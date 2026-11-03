@@ -37,7 +37,7 @@ Harness Bootstrap 是一个元技能：给一个真实项目装上**约束、门
 ## 60 秒试一下（不用先装进项目）
 
 ```powershell
-git clone https://github.com/<your-account>/harness-bootstrap.git
+git clone https://github.com/fengyale/harness-bootstrap.git
 cd harness-bootstrap
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 ```
