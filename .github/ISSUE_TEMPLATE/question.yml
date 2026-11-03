@@ -1,0 +1,24 @@
+name: Question
+description: How to use the harness, or how a piece of it is meant to work
+title: "[question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If your question is about **a specific project you installed the harness
+        into**, please say which, and paste the relevant part of its `AGENTS.md`
+        or `summary.md` — most questions are answered by those files.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Which project, which stage, what you were trying to do

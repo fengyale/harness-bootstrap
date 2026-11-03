@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in the gates, scripts or installers does not behave as documented
+title: "[bug] "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing this. Please fill in what you can — the exact command and
+        the full output matter far more than a description of the symptom.
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, IDE or agent platform, and the PowerShell version
+      placeholder: Windows 11 / TRAE / Windows PowerShell 5.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part failed
+      options:
+        - Gate / red-line scan
+        - Stage gate
+        - Summary field validation
+        - Grounding check (verify-grounding)
+        - Install / uninstall / setup-links
+        - Probe (project / stack)
+        - Metrics
+        - Package self-check (verify-package)
+        - Documentation only
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      description: The command you ran, copied as-is
+      render: powershell
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Full output
+      description: Not a summary — the complete stdout and stderr
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project-type
+    attributes:
+      label: Project type
+      options:
+        - Existing codebase
+        - New project (no code yet)
+        - The harness-bootstrap package itself
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true

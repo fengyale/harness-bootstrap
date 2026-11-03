@@ -1,0 +1,60 @@
+name: Feature request
+description: Suggest a new rule, gate, skill, metric or platform adapter
+title: "[feature] "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A good request here answers one question: **what breaks today that this
+        would prevent?**
+
+        Requests that add documentation without a machine-checkable consequence
+        will usually be declined — this project deliberately keeps prose and
+        mechanism separate.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change is this
+      options:
+        - A new gate (machine-checkable, blocks)
+        - A new rule (boundary, not a procedure)
+        - A new skill (procedure for a recurring scenario)
+        - A new metric (something to count)
+        - A platform adapter (new IDE / agent platform)
+        - A fix to an existing mechanism
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the failure mode, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposal
+    validations:
+      required: true
+
+  - type: textarea
+    id: checkable
+    attributes:
+      label: How would a machine know it worked
+      description: |
+        If the answer is "it cannot", say so — that is a valid answer, and it
+        changes where the change belongs (a skill or a review checklist, not a
+        gate).
+      placeholder: A failing command, a missing field, a regex that matches
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
