@@ -125,7 +125,7 @@ Harness 就是把"看运气"变成"看流程"。
 | "该触发不触发""调触发词" | **调优** | 只读 `references/维护与体检.md` 第三节 |
 | "复盘""这两周有没有用""A7 怎么样" | **两周复盘** | 只读 `references/两周复盘.md`（这是验 A7 的唯一方式） |
 | "加一条红线""补一个技能" | **增量** | 只做那一个小动作，不要重跑全程 |
-| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先看 DryRun 差异，确认后 `-Apply`；不要重跑第 0 步 |
+| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先不加 `-Apply` 看差异，确认后 `-Apply`；要同步已装技能正文再加 `-UpdateSkills`；不要重跑第 0 步 |
 
 > **只有第一种需要跑完整流程**——其余都是小操作，把它们做成大工程是最常见的误判。
 >
@@ -377,11 +377,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 更新边界：
 
-- `scripts\*.ps1`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
+- `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
 - `scripts\*.json`（项目配置）：**不覆盖**，只提示手工合并新键
 - `.harness\rules|wiki|modules`：只补缺失文件，已存在的一律保留
+- `.harness\skills`：README 缺失才补；**已装技能正文**默认标 MANUAL，确认要同步时加 `-UpdateSkills` 才替换；未安装的模板技能不会补装
 - `AGENTS.md`、平台 agents：只报告差异，手工合并
 - `.harness\changes|metrics`：**永不触碰**
+- `.gitignore` 只提示缺的 `.harness/metrics/` 与 `.harness/upgrade/`，不重写用户文件
 - 首次安装会写 `.harness\.installed-version`；老项目没有也能升级，脚本会从技能目录的 `VERSION` 推断旧版本
 
 升级后先跑阶段 3/5/7/10：新的编译/测试判据会真跑 `AGENTS.md` 的命令。缺行 BLOCKED、占位 SKIP，这是机制在生效，不是回归。

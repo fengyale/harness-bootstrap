@@ -8,6 +8,9 @@
 # 门禁运行记录：每次提交都会追加，提交进去会让工作区恒 dirty（本地度量用，不入库）
 .harness/metrics/
 
+# 升级备份：update-harness.ps1 替换旧脚本前会写到这里，不入库
+.harness/upgrade/
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

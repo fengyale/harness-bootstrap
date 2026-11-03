@@ -6,16 +6,19 @@
     project keeps old gate scripts forever. An upgrade needs explicit rules:
     replace package-owned machinery, never touch project assets or history.
 
-  WHAT IT DOES (dry-run by default)
-    scripts/*.ps1          ADD or UPDATE (the old file is backed up first)
+  WHAT IT DOES (prints a plan unless -Apply is given)
+    scripts/*.ps1, *.py    ADD or UPDATE (the old file is backed up first)
     scripts/*.json         ADD if missing; otherwise MANUAL (project config)
     .harness/rules         ADD missing only (project-owned)
     .harness/wiki          ADD missing only
     .harness/modules       ADD missing only
+    .harness/skills        README missing -> ADD; installed skill files -> MANUAL,
+                           or UPDATE when -UpdateSkills is given. Uninstalled
+                           template skills are never added (the install keeps 3-5).
     .harness/changes       only _template is added when missing; history is kept
     AGENTS.md              MANUAL when it differs; never overwritten
     platform agents        ADD missing, MANUAL when different
-    .gitignore             MANUAL when .harness/metrics/ is absent
+    .gitignore             MANUAL when .harness/metrics/ or .harness/upgrade/ is absent
     .harness/.installed-version   written on -Apply
 
   USAGE
@@ -23,6 +26,7 @@
       -PackagePath D:\path\to\new\harness-bootstrap
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
       -PackagePath D:\path\to\new\harness-bootstrap -Apply
+    ... -Apply -UpdateSkills
     ... -Apply -SkipHooks -SkipVerify
 
   EXIT CODE
@@ -38,6 +42,7 @@ param(
     [string]$PackagePath,
     [string]$Root = (Get-Location).Path,
     [switch]$Apply,
+    [switch]$UpdateSkills,
     [switch]$SkipHooks,
     [switch]$SkipVerify
 )
@@ -123,7 +128,7 @@ foreach ($src in Get-ChildItem -LiteralPath $srcScripts -File -Force) {
     }
     $same = (Get-Hash $src.FullName) -eq (Get-Hash $dst)
     if ($same) { Add-Plan 'SAME' $rel $src.FullName ''; continue }
-    if ($src.Extension -eq '.ps1') {
+    if ($src.Extension -eq '.ps1' -or $src.Extension -eq '.py') {
         Add-Plan 'UPDATE' $rel $src.FullName 'package-owned script'
     } else {
         Add-Plan 'MANUAL' $rel $src.FullName 'project config may be edited; merge new keys by hand'
@@ -142,6 +147,42 @@ foreach ($sub in @('rules', 'wiki', 'modules')) {
             Add-Plan 'ADD' $rel $src.FullName 'new project asset'
         } else {
             Add-Plan 'SKIP' $rel $src.FullName 'project-owned; kept as-is'
+        }
+    }
+}
+
+# ------------------------------------------- skills: installed bodies only
+# The install deliberately keeps 3-5 skills, so a missing template skill is
+# NOT added here. Only files the project already has are compared; with
+# -UpdateSkills they are replaced (old copies go to .harness/upgrade).
+$srcSkills = Join-Path $templates '.harness\skills'
+if (Test-Path -LiteralPath $srcSkills) {
+    $readmeSrc = Join-Path $srcSkills 'README.md'
+    $readmeRel = '.harness\skills\README.md'
+    $readmeDst = Join-Path $rootPath $readmeRel
+    if (Test-Path -LiteralPath $readmeSrc) {
+        if (-not (Test-Path -LiteralPath $readmeDst)) {
+            Add-Plan 'ADD' $readmeRel $readmeSrc 'skill index missing'
+        } elseif ((Get-Hash $readmeSrc) -eq (Get-Hash $readmeDst)) {
+            Add-Plan 'SAME' $readmeRel $readmeSrc ''
+        } elseif ($UpdateSkills) {
+            Add-Plan 'UPDATE' $readmeRel $readmeSrc 'skill index replaced (-UpdateSkills)'
+        } else {
+            Add-Plan 'MANUAL' $readmeRel $readmeSrc 'installed skill index differs; re-run with -UpdateSkills to replace'
+        }
+    }
+    foreach ($src in Get-ChildItem -LiteralPath $srcSkills -Recurse -File -Force) {
+        $relPath = $src.FullName.Substring($srcSkills.Length).TrimStart('\')
+        if ($relPath -eq 'README.md') { continue }
+        $rel = '.harness\skills\' + $relPath
+        $dst = Join-Path $rootPath $rel
+        if (-not (Test-Path -LiteralPath $dst)) { continue }
+        if ((Get-Hash $src.FullName) -eq (Get-Hash $dst)) {
+            Add-Plan 'SAME' $rel $src.FullName ''
+        } elseif ($UpdateSkills) {
+            Add-Plan 'UPDATE' $rel $src.FullName 'installed skill replaced (-UpdateSkills)'
+        } else {
+            Add-Plan 'MANUAL' $rel $src.FullName 'installed skill differs; review or re-run with -UpdateSkills'
         }
     }
 }
@@ -205,10 +246,11 @@ $srcIgnore = Join-Path $templates '.gitignore'
 if (-not (Test-Path -LiteralPath $dstIgnore)) {
     if (Test-Path -LiteralPath $srcIgnore) { Add-Plan 'ADD' '.gitignore' $srcIgnore 'missing file' }
 } else {
-    $hasMetrics = @([System.IO.File]::ReadAllLines($dstIgnore, [System.Text.Encoding]::UTF8) |
-        Where-Object { $_.Trim() -eq '.harness/metrics/' }).Count -gt 0
-    if ($hasMetrics) { Add-Plan 'SAME' '.gitignore' $srcIgnore '' }
-    else { Add-Plan 'MANUAL' '.gitignore' $srcIgnore 'add the line .harness/metrics/ by hand' }
+    $lines = @([System.IO.File]::ReadAllLines($dstIgnore, [System.Text.Encoding]::UTF8) | ForEach-Object { $_.Trim() })
+    $needed = @('.harness/metrics/', '.harness/upgrade/')
+    $missingIgnore = @($needed | Where-Object { $lines -notcontains $_ })
+    if ($missingIgnore.Count -eq 0) { Add-Plan 'SAME' '.gitignore' $srcIgnore '' }
+    else { Add-Plan 'MANUAL' '.gitignore' $srcIgnore ('add by hand: ' + ($missingIgnore -join ', ')) }
 }
 
 # -------------------------------------------------------------------- print

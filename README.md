@@ -38,7 +38,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      19 .ps1 file(s) parse
+[PASS] parse      21 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -57,7 +57,7 @@ package gate: OPEN
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-两套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒。
+三套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史。
 
 ## 装到项目
 
@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <新包根目录> -Apply
 ```
 
-只替换 `scripts\*.ps1`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。已装技能正文默认只提示差异，确认要同步时加 `-UpdateSkills`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
 ## 装完之后
 

@@ -38,7 +38,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      19 .ps1 file(s) parse
+[PASS] parse      21 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -57,7 +57,7 @@ Run the behavioural tests:
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-Both suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking base fields only, three hooks installed and removed, A3+ spoof rejected.
+Three suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking base fields only, three hooks installed and removed, A3+ spoof rejected, and upgrade replacing machinery while keeping history.
 
 ## Install
 
@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <new package root> -Apply
 ```
 
-Only `scripts\*.ps1` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. Installed skill bodies only report a difference unless `-UpdateSkills` is given. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
 
 ## What you get
 

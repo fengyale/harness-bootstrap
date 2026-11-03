@@ -1,7 +1,14 @@
-HARNESS-BOOTSTRAP VERSION 1.23.0
+HARNESS-BOOTSTRAP VERSION 1.23.1
 
 changelog
 ---------
+1.23.1  (升级修复：.py / 技能同步 / 备份忽略 / 文档口径)
+- update-harness：.py 扫描器与 .ps1 同等替换；已装技能正文默认 MANUAL，
+  加 -UpdateSkills 才替换；未安装的模板技能不补装
+- .gitignore：模板补 .harness/upgrade/；升级检查 metrics + upgrade 两行
+- 文档：去掉不存在的 -DryRun 参数说法，改为「不加 -Apply 只预览」
+- 仓库 .gitignore 清理失效的内部文档名
+
 1.23.0  (升级支持)
 - scripts/update-harness.ps1：默认 DryRun，-Apply 执行；只替换 scripts/*.ps1 并备份，
   scripts/*.json、项目资产、.harness/changes 与 metrics 保留

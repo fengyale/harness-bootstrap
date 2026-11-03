@@ -686,7 +686,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
           <div class="step-num">5</div>
           <div>
             <h3>升级已有项目（不是重装）</h3>
-            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级只替换 <code>scripts\*.ps1</code>，保留 JSON 配置、项目资产与历史；旧脚本备份到 <code>.harness\upgrade\</code>。</p>
+            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。已装技能正文默认只提示差异，确认要同步时加 <code>-UpdateSkills</code>。</p>
             <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt;
 # 确认差异后
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt; -Apply</code></pre>
