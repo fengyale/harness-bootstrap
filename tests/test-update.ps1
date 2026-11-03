@@ -48,10 +48,13 @@ Copy-Item -LiteralPath "$pkg\templates\.gitignore" -Destination "$proj\.gitignor
 Set-Content -LiteralPath "$proj\.harness\.installed-version" -Value '1.0.0' -Encoding ASCII
 
 # One installed skill (the install keeps 3-5, not all 25 templates).
+# Create the fixture contents explicitly instead of copying a template file:
+# this keeps the test independent of the checked-out line endings and of
+# whether the template skill happens to exist in the CI workspace.
 New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\coding-skill" | Out-Null
-Copy-Item -LiteralPath "$pkg\templates\.harness\skills\README.md" -Destination "$proj\.harness\skills\README.md"
-Copy-Item -LiteralPath "$pkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
-    -Destination "$proj\.harness\skills\main-dev\coding-skill\SKILL.md"
+Set-Content -LiteralPath "$proj\.harness\skills\README.md" -Value '# skill index' -Encoding UTF8
+Set-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" `
+    -Value @('# installed skill', '', 'body') -Encoding UTF8
 
 # Remove the new ignore line so the MANUAL branch for .gitignore is exercised.
 # Use .NET UTF-8 explicitly: PS 5.1 Get-Content/Set-Content on a UTF-8 file
@@ -82,10 +85,8 @@ Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-scan.py" -Destination "$
 Add-Content -LiteralPath "$newPkg\templates\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
 # An installed skill that differs must be MANUAL unless -UpdateSkills is given.
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\coding-skill" | Out-Null
-Copy-Item -LiteralPath "$pkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
-    -Destination "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md"
-Add-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
-    -Value '<!-- upgraded-skill -->' -Encoding UTF8
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
+    -Value @('# installed skill', '', 'body', '<!-- upgraded-skill -->') -Encoding UTF8
 Copy-Item -LiteralPath "$pkg\templates\AGENTS.md" -Destination "$newPkg\templates\AGENTS.md"
 Add-Content -LiteralPath "$newPkg\templates\AGENTS.md" -Value '<!-- new template line -->' -Encoding UTF8
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.trae\agents" | Out-Null
@@ -98,6 +99,8 @@ $dry = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\upda
 if ($LASTEXITCODE -ne 0) { Write-Host 'DRY RUN FAILED' -ForegroundColor Red; $fail++ }
 Write-Host $dry
 
+Check 'fixture skill exists' (Test-Path -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md")
+Check 'new package skill exists' (Test-Path -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md")
 Check 'dry-run plans stage-gate UPDATE' ($dry -match '\[UPDATE\]\s+scripts\\stage-gate\.ps1')
 Check 'dry-run plans new-tool ADD'         ($dry -match '\[ADD\s*\]\s+scripts\\new-tool\.ps1')
 Check 'dry-run marks AGENTS.md MANUAL'     ($dry -match '\[MANUAL\]\s+AGENTS\.md')
