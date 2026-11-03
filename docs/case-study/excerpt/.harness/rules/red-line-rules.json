@@ -1,0 +1,44 @@
+{
+  "_说明": "本项目首批 4 条红线（R3/R4/R5/R6），只拦新增改动；与 AGENTS.md 红线表一一对应。",
+  "_字段": {
+    "id": "规则编号，与 AGENTS.md 红线表一致",
+    "name": "规则名",
+    "pattern": "触发违规的正则",
+    "requireAlso": "可选；同一行还必须同时匹配它才算违规",
+    "include": "只在这些扩展名里查",
+    "includePath": "可选；按相对路径收窄",
+    "multiline": "可选；true 表示跨行匹配",
+    "hint": "修复建议"
+  },
+  "rules": [
+    {
+      "id": "R3",
+      "name": "异常必须走统一异常体系",
+      "pattern": "throw\\s+new\\s+(RuntimeException|IllegalStateException|IllegalArgumentException|Exception)\\b",
+      "include": ["*.java"],
+      "hint": "改用项目统一异常处理（见 aspect 模块的全局异常处理器）"
+    },
+    {
+      "id": "R4",
+      "name": "禁止字段注入",
+      "pattern": "@Autowired\\s*(?:\\r?\\n\\s*)*private",
+      "include": ["*.java"],
+      "multiline": true,
+      "hint": "改用构造器注入（如 @RequiredArgsConstructor + final）"
+    },
+    {
+      "id": "R5",
+      "name": "事务必须声明回滚范围",
+      "pattern": "@Transactional\\s*\\(\\s*\\)",
+      "include": ["*.java"],
+      "hint": "补上 rollbackFor（如 rollbackFor = Exception.class）"
+    },
+    {
+      "id": "R6",
+      "name": "禁止把敏感信息写进日志",
+      "pattern": "(log|logger)\\.(info|warn|error|debug)\\s*\\([^)]*(password|passwd|token|secret|mobile|phone)",
+      "include": ["*.java"],
+      "hint": "禁止把密码 <redacted>
+    }
+  ]
+}

@@ -144,6 +144,32 @@ In one line:
 
 ---
 
+## A real landing
+
+> A 12-module Java medical-insurance backend, 182 legacy violations, 2 test
+> files. How it went from "the gate is always BLOCKED" to "the gate really
+> blocks", and how the first lesson loop closed.
+
+**→ [Full case study (EN/中文) + desensitised files](docs/case-study/README.en.md)**
+
+Several things in it that neither templates nor tutorials will tell you:
+
+- **Three red lines were turned off on purpose.** A rule a machine cannot judge
+  accurately only produces noise, and noise trains people to reach for
+  `--no-verify`.
+- **The first version of the stage gate was broken.** It read a full scan →
+  182 legacy violations → always BLOCKED → effectively not installed.
+- **The commands in AGENTS.md contain `<module>` placeholders** → running them
+  automatically always misfires → the criterion has to be demoted to HUMAN.
+- **A rule in the index that nobody reads does not exist**: 5 files measured at
+  0 references.
+- **The loop is counted, not judged**: `lesson_id` 2nd occurrence → the script
+  prompts → promote → record in `promoted.txt`.
+
+![Case: metrics output](docs/case-study/figures/metrics.png)
+
+---
+
 ## Try it in 60 seconds (no need to install it anywhere yet)
 
 ```powershell

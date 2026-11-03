@@ -1,0 +1,16 @@
+{
+    "generatedAt":  "2026-10-27T22:15:06",
+    "root":  "<path>\项目\insurance-backend",
+    "language":  "java",
+    "buildTool":  "maven",
+    "modules":  12,
+    "orm":  "jfinal",
+    "ormEvidence":  "<path>\async\AsyncLogTask.java",
+    "cache":  "redis",
+    "cacheApi":  "RedisUtils",
+    "cacheEvidence":  "<path>\impl\CommonCacheServiceImpl.java",
+    "mq":  null,
+    "mqEvidence":  null,
+    "testFiles":  2,
+    "frontend":  null
+}

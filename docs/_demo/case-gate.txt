@@ -1,0 +1,12 @@
+$ git commit -m "feat: add charge doctor reminder"
+[FAIL] red-line scan found 1 violation(s):
+[R5] 事务必须声明回滚范围  -- 1 hit(s)
+     hint: 补上 rollbackFor（如 rollbackFor = Exception.class）
+     sync-data-task\src\main\java\...\ChargeService.java:88
+         @Transactional()
+Red lines are zero-tolerance: STOP -> FIX -> re-verify from the affected stage.
+[SKIP] no SQL detected in the staged source lines
+harness gate blocked: fix red lines, complete the summary fields, or add a sql_review note for SQL changes.
+
+$ echo $?
+1

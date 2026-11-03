@@ -1,0 +1,21 @@
+$ powershell -File scripts\metrics.ps1 -Root .
+harness metrics -- C:\projects\insurance-backend
+window: last 14 day(s), since 2026-10-27
+----------------------------------------------------------------------
+tasks: 4   with fields: 2   total corrections: 3   avg: 0.8
+impl-level corrections: total 0   avg 0 (target 0)
+scans: 3   commits: 1   blocked: 1   bypass: 0 (0%)
+skill load rate: 67%
+previous window: tasks 0   avg corrections 0   avg impl 0   skill rate n/a   blocked 0
+trend: INSUFFICIENT DATA (need >= 2 tasks in each window)
+skills loaded:
+  request-analysis         2
+  coding-skill             2
+  expert-reviewer          1
+lessons recorded:
+  rule-without-load-path   2
+----------------------------------------------------------------------
+  - 2 of 4 summaries are missing a metric field
+  - skill load rate 67% is below the 70% floor -- one skill is not being loaded
+  - lesson "rule-without-load-path" has occurred 2 times:
+      promote it into a rule, a gate or a skill

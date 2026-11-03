@@ -1,0 +1,4 @@
+# 已晋升的教训（每行一个 lesson_id）
+# 规则：某条 lesson_id 完成晋升（写进规则/门禁/技能）后，把 id 追加到这里，
+# verify-harness 的 lessons 提醒就会停止；metrics 仍会统计次数，但不再提示升级。
+rule-without-load-path
