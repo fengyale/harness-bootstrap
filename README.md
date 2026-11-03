@@ -4,7 +4,7 @@
 
 > **English**: A meta-skill that installs a verifiable harness into an AI coding project —
 > constraints, gates, grounding, observability and review loops. Not another prompt collection.
-> [English version](README.en.md) · [中文说明](harness工程化ai编程-为什么做这件事.md)
+> [English version](README.en.md)
 
 [![package gate](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml)
 [![version](https://img.shields.io/github/v/release/fengyale/agent-harness-bootstrap?display_name=tag)](https://github.com/fengyale/agent-harness-bootstrap/releases)

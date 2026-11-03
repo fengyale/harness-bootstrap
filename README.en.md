@@ -2,7 +2,7 @@
 
 **AI coding capability is no longer the bottleneck. Predictability is.**
 
-> [中文版](README.md) · [Why this exists](harness工程化ai编程-为什么做这件事.md)
+> [中文版](README.md)
 
 [![package gate](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml)
 [![version](https://img.shields.io/github/v/release/fengyale/agent-harness-bootstrap?display_name=tag)](https://github.com/fengyale/agent-harness-bootstrap/releases)
