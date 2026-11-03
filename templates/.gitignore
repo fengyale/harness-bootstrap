@@ -1,0 +1,23 @@
+# 目录联接（入口）不进版本库：真源在 .harness/skills/，新机器用 scripts/setup-links.ps1 重建
+.trae/skills/
+
+# 平台本地状态
+.trae/*.local.*
+.trae/settings.local.json
+
+# 门禁运行记录：每次提交都会追加，提交进去会让工作区恒 dirty（本地度量用，不入库）
+.harness/metrics/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# 构建产物（按项目实际情况增删）
+node_modules/
+dist/
+build/
+target/
+*.log

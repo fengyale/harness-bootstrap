@@ -1,0 +1,480 @@
+<#
+  metrics.ps1 -- collect the numbers that make "A7: no repeated mistake" measurable
+
+  WHY
+    summary.md has carried corrections: / loaded_skills: for a while, but nothing
+    ever read them, so the two-week review depended on memory. This script turns
+    those fields plus the gate log into counts and a verdict.
+
+  SOURCES
+    .harness/changes/<feature>/summary.md   corrections: N   impl_corrections: N
+                                            loaded_skills: a,b   lesson_id: id
+    .harness/metrics/gate.jsonl             {"ts":"...","blocked":1}  (written by pre-commit)
+
+  LESSON IDS
+    lesson_id makes "persist on the second occurrence" machine-checkable. Each
+    correction may carry its own id; all ids in a summary are collected (deduped
+    per task). When the same id appears in >= 2 tasks the verdict says to promote
+    it into a rule, a gate or a skill. No semantics needed.
+
+  COMPARE
+    -Compare splits the history into the current -Days window and the window
+    immediately before it, then prints IMPROVING / REGRESSING / FLAT /
+    INSUFFICIENT DATA. This is the project-level half of A6: task-level
+    impl_corrections can be zero while the trend still gets worse. -Compare
+    needs -Days N (N > 0); with -Days 0 there is no previous window.
+
+  USAGE
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Json
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14 -Compare
+
+  EXIT CODE
+    0 always (report only). Use the printed verdict during the biweekly review.
+
+  NOTE  Pure ASCII. -Days counts tasks by the first ISO date near the top of
+        summary.md; a summary without one falls back to file mtime and is
+        listed as "undated". Gate events without a parsable ts are skipped
+        and counted, never silently dropped.
+#>
+[CmdletBinding()]
+param(
+    [string]$Root = (Get-Location).Path,
+    [int]$Days = 0,
+    [switch]$Compare,
+    [switch]$Json,
+    [switch]$Quiet
+)
+
+$ErrorActionPreference = 'Stop'
+$rootPath = (Resolve-Path -LiteralPath $Root).Path
+
+$changesRoot = Join-Path $rootPath '.harness\changes'
+$logPath = Join-Path $rootPath '.harness\metrics\gate.jsonl'
+$promotedPath = Join-Path $rootPath '.harness\metrics\promoted.txt'
+$skillsRoot = Join-Path $rootPath '.harness\skills'
+
+# ------------------------------------------------------------- read once, filter later
+# Parsing is split from windowing so that -Compare can reuse the same task and
+# event objects for two windows instead of parsing the files twice (and drifting).
+function Get-SummaryTasks {
+    $out = @()
+    if (-not (Test-Path -LiteralPath $changesRoot)) { return $out }
+    Get-ChildItem -LiteralPath $changesRoot -Directory -Force | Where-Object { $_.Name -ne '_template' } | ForEach-Object {
+        $summary = Join-Path $_.FullName 'summary.md'
+        if (-not (Test-Path -LiteralPath $summary)) { return }
+        $text = [System.IO.File]::ReadAllText($summary, [System.Text.Encoding]::UTF8)
+
+        # the date lives on a header line; take the first ISO date in the top
+        # of the file (ASCII-only: no Chinese label needed in the script)
+        $taskDate = $null
+        $head = (($text -split "\r?\n") | Select-Object -First 15) -join "`n"
+        if ($head -match '(\d{4}-\d{2}-\d{2})') {
+            try { $taskDate = [datetime]::ParseExact($matches[1], 'yyyy-MM-dd', $null) } catch { $taskDate = $null }
+        }
+        $dated = ($null -ne $taskDate)
+        if (-not $dated) { $taskDate = (Get-Item -LiteralPath $summary).LastWriteTime.Date }
+
+        $corr = $null
+        # Field lines use the same shape check-summary.ps1 validates: a bare field,
+        # a list item, or a labelled list item. A prose mention must not become data.
+        # The lookbehind keeps "impl_corrections:" from satisfying "corrections:".
+        # U+FF1A is written as \uFF1A so this file stays pure ASCII for PS 5.1.
+        if ($text -match '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])corrections:\s*`?\s*(\d+)') { $corr = [int]$matches[1] }
+        $impl = $null
+        if ($text -match '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])impl_corrections:\s*`?\s*(\d+)') { $impl = [int]$matches[1] }
+
+        $skills = @()
+        $hasSkillsField = $false
+        if ($text -match '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?loaded_skills:\s*([^\r\n]+)') {
+            $hasSkillsField = $true
+            # each comma item starts with an optional backtick then the name;
+            # anything after the name (prose, "<...>", CLOSE) is ignored
+            $skills = @()
+            foreach ($part in $matches[1].Split(',')) {
+                $m = [regex]::Match($part, '^\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)')
+                if ($m.Success) {
+                    $name = $m.Groups[1].Value
+                    if ($name.ToLower() -ne 'none') { $skills += $name }
+                }
+            }
+        }
+        # one lesson_id per correction: collect ALL of them, dedupe within the task
+        # (the same lesson twice in one task is still one task, not two occurrences)
+        $lessons = @()
+        foreach ($m in [regex]::Matches($text, '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?lesson_id:\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)')) {
+            $id = $m.Groups[1].Value
+            if ($lessons -notcontains $id) { $lessons += $id }
+        }
+        $out += [pscustomobject]@{
+            Feature = $_.Name
+            Date = $taskDate
+            Dated = $dated
+            Corrections = $corr
+            ImplCorrections = $impl
+            Skills = $skills
+            Lessons = $lessons
+            HasCorrections = ($null -ne $corr)
+            HasImpl = ($null -ne $impl)
+            HasSkills = $hasSkillsField
+            HasRealSkill = ($skills.Count -gt 0)
+        }
+    }
+    return $out
+}
+
+function Get-GateEvents {
+    $out = @()
+    if (-not (Test-Path -LiteralPath $logPath)) { return $out }
+    foreach ($line in [System.IO.File]::ReadLines($logPath)) {
+        if ($line.Trim().Length -eq 0) { continue }
+        try { $e = $line | ConvertFrom-Json } catch {
+            # A malformed gate line still counts as an un-dateable event so the
+            # "skipped" number in the report cannot hide a broken log.
+            $out += [pscustomobject]@{ Event = 'invalid'; Date = $null; Blocked = '0'; Scanned = '' }
+            continue
+        }
+        $evtDate = $null
+        if ($e.ts) { try { $evtDate = ([datetime]$e.ts).Date } catch { $evtDate = $null } }
+        $out += [pscustomobject]@{
+            Event = $e.event
+            Date = $evtDate
+            Blocked = "$($e.blocked)"
+            Scanned = "$($e.scanned)"
+        }
+    }
+    return $out
+}
+
+# Window is [From, To): From inclusive, To exclusive. Undated tasks are kept
+# (and counted) so the denominator never shrinks silently.
+function Select-Window {
+    param($Tasks, $Events, [datetime]$From, [datetime]$To)
+    $t = @($Tasks | Where-Object { $_.Date -ge $From -and $_.Date -lt $To })
+    $e = @($Events | Where-Object { $null -ne $_.Date -and $_.Date -ge $From -and $_.Date -lt $To })
+    return [pscustomobject]@{ Tasks = $t; Events = $e }
+}
+
+function Get-WindowStats {
+    param($Window)
+    $tasks = @($Window.Tasks)
+    $withCorr = @($tasks | Where-Object { $_.HasCorrections })
+    $withImpl = @($tasks | Where-Object { $_.HasImpl })
+    $withSkills = @($tasks | Where-Object { $_.HasRealSkill })
+
+    $totalCorr = 0
+    foreach ($t in $withCorr) { $totalCorr += $t.Corrections }
+    $totalImpl = 0
+    foreach ($t in $withImpl) { $totalImpl += $t.ImplCorrections }
+
+    $avgCorr = if ($withCorr.Count -gt 0) { [math]::Round($totalCorr / $withCorr.Count, 2) } else { 0 }
+    $avgImpl = if ($withImpl.Count -gt 0) { [math]::Round($totalImpl / $withImpl.Count, 2) } else { 0 }
+    $skillRate = if ($tasks.Count -gt 0) { [math]::Round($withSkills.Count * 100.0 / $tasks.Count, 1) } else { $null }
+
+    $scans = 0
+    $blocked = 0
+    $commits = 0
+    $bypass = 0
+    foreach ($e in $Window.Events) {
+        if ($e.Event -eq 'scan') {
+            $scans++
+            if ($e.Blocked -eq '1') { $blocked++ }
+        } elseif ($e.Event -eq 'commit') {
+            $commits++
+            # scanned=0 means no passing scan preceded this commit (e.g. --no-verify);
+            # missing field is unknown, not a bypass
+            if ($e.Scanned -eq '0') { $bypass++ }
+        }
+    }
+    $bypassRate = if ($commits -gt 0) { [math]::Round($bypass * 100.0 / $commits, 1) } else { $null }
+
+    return [pscustomobject]@{
+        Tasks = $tasks
+        WithCorr = $withCorr
+        WithImpl = $withImpl
+        WithSkills = $withSkills
+        TotalCorr = $totalCorr
+        TotalImpl = $totalImpl
+        AvgCorr = $avgCorr
+        AvgImpl = $avgImpl
+        SkillRate = $skillRate
+        Scans = $scans
+        Commits = $commits
+        Blocked = $blocked
+        Bypass = $bypass
+        BypassRate = $bypassRate
+    }
+}
+
+# ---------------------------------------------------------------------- windows
+# The current window is N calendar days INCLUDING today: [today-(N-1), today+1).
+# Using -N with today+1 made the window N+1 days while the previous one stayed N,
+# so -Days 1 compared 2 days against 1.
+$cutoff = if ($Days -gt 0) { (Get-Date).Date.AddDays(-($Days - 1)) } else { $null }
+$now = (Get-Date).Date.AddDays(1)   # "today" belongs to the current window
+$allTasks = @(Get-SummaryTasks)
+$allEvents = @(Get-GateEvents)
+
+$curWindow = if ($Days -gt 0) {
+    Select-Window -Tasks $allTasks -Events $allEvents -From $cutoff -To $now
+} else {
+    [pscustomobject]@{ Tasks = $allTasks; Events = $allEvents }
+}
+$stats = Get-WindowStats -Window $curWindow
+
+# -Compare needs a previous window of the same length, so it needs -Days N.
+$prevStats = $null
+$trendVerdict = $null
+if ($Compare) {
+    if ($Days -le 0) {
+        $trendVerdict = 'compare needs -Days N (N > 0): there is no previous window with -Days 0'
+    } else {
+        $prevFrom = $cutoff.AddDays(-$Days)
+        $prevWindow = Select-Window -Tasks $allTasks -Events $allEvents -From $prevFrom -To $cutoff
+        $prevStats = Get-WindowStats -Window $prevWindow
+    }
+}
+
+$undatedTasks = @($stats.Tasks | Where-Object { -not $_.Dated } | ForEach-Object { $_.Feature })
+# Windowed events are already date-filtered, so count the unparsable ones from
+# the full history; they belong to no window and are reported, never dropped.
+$undatedEvents = @($allEvents | Where-Object { $null -eq $_.Date }).Count
+
+# ------------------------------------------------------------------ aggregate
+$tasks = @($stats.Tasks)
+$withCorr = @($stats.WithCorr)
+$totalCorr = $stats.TotalCorr
+$avgCorr = $stats.AvgCorr
+$totalImpl = $stats.TotalImpl
+$avgImpl = $stats.AvgImpl
+
+$skillCounts = @{}
+foreach ($t in $tasks) {
+    foreach ($s in $t.Skills) {
+        if (-not $skillCounts.ContainsKey($s)) { $skillCounts[$s] = 0 }
+        $skillCounts[$s] = $skillCounts[$s] + 1
+    }
+}
+
+# lessons seen in more than one task are candidates for promotion (rule / gate / skill)
+$lessonCounts = @{}
+foreach ($t in $tasks) {
+    foreach ($id in $t.Lessons) {
+        if (-not $lessonCounts.ContainsKey($id)) { $lessonCounts[$id] = 0 }
+        $lessonCounts[$id] = $lessonCounts[$id] + 1
+    }
+}
+
+# lessons already promoted stop nagging (but keep being counted)
+$promoted = @()
+if (Test-Path -LiteralPath $promotedPath) {
+    $promoted = @(Get-Content -LiteralPath $promotedPath -Encoding UTF8 |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+}
+
+# installed skills (for the "never loaded" signal that drives retirement)
+$installed = @()
+if (Test-Path -LiteralPath $skillsRoot) {
+    Get-ChildItem -LiteralPath $skillsRoot -Directory -Force | ForEach-Object {
+        Get-ChildItem -LiteralPath $_.FullName -Directory -Force | ForEach-Object {
+            if (Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md')) {
+                $installed += ($_.Name -replace '^\d+-', '')
+            }
+        }
+    }
+}
+
+$skillRate = $stats.SkillRate
+$missingFields = @($tasks | Where-Object { -not $_.HasCorrections -or -not $_.HasSkills -or -not $_.HasImpl })
+
+# ------------------------------------------------------------------- trend
+# A6 has two halves: task-level (impl_corrections must be 0) and project-level
+# (is the trend going down?). A single good task cannot prove the harness works.
+if ($Compare -and $null -ne $prevStats) {
+    $enough = ($stats.Tasks.Count -ge 2 -and $prevStats.Tasks.Count -ge 2)
+    if (-not $enough) {
+        $trendVerdict = 'INSUFFICIENT DATA (need >= 2 tasks in each window)'
+    } else {
+        $curCorr = $stats.AvgCorr
+        $prevCorr = $prevStats.AvgCorr
+        $regress = $false
+        $improve = $false
+
+        # human corrections: 20% or more is treated as a real move, not noise
+        if ($prevCorr -gt 0) {
+            if ($curCorr -le ($prevCorr * 0.8)) { $improve = $true }
+            if ($curCorr -ge ($prevCorr * 1.2)) { $regress = $true }
+        } elseif ($curCorr -gt 0) {
+            $regress = $true
+        }
+
+        # implementation-level corrections must not appear at all
+        if ($stats.AvgImpl -gt $prevStats.AvgImpl) { $regress = $true }
+
+        # loading the right skill must not get worse while corrections drop
+        if ($null -ne $stats.SkillRate -and $null -ne $prevStats.SkillRate) {
+            if ($stats.SkillRate -lt $prevStats.SkillRate) { $improve = $false }
+        }
+
+        # a rising bypass rate means the gate is being routed around
+        if ($null -ne $stats.BypassRate -and $stats.BypassRate -gt 10) { $regress = $true }
+
+        if ($improve -and -not $regress) { $trendVerdict = 'IMPROVING' }
+        elseif ($regress) { $trendVerdict = 'REGRESSING' }
+        else { $trendVerdict = 'FLAT' }
+    }
+}
+
+# ------------------------------------------------------------------- verdict
+$verdict = @()
+if ($Days -gt 0) {
+    $verdict += "window: last $Days day(s), since $($cutoff.ToString('yyyy-MM-dd'))"
+    if ($undatedTasks.Count -gt 0) {
+        $verdict += "$($undatedTasks.Count) task(s) had no date line (mtime used): $($undatedTasks -join ', ')"
+    }
+}
+if ($tasks.Count -eq 0) {
+    $verdict += 'no task summary yet: record at least one real task before judging A7'
+} else {
+    if ($missingFields.Count -gt 0) {
+        $verdict += "$($missingFields.Count) summary file(s) missing corrections/impl_corrections/loaded_skills"
+    }
+    if ($avgCorr -gt 2) {
+        $verdict += "avg corrections per task = $avgCorr (target <= 2): harness is not carrying enough weight"
+    } else {
+        $verdict += "avg corrections per task = $avgCorr (within budget)"
+    }
+    if ($stats.WithImpl.Count -eq 0) {
+        $verdict += "impl_corrections not recorded in any summary: A6 cannot be judged (fill the field)"
+    } elseif ($avgImpl -gt 0) {
+        $verdict += "avg implementation-level corrections per task = $avgImpl (target 0): the gate is not absorbing the mechanical mistakes"
+    } else {
+        $verdict += "avg implementation-level corrections per task = 0 (target met)"
+    }
+    # A6 is judged per task as well: an average can look healthy while a single
+    # task needed many corrections. List the offenders instead of hiding them.
+    $overBudget = @($tasks | Where-Object {
+        ($_.HasCorrections -and $_.Corrections -gt 2) -or ($_.HasImpl -and $_.ImplCorrections -gt 0)
+    })
+    if ($overBudget.Count -gt 0) {
+        $names = @($overBudget | ForEach-Object { $_.Feature }) -join ', '
+        $verdict += "$($overBudget.Count) task(s) over the A6 budget (corrections > 2 or impl_corrections > 0): $names"
+    }
+    if ($skillRate -ne $null -and $skillRate -lt 50 -and $tasks.Count -ge 5) {
+        $verdict += "skill load rate = $skillRate% (< 50%): skills are probably not triggering"
+    }
+    if ($tasks.Count -ge 5) {
+        foreach ($k in $installed) {
+            if (-not $skillCounts.ContainsKey($k)) {
+                if ($Days -ge 28) {
+                    $verdict += "skill never loaded in last $Days day(s): $k (retire candidate -- confirm with a human before deleting)"
+                } else {
+                    $verdict += "skill never loaded in this window: $k (extend -Days to 28 or more before judging retirement)"
+                }
+            }
+        }
+    }
+    foreach ($k in ($lessonCounts.Keys | Sort-Object)) {
+        if ($lessonCounts[$k] -ge 2 -and $promoted -notcontains $k) {
+            $verdict += "lesson repeated $($lessonCounts[$k])x: $k (promote it into a rule, a gate or a skill)"
+        }
+    }
+}
+if ($Compare) { $verdict += "trend: $trendVerdict" }
+
+# gate health is reported even when no task summary exists yet
+if (-not (Test-Path -LiteralPath $logPath)) {
+    $verdict += 'gate log missing: install-git-hooks was not run, or no commit happened yet'
+} elseif ($stats.Commits -eq 0) {
+    $verdict += "$($stats.Scans) scan event(s), no commit event yet (post-commit not installed or no commit)"
+} else {
+    $verdict += "$($stats.Commits) commit(s), $($stats.Scans) scan(s), $($stats.Blocked) blocked"
+    if ($null -ne $stats.BypassRate -and $stats.BypassRate -gt 10) {
+        $verdict += "bypass rate = $($stats.BypassRate)% (> 10%): the gate is being skipped, fix the friction or the rules"
+    } else {
+        $verdict += "bypass rate = $($stats.BypassRate)% (ok)"
+    }
+}
+
+if ($Json) {
+    $out = [pscustomobject]@{
+        tasks = $tasks.Count
+        tasksWithFields = $withCorr.Count
+        totalCorrections = $totalCorr
+        avgCorrections = $avgCorr
+        totalImplCorrections = $totalImpl
+        avgImplCorrections = $avgImpl
+        scans = $stats.Scans
+        commits = $stats.Commits
+        blockedCommits = $stats.Blocked
+        bypassCommits = $stats.Bypass
+        bypassRate = $stats.BypassRate
+        skillLoadRate = $skillRate
+        skills = $skillCounts
+        lessons = $lessonCounts
+        promoted = $promoted
+        days = $Days
+        cutoff = $(if ($Days -gt 0) { $cutoff.ToString('yyyy-MM-dd') } else { $null })
+        undatedTasks = @($undatedTasks)
+        undatedGateEvents = $undatedEvents
+        trend = $(if ($Compare) {
+            [pscustomobject]@{
+                verdict = $trendVerdict
+                current = $(if ($null -ne $prevStats) {
+                    [pscustomobject]@{ tasks = $tasks.Count; avgCorrections = $stats.AvgCorr; avgImplCorrections = $stats.AvgImpl; skillLoadRate = $stats.SkillRate; blocked = $stats.Blocked; bypassRate = $stats.BypassRate }
+                } else { $null })
+                previous = $(if ($null -ne $prevStats) {
+                    [pscustomobject]@{ tasks = $prevStats.Tasks.Count; avgCorrections = $prevStats.AvgCorr; avgImplCorrections = $prevStats.AvgImpl; skillLoadRate = $prevStats.SkillRate; blocked = $prevStats.Blocked; bypassRate = $prevStats.BypassRate }
+                } else { $null })
+            }
+        } else { $null })
+        verdict = $verdict
+    }
+    $out | ConvertTo-Json -Depth 6
+    exit 0
+}
+
+if (-not $Quiet) {
+    Write-Host ""
+    Write-Host "harness metrics -- $rootPath" -ForegroundColor Cyan
+    Write-Host ("window: {0}" -f $(if ($Days -gt 0) { "last $Days day(s), since $($cutoff.ToString('yyyy-MM-dd'))" } else { 'all history' }))
+    if ($Days -gt 0 -and $undatedTasks.Count -gt 0) {
+        Write-Host ("undated tasks (date from mtime): {0}" -f ($undatedTasks -join ', ')) -ForegroundColor Yellow
+    }
+    if ($Days -gt 0 -and $undatedEvents -gt 0) {
+        Write-Host ("gate events skipped (no parsable ts): {0}" -f $undatedEvents) -ForegroundColor Yellow
+    }
+    Write-Host ("-" * 70)
+    Write-Host ("tasks: {0}   with fields: {1}   total corrections: {2}   avg: {3}" -f `
+        $tasks.Count, $withCorr.Count, $totalCorr, $avgCorr)
+    Write-Host ("impl-level corrections: total {0}   avg {1} (target 0)" -f $totalImpl, $avgImpl)
+    Write-Host ("scans: {0}   commits: {1}   blocked: {2}   bypass: {3} ({4}%)" -f `
+        $stats.Scans, $stats.Commits, $stats.Blocked, $stats.Bypass, $(if ($null -eq $stats.BypassRate) { 'n/a' } else { $stats.BypassRate }))
+    Write-Host ("skill load rate: {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
+    if ($Compare -and $null -ne $prevStats) {
+        $prevRate = if ($null -eq $prevStats.SkillRate) { 'n/a' } else { "$($prevStats.SkillRate)%" }
+        Write-Host ("previous window: tasks {0}   avg corrections {1}   avg impl {2}   skill rate {3}   blocked {4}" -f `
+            $prevStats.Tasks.Count, $prevStats.AvgCorr, $prevStats.AvgImpl, $prevRate, $prevStats.Blocked)
+        Write-Host ("trend: {0}" -f $trendVerdict) -ForegroundColor $(switch ($trendVerdict) { 'IMPROVING' { 'Green' } 'REGRESSING' { 'Red' } default { 'Yellow' } })
+    }
+    if ($skillCounts.Count -gt 0) {
+        Write-Host "skills loaded:"
+        foreach ($k in ($skillCounts.Keys | Sort-Object)) {
+            Write-Host ("  {0,-24} {1}" -f $k, $skillCounts[$k])
+        }
+    } else {
+        Write-Host "skills loaded: (none recorded)"
+    }
+    if ($lessonCounts.Count -gt 0) {
+        Write-Host "lessons recorded:"
+        foreach ($k in ($lessonCounts.Keys | Sort-Object)) {
+            $mark = if ($promoted -contains $k) { '  (promoted)' } elseif ($lessonCounts[$k] -ge 2) { '  <- promote' } else { '' }
+            Write-Host ("  {0,-32} {1}{2}" -f $k, $lessonCounts[$k], $mark)
+        }
+    }
+    Write-Host ("-" * 70)
+    foreach ($v in $verdict) { Write-Host ("  - " + $v) }
+    Write-Host ""
+}
+exit 0

@@ -1,0 +1,51 @@
+{
+  "_说明": "阶段门检查的匹配规则。脚本 stage-gate.ps1 按 UTF-8 读取本文件，因此中文可以安全地写在这里。",
+  "_为什么外置": "PS 5.1 读 .ps1 只认 UTF-8 带 BOM，脚本里写中文会解析失败。所以所有中文匹配串放在这个 JSON 里。",
+  "_对齐": "summarySections 必须与 .harness/changes/_template/summary.md 的章节名一致，否则阶段门会误报 missing。多个关键词之间是 OR 关系，只需命中一个。",
+
+  "summarySections": {
+    "requirement": ["需求概述", "为什么"],
+    "techImpact": ["技术变更清单"],
+    "risk": ["冲突与风险"],
+    "tasks": ["任务拆分"],
+    "rollback": ["回滚方案"],
+    "verification": ["验证方式"],
+    "review": ["评审结论"],
+    "shortfall": ["待补短板"],
+    "distill": ["待沉淀"]
+  },
+
+  "_noneMarkers说明": "「待补短板」允许写的“没有”结论。脚本用这些标记判定：命中任意一个即视为已写结论；否则必须给出已补能力的路径。",
+
+  "noneMarkers": ["无", "N/A", "none"],
+
+  "agentsCommandPurpose": {
+    "compile": ["编译", "类型检查"],
+    "test": ["跑全部测试"],
+    "lint": ["Lint", "格式化"],
+    "run": ["本地启动"]
+  },
+
+  "_agentsCommandSection说明": "只在 AGENTS.md 的这个章节内解析必跑命令表。不限定章节时，任何含「编译」的表格行（例如红线表）都会被当成编译命令执行。",
+
+  "agentsCommandSection": ["必跑命令"],
+
+  "_commandSkipMarkers说明": "AGENTS.md 必跑命令表里出现这些「自我声明」短语时视为已声明但未实测：门禁输出 SKIP，不阻断也不假装通过。整行缺失则是 FAIL。",
+
+  "commandSkipMarkers": ["待实测", "不适用", "TODO", "TBD", "待定"],
+
+  "_commandSkipExact说明": "只有整格等于这些词时才算占位（大小写不敏感）。用子串匹配会误伤真实命令，例如命令里含 none 就被跳过。",
+
+  "commandSkipExact": ["none", "N/A", "无", "—", "-"],
+
+  "messages": {
+    "noFeature": "no -Feature given",
+    "summaryFound": "found",
+    "missingSections": "missing sections",
+    "present": "present",
+    "paired": "paired",
+    "notPaired": "db-migrations.sql without rollback.sql",
+    "reverseNotPaired": "rollback.sql without db-migrations.sql",
+    "noDdl": "no DDL in this change"
+  }
+}

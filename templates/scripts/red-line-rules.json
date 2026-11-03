@@ -1,0 +1,74 @@
+{
+  "_说明": "红线规则表。与根 AGENTS.md 的「🔴 红线」表、.harness/rules/编码规范.md 的「红线汇总」三处必须一致（编号 R1、R2、R3… 连续，不要跳号）。",
+  "_字段": {
+    "id": "规则编号，与 AGENTS.md 红线表的「#」列一一对应",
+    "name": "规则名（可以写中文：本文件由脚本按 UTF-8 读取，不受 PS 5.1 编码限制）",
+    "pattern": "触发违规的正则",
+    "requireAlso": "可选；同一行还必须同时匹配它才算违规（用来压误报）",
+    "include": "只在这些扩展名里查，如 [\"*.java\"]",
+    "includePath": "可选；再按相对路径收窄，如 [\"*mapper*\"]（防止通用规则扫到构建文件）",
+    "multiline": "可选；true 表示按整个文件做多行匹配（默认逐行匹配，跨行正则必须开这个）",
+    "hint": "修复建议"
+  },
+  "rules": [
+    {
+      "id": "R1",
+      "name": "金额字段必须用整数最小单位",
+      "pattern": "\\b(BigDecimal|double|float|Double|Float)\\b",
+      "requireAlso": "(amount|price|money|fee|cost|cents|金额|价格|费用)",
+      "include": ["*.java", "*.kt", "*.ts", "*.tsx", "*.vue"],
+      "hint": "金额改用整数最小单位（如以分为单位），命名带 Cents 之类后缀"
+    },
+    {
+      "id": "R2",
+      "name": "缓存 Key 必须用统一前缀常量",
+      "pattern": "opsForValue\\(\\)\\s*\\.\\s*(get|set|delete)\\s*\\(\\s*\"",
+      "include": ["*.java", "*.kt"],
+      "hint": "Key 必须由常量前缀拼接，禁止裸字符串字面量"
+    },
+    {
+      "id": "R3",
+      "name": "异常必须走统一异常体系",
+      "pattern": "throw\\s+new\\s+(RuntimeException|IllegalStateException|IllegalArgumentException|Exception)\\b",
+      "include": ["*.java", "*.kt"],
+      "hint": "改用项目统一异常类（见编码规范的异常对照表）"
+    },
+    {
+      "id": "R4",
+      "name": "禁止字段注入",
+      "pattern": "@Autowired\\s*(?:\\r?\\n\\s*)*private",
+      "include": ["*.java", "*.kt"],
+      "multiline": true,
+      "hint": "改用构造器注入（如 @RequiredArgsConstructor + final）"
+    },
+    {
+      "id": "R5",
+      "name": "事务必须声明回滚范围",
+      "pattern": "@Transactional\\s*\\(\\s*\\)",
+      "include": ["*.java", "*.kt"],
+      "hint": "补上 rollbackFor（如 rollbackFor = Exception.class）"
+    },
+    {
+      "id": "R6",
+      "name": "禁止把敏感信息写进日志",
+      "pattern": "(log|logger)\\.(info|warn|error|debug)\\s*\\([^)]*(password|passwd|token|secret|mobile|phone)",
+      "include": ["*.java", "*.kt", "*.ts", "*.tsx"],
+      "hint": "禁止把密码/令牌/完整手机号写入日志"
+    },
+    {
+      "id": "R7",
+      "name": "SQL 禁止字符串替换占位",
+      "pattern": "\\$\\{",
+      "include": ["*.xml"],
+      "includePath": ["*mapper*"],
+      "hint": "XML 中一律用 #{} 参数占位，${} 有注入风险"
+    },
+    {
+      "id": "R8",
+      "name": "（示例占位）按项目实际补充第 8 条红线，或删掉本条",
+      "pattern": "__HARNESS_PLACEHOLDER_NEVER_MATCHES__",
+      "include": ["*.md"],
+      "hint": "这是占位规则：把 name/pattern/include/hint 换成项目真实红线，或直接删除本条并把 AGENTS.md 与编码规范里的第 8 行一并删掉"
+    }
+  ]
+}

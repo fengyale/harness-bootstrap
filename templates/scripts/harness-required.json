@@ -1,0 +1,42 @@
+{
+  "_说明": "verify-harness.ps1 的必需文件清单、AGENTS.md 必含章节与平台入口。agentsSections 顺序固定：[0]技术栈 [1]必跑命令 [2]红线 [3]文件索引 [4]AI 编码纪律。",
+  "agentsSections": ["技术栈", "必跑命令", "红线", "文件索引", "AI 编码纪律"],
+  "platformEntries": {
+    "skillDirs": [".trae/skills", ".claude/skills"],
+    "agentDirs": [".trae/agents", ".claude/agents"]
+  },
+  "stackTermRules": [
+    { "field": "orm", "whenNotEquals": "mybatis", "forbid": ["MyBatis", "@Mapper", "@Entity", "JPA"] },
+    { "field": "mq", "whenNotEquals": "present", "forbid": ["RocketMQ", "Kafka", "RabbitMQ", "@RabbitListener"] },
+    { "field": "frontend", "whenNotEquals": "vue", "forbid": ["Pinia", "Vuex"] }
+  ],
+  "negationWords": ["不要", "禁止", "无需", "不适用", "不是", "不用", "改用", "替代", "删掉"],
+  "patternSections": ["模式", "反例", "证据"],
+  "moduleSections": ["职责", "关键入口", "依赖与数据", "重点", "难点", "坑点", "验证方式", "证据锚点"],
+  "required": [
+    "AGENTS.md",
+    ".harness/rules/编码规范.md",
+    ".harness/rules/工程结构.md",
+    ".harness/rules/开发流程规范.md",
+    ".harness/skills/README.md",
+    ".harness/wiki/领域术语.md",
+    ".harness/wiki/业务模型.md",
+    ".harness/wiki/数据模型.md",
+    ".harness/wiki/接口协议.md",
+    ".harness/changes/README.md",
+    ".harness/modules/README.md",
+    "scripts/red-line-rules.json",
+    "scripts/red-line-scan.ps1",
+    "scripts/probe-stack.ps1",
+    "scripts/probe-project.ps1",
+    "scripts/install-git-hooks.ps1",
+    "scripts/stage-gate.ps1",
+    "scripts/stage-gate-rules.json",
+    "scripts/check-summary.ps1",
+    "scripts/setup-links.ps1",
+    "scripts/verify-grounding.ps1",
+    "scripts/agents-delta.ps1",
+    "scripts/metrics.ps1",
+    "scripts/promote-pattern.ps1"
+  ]
+}

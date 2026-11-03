@@ -1,0 +1,174 @@
+{
+  "_说明": "harness-bootstrap 自举契约：verify-package.ps1 按本文件检查包自身。中文只放这里，脚本保持纯 ASCII。",
+  "_为什么": "同一套门禁语义写在脚本、JSON、SKILL、AGENTS、规则五处；没有机器检查时，改一处就会漂一处。本文件把「五处必须一致」变成可判定的断言。",
+
+  "requiredFiles": [
+    "SKILL.md",
+    "templates/AGENTS.md",
+    "templates/.gitignore",
+    "templates/scripts/stage-gate.ps1",
+    "templates/scripts/stage-gate-rules.json",
+    "templates/scripts/check-summary.ps1",
+    "templates/scripts/install-git-hooks.ps1",
+    "templates/scripts/uninstall-harness.ps1",
+    "templates/scripts/verify-harness.ps1",
+    "templates/scripts/verify-grounding.ps1",
+    "templates/scripts/metrics.ps1",
+    "templates/scripts/probe-project.ps1",
+    "references/接地协议.md",
+    "references/新项目初始化.md",
+    "references/平台适配.md"
+  ],
+
+  "mustNotExist": [
+    "templates/.trae/agents/harness-auditor.md"
+  ],
+
+  "contracts": [
+    {
+      "id": "skip-markers-exist",
+      "file": "templates/scripts/stage-gate-rules.json",
+      "pattern": "\"commandSkipMarkers\"",
+      "why": "三态判据的「占位行」标记必须外置在 JSON 里，脚本才能保持纯 ASCII。"
+    },
+    {
+      "id": "tri-state-in-code",
+      "file": "templates/scripts/stage-gate.ps1",
+      "pattern": "placeholder row -> SKIP, missing row -> BLOCKED",
+      "why": "编译/测试判据必须在代码里写明：占位行 SKIP，整行缺失 BLOCKED。"
+    },
+    {
+      "id": "tri-state-in-skill",
+      "file": "SKILL.md",
+      "patterns": ["整行缺失", "\\[SKIP\\]"],
+      "why": "SKILL 是安装者读的唯一入口；三态语义不在这里写清，安装者会把 SKIP 当成通过。"
+    },
+    {
+      "id": "tri-state-in-flow-rules",
+      "file": "templates/.harness/rules/开发流程规范.md",
+      "patterns": ["整行缺失", "BLOCKED"],
+      "why": "项目内的流程规范必须与门禁脚本同一口径，否则 agent 按文档操作会被门禁拦。"
+    },
+    {
+      "id": "merge-hook-in-gate",
+      "file": "templates/scripts/stage-gate.ps1",
+      "pattern": "pre-merge-commit",
+      "why": "合并提交不触发 pre-commit；阶段 4/7 的 gate-proven 必须同时证明合并 hook 存在。"
+    },
+    {
+      "id": "merge-hook-in-verify",
+      "file": "templates/scripts/verify-harness.ps1",
+      "pattern": "pre-merge-commit",
+      "why": "体检脚本必须与阶段门检查同一批 hook，否则安装漏掉合并 hook 也报 PASS。"
+    },
+    {
+      "id": "precommit-checks-initial-only",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "-Stage initial",
+      "why": "pre-commit 只查基础字段；收尾字段由 stage-gate 阶段 10 查，避免 WIP 提交被逼用 --no-verify。"
+    },
+    {
+      "id": "hooks-path-override-warned",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "core.hooksPath",
+      "why": "core.hooksPath 会让写入 .git/hooks 的门禁静默不生效，安装时必须告警。"
+    },
+    {
+      "id": "summary-stage-param",
+      "file": "templates/scripts/check-summary.ps1",
+      "pattern": "ValidateSet\\('initial', 'final'\\)",
+      "why": "initial / final 两档是 pre-commit 与阶段 10 分工的唯一实现点。"
+    },
+    {
+      "id": "agents-field-split",
+      "file": "templates/AGENTS.md",
+      "pattern": "pre-commit 只查基础字段",
+      "why": "常驻文件是 agent 每轮读的入口，字段分工必须写在这里。"
+    },
+    {
+      "id": "grounding-anchor-example",
+      "file": "references/接地协议.md",
+      "pattern": "(?m)^  - \\[E2\\]",
+      "why": "证据锚点示例必须行首以 - [E2] 开头，verify-grounding 的正则才能识别；写成「- 证据：- [E2]」永远扫不到。"
+    },
+    {
+      "id": "gitignore-metrics",
+      "file": "templates/.gitignore",
+      "pattern": "\\.harness/metrics/",
+      "why": "门禁日志每次提交都追加；不忽略会让工作区恒 dirty，反过来诱发绕过门禁。"
+    },
+    {
+      "id": "no-stale-skip-phrase",
+      "file": "templates/scripts/stage-gate.ps1",
+      "forbid": "no command -> SKIP",
+      "why": "旧口径「没有命令就 SKIP」会把「没声明」伪装成「不适用」，已改为整行缺失 BLOCKED。"
+    },
+    {
+      "id": "agents-command-section",
+      "file": "templates/scripts/stage-gate-rules.json",
+      "pattern": "\"agentsCommandSection\"",
+      "why": "命令行只在「必跑命令」章节内解析；不限章节会把红线表里含「编译」的行当命令执行。"
+    },
+    {
+      "id": "skip-exact-markers",
+      "file": "templates/scripts/stage-gate-rules.json",
+      "pattern": "\"commandSkipExact\"",
+      "why": "none / n/a / - 这类裸词必须整格相等才算占位；子串匹配会误伤真实命令。"
+    },
+    {
+      "id": "hooks-path-install",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "--git-path hooks",
+      "why": "linked worktree 下 --absolute-git-dir 的 hooks/ 永远不执行；必须问 git 要生效目录。"
+    },
+    {
+      "id": "hooks-path-uninstall",
+      "file": "templates/scripts/uninstall-harness.ps1",
+      "pattern": "--git-path hooks",
+      "why": "卸载必须与安装看同一个生效目录，否则 worktree 下三个 hook 会全部漏删。"
+    },
+    {
+      "id": "hooks-path-verify",
+      "file": "templates/scripts/verify-harness.ps1",
+      "pattern": "--git-path hooks",
+      "why": "体检与安装同一目录口径，否则门禁失效也会报 PASS。"
+    },
+    {
+      "id": "hooks-path-stage",
+      "file": "templates/scripts/stage-gate.ps1",
+      "pattern": "--git-path hooks",
+      "why": "阶段 4/7 的 gate-proven 必须指向 git 真正执行的 hook 目录。"
+    },
+    {
+      "id": "self-gate-own-repo-only",
+      "file": "tools/install-self-gate.ps1",
+      "pattern": "--show-toplevel",
+      "why": "自举 hook 只能在包自己的仓库安装；包被复制到宿主项目时安装会阻断宿主所有提交。"
+    },
+    {
+      "id": "gate-marker",
+      "file": "templates/scripts/stage-gate.ps1",
+      "pattern": "harness pre-commit gate",
+      "why": "只查 red-line-scan 字符串会把「注释里提了一句」当成门禁；必须同时校验安装标记。"
+    },
+    {
+      "id": "summary-flow-placeholder",
+      "file": "templates/.harness/changes/_template/summary.md",
+      "pattern": "flow: <L1",
+      "why": "模板里的 flow 必须是占位符；写死 L2 会让未定档的任务直接通过校验。"
+    },
+    {
+      "id": "summary-lesson-rule",
+      "file": "templates/.harness/changes/_template/summary.md",
+      "pattern": "corrections ≥ 1",
+      "forbid": "corrections 为 0 时才填",
+      "why": "check-summary 的规则是 corrections>0 时 lesson_id 必填；模板写反会让人漏填到阶段 10 才失败。"
+    },
+    {
+      "id": "theme-commitments",
+      "file": "references/核心论述.md",
+      "pattern": "实现层的错由机器吸收",
+      "why": "三句主题承诺是 SKILL 指向的基调；这一节空着会让所有下游判断失去依据。"
+    }
+  ]
+}

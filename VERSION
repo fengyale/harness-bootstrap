@@ -1,0 +1,271 @@
+HARNESS-BOOTSTRAP VERSION 1.21.0
+
+changelog
+---------
+1.21.0  (SKILL 瘦身 + 验收可判定 + 晋升有留痕)
+- SKILL.md 604 -> 357 行：1.2 / 1.4 / 1.6 / 2.3 / 3.2 / 3.3 下沉到 references/核心论述.md，
+  主文件只留指针；触发时上下文成本约减 40%
+- 验收表 A3 / A3+ / A6 改为可判定口径：抽查命中率、待补短板条数、corrections <= 2
+- 新增晋升留痕：.harness/metrics/promoted.txt 记录已晋升 lesson_id；
+  metrics 与 verify-harness 对已晋升项不再提示（计数保留）
+- 包模板 开发流程规范 新增 6.6「新增规则 / wiki 必须写明触发者」，
+  与项目 §5 的晋升规则对齐（新项目冷启动即带这条纪律）
+
+1.20.0  (setup-links：受限环境自动降级，健康链接不再重建)
+- 新增 -Mode auto|junction|copy：junction 目标若含 sandbox-storage / unified-cache
+  （虚拟化 shell 的典型症状），自动删除并改为复制
+- 复制出来的目录带 .harness-copy 标记，后续运行可安全刷新；非本脚本创建的实体目录仍拒绝覆盖
+- 已健康的 junction 直接跳过，不再每次全量重建
+
+1.19.0  (技能数量改为"冷启动管上限，运行期管效果")
+- verify-grounding.ps1：MaxGrounded 默认改为 0（不检查）；仅冷启动时显式传 -MaxGrounded 8
+- 接地协议 G3 改为：冷启动 ≤ 8；运行期不设数量上限，按"4 周 0 加载即删"管理
+- 新增 verify-harness 的 lessons 提醒同版说明见 1.18.0
+
+1.18.0  (自检可信化 + 晋升提醒)
+- verify-harness 第 6 项 runnable：退出码 1 但输出可识别 → PASS（存量违规不再让自检变黄），
+  只有完全跑不出扫描结果才 FAIL
+- verify-harness 第 10 项 metrics 之后新增 lessons 提醒：任一 lesson_id >= 2 → WARN 并点名
+  "promote into a rule, a gate or a skill"，让自检本身成为晋升提醒器
+
+1.17.0  (技能保鲜：代码改了，技能会被提醒)
+- verify-grounding.ps1 新增 stale 检查：E2 锚点指向的文件修改时间晚于技能的
+  `- verified: YYYY-MM-DD`（缺省用技能文件 mtime）→ WARN，只提醒不拦
+- references/接地协议.md 新增 verified 行约定
+- references/维护与体检.md 技能体检新增判定：stale 必须重读那段代码，
+  确认没变后只更新 verified 日期
+
+1.16.0  (lesson_id：把"第 2 次才落盘"从判断变成可数)
+- summary.md 模板新增 `lesson_id:` 行：同一条教训复用同一个 id，本次没有新教训写 `-`
+- scripts/metrics.ps1 统计同一 lesson_id 的出现次数，>= 2 时直接给出
+  "promote it into a rule, a gate or a skill" 的结论；文本输出与 -Json 都带 lessons
+- references/维护与体检.md 提示词 B 新增 3.5：起 id、复用 id、说明机器判据
+- 修正 metrics.ps1：原来只取每个 summary 的第一条 `lesson_id`，改为收集全部
+  （同一任务内去重，跨任务才计数），否则"每条纠正挂一个 id"时其余 id 全部漏统计
+- 维护与体检提示词 B 第 3 步：落点从 3 类扩到 6 类（红线/门禁/编码细则/wiki/流程/技能），
+  并要求先出"落点表"再动手；新增 3.1：默认修改，新建文件需 ≥2 任务会用，
+  新建技能需同一 lesson_id ≥2 次
+- metrics.ps1 真正支持 `-Days N`（此前只在用法里写了、参数不存在）：
+  任务按 summary 顶部首个 ISO 日期过滤，gate 事件按 ts 过滤；
+  无日期行回退文件 mtime 并列为 undated，缺 ts 的事件跳过并计数，不静默丢弃
+
+1.15.0  (SQL 性能评审：事前评审 + 提交门禁)
+- 新增技能模板 biz-dev/14-sql-review（安装时按项目编号改名，如 04-sql-review）：
+  何时用、6 步评审、8 项检查、summary 输出模板；与 trouble-shooting/01-slow-sql 形成事前/事后分工
+- 新增规则模板 .harness/rules/SQL评审规范.md：三条必做（估数据量 / 执行计划 / 写结论）、
+  7 类高危写法、方言差异表（全部 slot 化）
+- 新增门禁 scripts/sql-review-gate.ps1 + sql-review-gate.py：staged diff 的新增行含 SQL 时，
+  要求**本次提交携带**的 `.harness/changes/<feature>/summary.md` 含 `sql_review:` 结论（≥4 字符），
+  否则 exit 1；`HARNESS_TASK=<feature>` 为逃生口。只检 `.java/.sql/.xml/.kt/.py/.js/.ts/.vue/.cs`，
+  排除门禁脚本自身与 `.md`（文档里写 SQL 示例不触发）；`select *` / `not in` / 前导 `%` 仅 WARN
+- 门禁绑定方式经独立审查修正：不用"最新修改的 summary"（多任务并行会双向误判），改为随提交携带；
+  hook 改用 `git rev-parse --absolute-git-dir`，diff 生成失败即 fail-closed 拒绝提交
+- install-git-hooks.ps1：red-line 扫描后调用 SQL 门禁，任一失败即阻断提交
+- templates/AGENTS.md、技能 README 同步登记"涉及 SQL 必评审"
+- 依据：性能好坏无法用正则判定，但"是否评估过"可判定——把"请考虑 SQL 性能"变成机械停止点
+
+1.14.2  (空文件检查 + 加载范围口径修正)
+- templates/AGENTS.md 第 9 节：把"上下文加载限额（规则 + wiki ≤3 个）"改为"加载范围 + 超限例外"，
+  明确**技能与模块卡不占该额度**（原措辞会被模型误读成"连技能也只能加载 3 个"，导致该加载时不加载）；
+  跨模块 / 数据迁移 / 上线评审可超限，但必须在 summary.md 写「额外读取 + 原因」
+- verify-harness 第 1 项新增空文件检查：`.harness/rules/*.md`、`.harness/wiki/*.md` 少于 5 行判 FAIL
+- 依据：首次真实项目落地时 33 项自检全绿，但 `.harness/rules/工程结构.md` 已被截断成 0 字节——
+  "文件存在"不等于"内容还在"，只查存在性会静默放过空壳规范
+- 同步清理包内 5 处旧口径（规则与技能写法.md ×2、开发流程规范.md、biz-dev/README.md、质量分级.md），
+  避免下次安装又把旧措辞带回项目
+
+1.14.1  (必上技能点名，不再只靠 description 触发)
+- AGENTS 模板 与 项目 AGENTS 第 9 节新增一行：收到需求先加载 request-analysis；动代码先加载 coding-skill；合并前加载 expert-reviewer
+- 依据：首次真实任务 loaded_skills=none（6 个技能 0 加载），证明仅靠 description 自动触发不可靠，需常驻层兜底
+- 同时把"技能清单里没有的"明确为"按技能缺失处理并说明"
+
+1.14.0  (模块卡片：位置知识有了落点)
+- 新增 templates/modules/：README（收录/更新规则）+ _template（七节固定结构：职责/关键入口/依赖与数据/重点/难点/坑点/验证方式）
+- 首次落地按"高频 3–5 个模块"生成，不要求 12 个全写
+- request-analysis / coding-skill 增加"定位到模块后先读 .harness/modules/<module>.md"（包内骨架同步加 slot:module.cards）
+- summary 模板增加 `touched_modules:`（项目模板与包模板同步）
+- verify-harness 新增第 11 项：卡片七节结构（缺节 WARN）+ 至少一条 E1/E2（缺失 FAIL）
+- harness-required.json 增加 moduleSections，并把 .harness/modules/README.md 加入必装清单
+- AGENTS.md 文件索引新增「模块卡片」小节
+
+1.13.0  (行级门禁 / fail-closed / 绕过率 / L3 回灌 / 全量模板骨架化)
+- red-line-scan.ps1 / .py 新增 diff 模式：解析 git diff -U0 的新增行集合，只在新增行报违规
+  （多行规则按匹配区间与新增集合求交），stdin 改按 UTF-8 字节读取
+- install-git-hooks.ps1：hook 改用 diff 模式；fail-closed（缺扫描器 / 无运行时 / 内部错误均拒绝提交）；
+  通过时写 .git/harness-gate-ok 标记；新增 post-commit 记录本 commit 是否被门禁覆盖（scanned）
+- metrics.ps1：新增 scans / commits / blocked / bypass / bypassRate / skillLoadRate；
+  绕过率 >10% 或技能加载率 <50% 直接给判定
+- 新增 references/回灌协议.md、scripts/promote-pattern.ps1、templates/patterns/（L3：≥2 项目 + 人工确认才晋升）
+- 18 个剩余模板全部骨架化：24/24 模板带 slot（51–52 行、5–6 个 slot、零栈专名）
+- references/两周复盘.md 指标改为脚本输出（增加绕过率、技能加载率）
+- 独立审查后的修正：diff 落临时文件（避免 sh→powershell 管道卡死）；扫描改读**索引 blob**，
+  修复 `git add -p` 部分暂存会漏拦的 P0；补装 `pre-merge-commit`；门禁标记绑定 tree 哈希；
+  解析兼容引号路径并在 `diff --git` 处重置；metrics 对缺 `scanned` 的旧事件不再误判为绕过；
+  promote-pattern 只校验头部字段、要求 id 与文件名一致、outbox 已存在需 -Force
+
+1.12.1  (模板骨架化 + 复盘改用数据)
+- 6 个核心模板技能（request-analysis / coding-skill / expert-reviewer / redis-cache /
+  transaction-consistency / slow-sql）改为"骨架 + `<!-- slot:… -->`"，不再写死 Spring/MyBatis/XML 等栈名词；
+  安装时必须编译，未填 slot 会被 verify-grounding 判 FAIL
+- references/两周复盘.md 第一节改为"先跑 metrics.ps1"，不再靠回忆；保留两项人工判断（重复次数、基线）
+- references/维护与体检.md 新增 1.1「按数据删除」：4 周 0 加载删技能、4 周 0 拦截删红线
+- 待确认问题.md：A8 度量标记为已落地；A1/A5 标注为"机制已建、待跨项目验证"
+
+1.12.0  (度量闭环：corrections / loaded_skills / 拦截数真正被采集)
+- 新增 scripts/metrics.ps1：解析 .harness/changes/*/summary.md 的 corrections 与 loaded_skills，
+  读 .harness/metrics/gate.jsonl 统计拦截数，输出 A7 结论与"从未加载的技能（可删）"
+- install-git-hooks.ps1：hook 拦截时追加 .harness/metrics/gate.jsonl（ts / blocked / files）
+- verify-harness.ps1 新增第 10 项：非模板 summary 必须含 corrections 与 loaded_skills（缺失 WARN）
+- SKILL.md 第 6 步：交付必须贴 metrics.ps1 的数字，作为 A7 起点
+- harness-required.json 加入 scripts/metrics.ps1
+
+1.11.0  (技能编译：从"复制模板"改为"按项目证据编译")
+- 新增 references/技能编译协议.md：三层（模式/绑定/锚点）、四动作（留/换/删/加）、slot 语法、合格线
+- 新增 scripts/probe-stack.ps1：产出 .harness/stack.json（language/build/modules/orm/cache/mq/test/frontend）
+- verify-grounding.ps1 新增 compile 校验：slot 残留 FAIL；技能提到 stack.json 中不存在的能力 FAIL
+  （带否定词的句子豁免，如"不要引入 …"）；无 stack.json 时给 WARN 提示先跑 probe-stack
+- harness-required.json 增加 stackTermRules / negationWords，并把 probe-stack.ps1 加入必装清单
+- SKILL.md 第 0.5 步同时跑两个 probe；第 2 步技能行改为"编译，不是复制；description 同步改写"
+- 首次用医保项目验证：6 个技能全部按 RedisUtils / JFinal / 2 个测试的事实重写（40–55 行），
+  probe 自动纠正了"13 个 module"的错误说法（实为 12）
+
+1.10.3  (空心与重装：结构检查下沉到内容层)
+- verify-harness.ps1：第 9 项从"章节存在"升级为"内容不空心"——
+  必跑命令需 ≥2 行带反引号的命令、红线需 ≥1 条 R 编号行、技术栈表行数不足给 WARN
+- 新增 scripts/agents-delta.ps1：重装前出差异清单（MISSING / HOLLOW / OK），
+  只补前两类；同时把 agents-delta 加进必装清单
+- SKILL.md 第 5 步改为三个脚本都要 0 FAIL；3.2.1 增加"重装先出 delta"步骤
+
+1.10.2  (常驻文件的信息架构成为机制)
+- verify-harness.ps1 新增第 9 项检查：AGENTS.md 必须含「技术栈 / 必跑命令 / 红线 / 文件索引 / AI 编码纪律」五块，
+  缺一块 FAIL；章节清单在 harness-required.json 的 agentsSections
+- 同项检查还会拦"模板残留"：出现 `<如 …>` 这类中文占位符直接 FAIL（脚本保持纯 ASCII，用 char code 匹配）
+- SKILL.md 3.2.1 明确：合并 ≠ 末尾追加，必须按模板信息架构重组（内容归用户、结构归模板）
+- 修复背景：首次试点只追加了一节，产出的 AGENTS.md 结构远薄于模板，但自检全绿
+
+1.10.1  (收尾：链接/可执行位的机制校验)
+- verify-harness.ps1 的 gate 检查在 Unix 上校验 pre-commit 的 UserExecute 位；
+  缺执行位直接 FAIL（此前会被 git 静默忽略而自检仍 PASS）
+- setup-links.ps1：新增 New-Link/Remove-Link 抽象——Windows 用 mklink /J，Unix（pwsh 7）用 ln -s；
+  重建分支也检查退出码，失败不再打印 "rebuilt"
+- 结论：除扫描器外，其余机制脚本在 macOS/Linux 上需要 pwsh 7；没有 pwsh 时仍按文档手工核对
+
+1.10.0  (机制层跨 OS + 已有 AGENTS.md 的合并规则)
+- 新增 scripts/red-line-scan.py：与 .ps1 镜像的跨平台扫描器（同一套规则、同样的退出码），
+  支持 --files / --files-from-stdin / --rules / --list-rules
+- install-git-hooks.ps1：hook 自动选解释器 powershell -> python3 -> python -> pwsh；
+  缺扫描器时显式 WARN；门禁从此在 Windows / macOS / Linux 都能跑
+- references/平台适配.md 新增「机制层怎么跨 OS 跑」，含两份镜像实现的同步要求
+- SKILL.md 新增 3.2.1「AGENTS.md 已存在时怎么合并」：事实/规则/无关内容分类处理、
+  只增不删 + marker 区块、合并后 150 行预算、三不（不覆盖/不删/不改写）
+- 独立审查后的修正：py/ps1 行级规则大小写语义对齐（ps1 -match 忽略大小写，多行规则区分）；
+  py 校验 root、按 BOM 解码 UTF-16；hook 用 core.quotepath=false + ACMR（中文名/重命名不再漏扫）、
+  Unix 下补 chmod +x；verify-harness 的 runnable 按 powershell/pwsh/python 择一
+
+1.9.0  (平台无关：一份内容，多种入口)
+- 新增 references/平台适配.md：平台矩阵（TRAE / Claude Code / Codex / CodeBuddy / 未知）、
+  三种技能发现模式（自动发现 / 入口导入 / 索引导航）、缺能力时的降级规则
+- 新增 templates/adapters/claude/CLAUDE.md（@AGENTS.md 导入）与
+  templates/adapters/generic/HARNESS-INDEX.md（无自动发现平台的技能索引）
+- SKILL.md：第 0 步改为"探测平台 + 落核心 + 只建对应入口"；第 3 步改为"按平台选发现方式"；
+  3.2 增加 CLAUDE.md 合并策略
+- setup-links.ps1 新增 -Dest（TRAE 默认 .trae\skills，Claude 用 .claude\skills）
+- harness-required.json 移除 .trae\agents 硬编码，改 platformEntries（skillDirs / agentDirs）
+- verify-harness.ps1：结构与发现检查改为平台无关（任一平台目录命中即通过；
+  无自动发现时接受 INDEX.md 索引模式）；新增 platform 检查项
+
+1.8.0  (装上就能用：门禁只拦新增 + 证据锚点 + 自检真的会红)
+- red-line-scan.ps1 新增 -Files / -FilesFromStdin：只扫本次改动的文件，存量违规不再阻塞提交
+- install-git-hooks.ps1：hook 改为 `git diff --cached --name-only --diff-filter=ACM` 增量扫描；
+  scripts 缺失时显式 WARN 并提示复制步骤，不再静默跳过
+- red-line-rules.json：R4 启用 multiline（跨行正则原来永不触发）；R7 加 includePath 收窄到 *mapper*
+- verify-harness.ps1：门禁缺失 / 无 git 从 WARN 改 FAIL；必需文件清单外置到 harness-required.json，
+  脚本恢复纯 ASCII 并去掉 BOM
+- 新增 references/接地协议.md 与 scripts/verify-grounding.ps1：
+  E1–E4 证据分级、无 E1/E2 不进正文、接地技能 ≤5 且 ≤120 行、路径完整性校验
+- SKILL.md：新增第 0 步"复制 scripts/.trae 到项目"；修正重复句、错位表格行、残留英文段
+
+1.7.0  (阶段门：把"流水线协议"变成"机制")
+- 新增 scripts/stage-gate.ps1：阶段门检查器
+  · 10 个阶段，每阶段有 AUTO（机器判定）和 HUMAN（人工确认）两类条件
+  · AUTO 未过 => Gate result: BLOCKED + exit 1；HUMAN 只提示不阻断
+  · 无状态设计：每次从磁盘现算，不维护"当前第几步"，换工具换机器都不失效
+- 新增 scripts/stage-gate-rules.json：中文匹配规则外置（PS 5.1 编码限制）
+- verify-harness.ps1 的必需文件清单加入 stage-gate 两个文件
+- 开发流程规范新增 2.1 节「阶段门（机制，不是建议）」
+- SKILL.md 目录树与第 5 步自检加入阶段门用法
+
+实测（4 个场景全部符合预期）：
+  A. summary.md 只有标题      -> Stage 1 BLOCKED (exit 1)
+  B. 补全 summary.md 各章节   -> Stage 1/3 OPEN (exit 0)
+  C. 部署记录章节为空         -> Stage 10 BLOCKED (exit 1)
+  D. 未定义的阶段号           -> 明确报错提示用 -ListStages
+
+1.6.0  (P1：全技能内容补齐 + 修复批量生成缺陷)
+- 修复严重缺陷：1.3.0 批量生成 16 个技能时，Step 标题被按字符切碎
+  （### S / ### 按 / ### 位 ...），执行流程完全损坏
+- 24 个技能全部重写为实质内容：触发条件 → 前置准备 → 核心规则 → 编号 Step → 自检清单 → 红线
+  共 2355 行，平均 98 行，最小 79 / 最大 143
+- 质量分级从 A/B/C 三级细化为 A / A- / B：
+  A=1（redis-cache 原文重写）、A-=8（内容完整、代码示例需换类名）、B=15（知识正确、命令路径需适配）
+- 每个技能都补了可执行命令、代码示例、常见根因表、失败处置
+- 新增技能升级路径：某技能被真实用到 N 次后从 B 升 A-
+
+1.5.0  (P0：可决策建议 + 自成长节律)
+- probe-project.ps1 新增建议层：不再只给原始事实，直接给出
+  · suggestedSkills（核心3 + 按技术栈挑的最高价值专题）
+  · redLineCandidates（按技术栈分组的候选红线）
+  · gateMode（有>=20提交的存量仓库自动判定 new-code-only）
+  · notes（已有规则文件/无测试根/无构建文件等会改变计划的因素）
+- baseline.md 重构为 Part 1 建议 / Part 2 事实两段，建议在前
+- 新增 references/两周复盘.md：验 A7 的唯一方式（四个数字 + 四类原因判断 + 三个决定）
+- SKILL.md 2.3 改为「自成长机制」：三个节律 + 修内容/补文件/补目录 + 五个腐化信号
+- 2.1 从五种请求扩为六种（增加"复盘"），description 增加"复盘"触发词
+
+1.4.0  (补齐最初的第三个支柱：闭环反馈)
+- SKILL.md 1.4 从"三条核心思想"扩为"四条"，新增「④ 闭环反馈」
+  · 明确最初的公式：Harness = 规则 + 执行引擎 + 闭环反馈
+  · 闭环四环节：证据 → 判定 → 修正 → 沉淀
+  · 判定标准只有一条：同一个错误会不会犯第二次
+  · 补上"可观测"要求：看不见的问题不会被修，只会被习惯
+- 验收标准新增 A7：闭环成立（同类错误不犯第二次）
+- 自建指南 / 交接单 / 交付要求 同步 A7
+
+1.3.0  (基调 + 能动性 + 补短板)
+- SKILL.md 新增「第零部分：基调」：明确核心目的是把 AI 编程工程化/自动化/流水化，
+  并给出三条推论（能自动化的不留给人工、能机器判定的不靠自觉、框架要替你进步）
+- SKILL.md 新增 1.6「守约定 vs 补短板」：A3 与 A3+ 的分界，补短板的四道闸门
+  （场景闸/价值闸/成本闸/方式闸）、留痕要求、什么不算补短板
+- SKILL.md 新增 1.5「主观能动性」：六种场景的消极 vs 主动对照 + 四条不可越过的边界
+- 验收标准新增 A3+：该补的短板在合适场景中补上并说明
+- 硬约束新增 11、12 条：补短板必须过闸门且留痕、不许默默改
+- 交付要求从四件事改为五件事，增加「本次发现的短板」
+- 自建指南新增「零、设计时的两个基本立场」，并同步 A3+ 到效果清单
+- 带过去先看这个.md：设计原则从四句话扩为「基调 + 四条原则」，并说明 A3/A3+ 分界
+
+1.2.0  (元技能重构 —— 核心改动)
+- SKILL.md 整份重写：从「施工手册」改为「元技能」
+  · 第一部分讲目的、病根、六条验收标准(A1–A6)、三条不可动摇的核心思想、角色定位
+  · 第二部分讲五种请求分流 + 从零自建六步
+  · 开篇第一句明确：templates 是参考样本，不是要铺进去的东西
+- 新增 references/自建指南.md：模板不适用时，怎么从零设计这个项目的框架
+  （四种资产的分工、从"用户纠正过什么"倒推技能集、红线的三条硬门槛、
+    wiki 事实从哪挖、门禁三层设计、设计完的六个自检问题）
+- 修复：SKILL.md description 从 273 字压到 111 字（原版尾部触发词会被平台截短丢掉）
+- 修复：coding-skill 中一处技能名拼写错乱 + 引用了改名前的评审技能
+- 修复：code-reviewer 引用了改名后的旧路径（死链）
+- 修复：模板引用 24 个技能但默认只装 3-5 个的架构矛盾
+  （AGENTS.md / 开发流程规范 / coding-skill 三处补了"技能缺失降级表"）
+
+1.1.0
+- 新增 scripts/verify-harness.ps1：22 项机制级自检
+- 新增 scripts/probe-project.ps1：落地前探测项目事实，产出 baseline.json/md
+- 新增 scripts/uninstall-harness.ps1：干净卸载
+- 新增 references/落地策略.md：默认启用集 + 存量项目渐进路径 + 首周节奏
+- 新增 references/红线候选池.md：按技术栈分组的红线候选
+- 新增 references/质量分级.md：24 个技能的 A/B/C 置信度标注
+- 技能扩充至 24 个（main-dev 6 / biz-dev 13 / trouble-shooting 5）
+- 恢复十阶段流水线；补 3 个分类 README；补 正确/错误 对照示例
+
+1.0.0
+- 初始版本：SKILL.md + references(4) + templates(26)
