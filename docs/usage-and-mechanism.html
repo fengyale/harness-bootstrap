@@ -537,7 +537,8 @@
     <a href="#s3">3 · 日常使用</a>
     <a href="#s4">4 · 内部机制</a>
     <a href="#s5">5 · 度量与成长</a>
-    <a href="#s6">6 · 文件与验收</a>
+    <a href="#s6">6 · 升级</a>
+    <a href="#s7">7 · 文件与验收</a>
   </nav>
 
   <div class="main">
@@ -686,7 +687,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
           <div class="step-num">5</div>
           <div>
             <h3>升级已有项目（不是重装）</h3>
-            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。已装技能正文默认只提示差异，确认要同步时加 <code>-UpdateSkills</code>。</p>
+            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。已装技能正文默认只提示差异，确认要同步时加 <code>-UpdateSkills</code>。完整规则见第 6 节。</p>
             <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt;
 # 确认差异后
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt; -Apply</code></pre>
@@ -966,6 +967,132 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
     <section id="s6">
       <div class="sec-head">
         <span class="sec-num">06</span>
+        <h2>升级</h2>
+        <span class="hint">已装项目怎么换机制</span>
+      </div>
+
+      <p class="lede" style="font-size:13px">
+        重跑 <code>SKILL.md</code> 第 0 步不会更新旧脚本：Copy-Missing 只补缺失文件。
+        升级要用 <code>scripts\update-harness.ps1</code>；默认只打印计划，加 <code>-Apply</code> 才执行。
+      </p>
+
+      <section class="diagram-shell">
+        <p class="diagram-shell__hint">先看计划，再执行；MANUAL 项不会被自动改写。</p>
+        <div class="mermaid-wrap">
+          <div class="zoom-controls">
+            <button type="button" data-action="zoom-in" title="放大">+</button>
+            <button type="button" data-action="zoom-out" title="缩小">&minus;</button>
+            <button type="button" data-action="zoom-fit" title="适配">&#8634;</button>
+            <button type="button" data-action="zoom-one" title="1:1">1:1</button>
+            <button type="button" data-action="zoom-expand" title="全屏">&#x26F6;</button>
+            <span class="zoom-label">Loading...</span>
+          </div>
+          <div class="mermaid-viewport">
+            <div class="mermaid mermaid-canvas"></div>
+          </div>
+        </div>
+        <script type="text/plain" class="diagram-source">
+          flowchart TD
+            A["新包路径"] --> B["默认 Dry-Run<br/>只打印计划"]
+            B --> C{"计划项"}
+            C -->|ADD / UPDATE| D["-Apply 执行<br/>旧 .ps1 进备份"]
+            C -->|MANUAL| E["手工合并<br/>AGENTS / JSON / agents"]
+            D --> F["写入 .installed-version"]
+            D --> G["重装 git hooks"]
+            D --> H["verify-harness"]
+            E --> I["替换技能包副本"]
+            I --> J["跑阶段 3 / 5 + 真实任务"]
+        </script>
+      </section>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">首次升级（旧项目还没有这个脚本）</h3>
+      <pre><code>git clone https://github.com/fengyale/harness-bootstrap.git D:\tools\harness-bootstrap
+
+cd D:\your-project
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File D:\tools\harness-bootstrap\templates\scripts\update-harness.ps1 `
+  -Root D:\your-project `
+  -PackagePath D:\tools\harness-bootstrap
+
+# 看完计划再执行
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File D:\tools\harness-bootstrap\templates\scripts\update-harness.ps1 `
+  -Root D:\your-project `
+  -PackagePath D:\tools\harness-bootstrap -Apply</code></pre>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">以后升级（项目里已有脚本）</h3>
+      <pre><code>powershell -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\update-harness.ps1 `
+  -PackagePath D:\tools\harness-bootstrap
+
+# 确认计划后
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\update-harness.ps1 `
+  -PackagePath D:\tools\harness-bootstrap -Apply</code></pre>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">旧文件与新文件怎么处理</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>对象</th><th>动作</th><th>旧文件</th></tr></thead>
+          <tbody>
+            <tr><td><code>scripts\*.ps1</code></td><td>缺失 ADD；不同 UPDATE</td><td>先备份到 <code>.harness\upgrade\&lt;时间戳&gt;\</code>，再替换</td></tr>
+            <tr><td><code>scripts\*.json</code></td><td>缺失 ADD；不同 MANUAL</td><td>不覆盖；红线、阈值、必查文件属于项目配置</td></tr>
+            <tr><td><code>scripts\*.py</code></td><td>缺失 ADD；不同 UPDATE</td><td>与 <code>.ps1</code> 一样先备份再替换</td></tr>
+            <tr><td><code>.harness\rules</code> / <code>wiki</code> / <code>modules</code></td><td>只补缺失</td><td>已存在 SKIP，项目资产不动</td></tr>
+            <tr><td><code>.harness\changes</code></td><td>只补 <code>_template</code></td><td>真实变更记录 KEEP，永不触碰</td></tr>
+            <tr><td><code>.harness\metrics</code></td><td>KEEP</td><td>门禁日志与晋升记录不动</td></tr>
+            <tr><td><code>AGENTS.md</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>永不覆盖，按新包 diff 手工加行/段落</td></tr>
+            <tr><td><code>.trae\agents</code> / <code>.claude\agents</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>你改过的评审智能体不覆盖</td></tr>
+            <tr><td><code>.gitignore</code></td><td>缺失 ADD；同时有 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code> 则 SAME；否则 MANUAL</td><td>不重写，手工补行</td></tr>
+            <tr><td><code>.harness\skills</code></td><td>README 缺失 ADD；已装技能不同 → MANUAL，加 <code>-UpdateSkills</code> 才 UPDATE</td><td>默认保留；未安装的模板技能不会新增</td></tr>
+            <tr><td><code>.trae\skills\harness-bootstrap</code></td><td>不在计划</td><td>手动替换技能包副本</td></tr>
+            <tr><td>git hooks</td><td>重装</td><td>旧 hook 自动备份为 <code>.bak-harness</code></td></tr>
+            <tr><td><code>.harness\.installed-version</code></td><td>写入</td><td>下一次升级据此识别旧版本</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid grid--2" style="margin-top:16px">
+        <div class="card card--green" style="--i:0">
+          <h3>会变</h3>
+          <ul>
+            <li><code>scripts\*.ps1</code> 换成新版，旧版在 <code>.harness\upgrade\</code> 可回滚</li>
+            <li>三个 git hook 换成新版</li>
+            <li>阶段 3 / 5 / 7 / 8 开始真跑 <code>AGENTS.md</code> 命令</li>
+            <li>缺行 BLOCKED、占位 SKIP、退出码非 0 BLOCKED</li>
+          </ul>
+        </div>
+        <div class="card card--teal" style="--i:1">
+          <h3>不会变</h3>
+          <ul>
+            <li><code>.harness\changes</code> 任务历史</li>
+            <li><code>.harness\metrics</code> 门禁与晋升记录</li>
+            <li>已存在的规则、wiki、模块卡</li>
+            <li><code>AGENTS.md</code> 正文（除非你手工合并）</li>
+            <li>项目自定义的 JSON 配置</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout callout--plum">
+        <strong>升级后第一件事：</strong>补齐 <code>AGENTS.md</code> 的「必跑命令」表。
+        阶段 3 / 5 会真跑这些命令；缺行会 BLOCKED，占位会 SKIP，不是回归，是新机制在生效。
+      </div>
+
+      <div class="callout">
+        <strong>当前版本的行为：</strong>
+        没有 <code>-DryRun</code> 参数，默认就是 Dry-Run；<code>-Apply</code> 执行。
+        已装技能正文默认只报 MANUAL，确认要同步时加 <code>-UpdateSkills</code>；
+        未安装的模板技能不会新增，安装时 3–5 个技能的策略保持不变。
+        <code>.gitignore</code> 需要同时包含 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code>，缺哪个就手工补。
+        <code>-SkipHooks</code> / <code>-SkipVerify</code> 仅排障时使用；脚本没有降级保护，不要指向旧包。
+      </div>
+    </section>
+
+    <!-- ============================== 7 ============================== -->
+    <section id="s7">
+      <div class="sec-head">
+        <span class="sec-num">07</span>
         <h2>文件与验收</h2>
         <span class="hint">装完长什么样，怎么算装好</span>
       </div>
