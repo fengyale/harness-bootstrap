@@ -11,6 +11,7 @@
     1. parse      every .ps1 under templates/scripts and tools parses (PS 5.1 parser)
     2. encoding   each .ps1 is pure ASCII, or carries a UTF-8 BOM (PS 5.1 rule)
     3. json       every JSON config parses as JSON
+    3b. version  VERSION and releases.json agree on the top version
     4. structure  required files exist; must-not-exist files are absent
     5. contracts  the same rule is not written differently in two places
                   (patterns and forbidden phrases live in tools/package-contract.json)
@@ -120,6 +121,32 @@ foreach ($f in $jsonFiles) {
     }
 }
 if ($jsonBad -eq 0) { Add-Result 'json' 'PASS' "$($jsonFiles.Count) JSON file(s) parse" }
+
+# ------------------------------------------------------------- 3b version
+# VERSION is the changelog source; releases.json is generated from it for the
+# release tool. Two copies drift, so compare the top entries here instead of
+# trusting a human to update both.
+$verPath = Join-Path $packageRoot 'VERSION'
+$relPath = Join-Path $packageRoot 'releases.json'
+if ((Test-Path -LiteralPath $verPath) -and (Test-Path -LiteralPath $relPath)) {
+    try {
+        $verLine = @([System.IO.File]::ReadAllLines($verPath, [System.Text.Encoding]::UTF8) | Select-Object -First 1)[0]
+        $ver = if ($verLine -match 'VERSION\s+(\d+\.\d+\.\d+)') { $matches[1] } else { $null }
+        # Do not wrap in @(): PS 5.1 returns the JSON array as one Object[], and
+        # @(...)[0] would then be the whole array (all versions joined by spaces).
+        $rels = (Get-Content -LiteralPath $relPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        $top = if ($rels -and @($rels).Count -gt 0) { [string](@($rels) | Select-Object -First 1).version } else { $null }
+        if (-not $ver) {
+            Add-Result 'version' 'FAIL' 'VERSION has no x.y.z header'
+        } elseif ($top -ne $ver) {
+            Add-Result 'version' 'FAIL' "releases.json top version $top != VERSION $ver (run tools\parse-changelog.py)"
+        } else {
+            Add-Result 'version' 'PASS' "VERSION and releases.json both say $ver"
+        }
+    } catch {
+        Add-Result 'version' 'FAIL' "cannot compare VERSION with releases.json: $($_.Exception.Message)"
+    }
+}
 
 # ------------------------------------------------------------ 4 structure
 if ($contract) {

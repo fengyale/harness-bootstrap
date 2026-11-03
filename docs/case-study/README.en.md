@@ -1,4 +1,4 @@
-# Case study: landing a harness on a 12-module Java insurance quality-control backend
+# Case study: landing a harness on a 12-module Java healthcare compliance-review backend
 
 > A record from a real existing codebase. Project name, datasource addresses,
 > credential locations and vendor names are desensitised; the stack, the
@@ -12,7 +12,7 @@
 
 | | |
 |---|---|
-| System | Insurance quality-control backend (real-time compliance checks on HIS orders and fees) |
+| System | Healthcare compliance-review backend (real-time checks on orders and fees from the upstream clinical system) |
 | Stack | Java 8 · Spring Boot 2.0.6 · **JFinal ORM** (not MyBatis/JPA) · Oracle + MSSQL + Redis · Maven, 12 modules |
 | Tests | **2 `*Test.java` files in the whole repository** |
 | Legacy red-line violations | **182** |
@@ -49,8 +49,8 @@ grounding protocol requires:
 ```markdown
 ## Evidence
 
-- [E2] cost-control-chronic/src/main/java/.../MenTeService.java :: the only @Transactional and the chronic-disease implementation
-- [E2] .trae/rules/project_rules.md :: drug-ratio and discharge-mode exclusion rules
+- [E2] cost-control-chronic/src/main/java/.../<chronic-disease service>.java :: the only @Transactional and the chronic-disease implementation
+- [E2] .trae/rules/project_rules.md :: fee-ratio and discharge-mode exclusion rules
 ```
 
 The rule: **no project-specific claim may enter a skill body without E1 (a
@@ -62,7 +62,7 @@ What that buys you shows up in `excerpt/.harness/modules/cost-control-chronic.md
 > Also **the only module in the repository that uses `@Transactional`** — take the
 > transaction style from it.
 >
-> The drug-ratio calculation must exclude cases whose diagnosis starts with **Z51**.
+> The fee-ratio calculation must exclude cases whose diagnosis starts with a specific code prefix.
 >
 > Assuming the exclusion always applies → the dictionary switch actually defaults
 > to '0' (off).
@@ -188,6 +188,11 @@ reports BLOCKED — **even though the code is fine**.
 
 Fix: `compiles` / `tests-green` were demoted to **HUMAN** criteria.
 
+> Note: that was the project's local adaptation at the time. Since 1.22.0 the
+> package uses AUTO with three states: placeholder row → SKIP, missing row →
+> BLOCKED, real run → exit code. A single `<module>` placeholder no longer
+> forces a blanket HUMAN downgrade.
+
 ### 5.3 A rule that was in the index but read by nobody
 
 The `lesson_id` of that task:
@@ -306,7 +311,9 @@ The original records came from a company intranet. Before publishing:
 - passwords and credentials → `<redacted>`
 - absolute paths → `<path>/…`
 - internal URLs → `<internal-url>`
-- company, product and third-party HIS vendor names → neutral descriptions
+- company, product and vendor names → neutral descriptions
+- table, class and business-metric names → neutral placeholders
+  (e.g. `<fee-detail table>` / `<sync service>` / `fee ratio`)
 - 2 lines naming a credential file were removed entirely
 
 **The stack, the structure, the rules, the decision trail and the numbers are

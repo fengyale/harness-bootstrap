@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Publish each changelog entry in VERSION as a GitHub Release.
+"""Publish each entry in releases.json as a GitHub Release.
 
-Reads the changelog that already ships in VERSION (the single source the
-package trusts) and creates one GitHub Release per version, with a tag
-named v<version>. Existing releases are skipped, so the script is safe
-to re-run.
+releases.json is generated from VERSION by tools/parse-changelog.py, so VERSION
+remains the single source of truth. This script creates one GitHub Release per
+version, with a tag named v<version>. Existing releases are skipped, so the
+script is safe to re-run.
 
 Usage:
+    python tools/parse-changelog.py
     GITHUB_TOKEN=... python tools/publish-releases.py
     GITHUB_TOKEN=... python tools/publish-releases.py --dry-run
     GITHUB_TOKEN=... python tools/publish-releases.py --from 1.8.0

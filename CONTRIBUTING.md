@@ -47,6 +47,34 @@ What does not belong here:
 5. Add a behavioural test in `tests/` when the change is about blocking/skipping.
 6. Run the full gate and the tests.
 
+## Commit messages
+
+Use Conventional Commits: `<type>(<scope>): <summary>`.
+
+- `type`: `feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `build` / `ci` / `chore` / `revert`
+- `scope` (optional): `gate` / `summary` / `hooks` / `grounding` / `metrics` / `docs` / `release` / `ci`
+- `summary`: Chinese is fine, no trailing period, keep it under ~50 characters
+- body: what changed and why, one bullet per file group
+- footer: `BREAKING CHANGE:` or `Refs: #123` when applicable
+
+Example:
+
+    fix(gate): 让 -WhatIf 不写盘，缺 stack.json 时显式 WARN
+
+    - install-git-hooks.ps1: 备份移入 ShouldProcess
+    - verify-grounding.ps1: 缺 stack.json 时 WARN
+
+History before 1.22.1 uses English subjects. Keep that history as-is; use this
+format for new commits.
+
+## Releasing
+
+1. Add the entry to `VERSION` (top of the changelog).
+2. Regenerate the release metadata: `py tools\parse-changelog.py`
+3. Run `tools\verify-package.ps1` and `tests\run-all.ps1`.
+4. Commit and push.
+5. Publish the GitHub Release: `py tools\publish-releases.py` (needs `GITHUB_TOKEN`).
+
 ## Pull requests
 
 - One concern per PR; say what the user-visible behaviour changes.

@@ -1,4 +1,4 @@
-# 案例:在一个 12 模块的 Java 医保系统上落地 Harness
+# 案例:在一个 12 模块的 Java 医疗合规系统上落地 Harness
 
 > 一个真实存量项目的落地记录。项目名称、数据源地址、凭据位置与厂商名称均已脱敏;
 > 技术栈、结构、规则与决策过程保持原样。
@@ -11,7 +11,7 @@
 
 | | |
 |---|---|
-| 系统 | 医保质控后端(与 HIS 对接做医嘱/费用实时合规校验) |
+| 系统 | 医疗合规审核后端(与上游临床系统对接做医嘱/费用实时合规校验) |
 | 技术栈 | Java 8 · Spring Boot 2.0.6 · **JFinal ORM**(不是 MyBatis/JPA)· Oracle + MSSQL + Redis · Maven 12 module |
 | 测试 | **全仓库 2 个 `*Test.java`** |
 | 存量红线违规 | **182 处** |
@@ -42,8 +42,8 @@ trouble-shooting/ 01-slow-sql
 ```markdown
 ## 证据锚点
 
-- [E2] cost-control-chronic/src/main/java/.../MenTeService.java :: 唯一 @Transactional 与慢病实现
-- [E2] .trae/rules/project_rules.md :: 药占比与离院方式剔除约束
+- [E2] cost-control-chronic/src/main/java/.../<慢病服务>.java :: 唯一 @Transactional 与慢病实现
+- [E2] .trae/rules/project_rules.md :: 费用占比与离院方式剔除约束
 ```
 
 规则:**没有 E1(可跑命令)或 E2(真实文件+行号)支撑的项目结论,不许进技能正文**,只能写 `TODO(待确认)`。
@@ -52,7 +52,7 @@ trouble-shooting/ 01-slow-sql
 
 > 也是**全仓库唯一使用 `@Transactional` 的模块**,事务写法以它为准
 >
-> 药占比计算需剔除诊断为 **Z51** 开头的病例
+> 费用占比计算需剔除诊断为 **某类诊断编码** 开头的病例
 >
 > 认为剔除逻辑一定生效 → 实际字典开关默认 '0'(关闭)
 
@@ -159,6 +159,9 @@ mvn -q -pl <module> -am -DskipTests compile
 `<module>` 是占位符。自动执行它会失败,然后阶段门报 BLOCKED —— **但实际上代码是好的**。
 
 改法:`compiles` / `tests-green` 降级为 **HUMAN 判据**,由人确认。
+
+> 说明:这是当时的项目改法。1.22.0 起包内默认用 AUTO + 三态判据:占位行 SKIP、
+> 整行缺失 BLOCKED、真跑看退出码;不再因为一个 `<module>` 占位就整体降级为 HUMAN。
 
 ### 5.3 规则写在索引里,但没人读
 
@@ -267,7 +270,8 @@ verify-harness 不再提示(但仍统计次数)
 - 密码、口令 → `<redacted>`
 - 绝对路径 → `<path>/…`
 - 内网 URL → `<internal-url>`
-- 公司名、产品名、第三方 HIS 厂商名 → 中性描述
+- 公司名、产品名、第三方上游系统厂商名 → 中性描述
+- 表名、类名、业务指标名 → 中性占位(如 `<费用明细表>` / `<同步补偿服务>` / `费用占比`)
 - 2 行含凭据位置说明的整行删除
 
 **技术栈、结构、规则、决策过程、数字一律保留原样。**

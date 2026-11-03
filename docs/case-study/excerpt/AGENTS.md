@@ -1,13 +1,13 @@
-# 医保质控系统（后端） AI 编码约束
+# 医疗合规审核系统（后端） AI 编码约束
 
 > 唯一常驻文件，只放「每轮必须」的内容：技术栈、必跑命令、红线、索引与纪律。
 > 权威约束见 `.trae/rules/project_rules.md`；项目知识（业务模型 / 数据模型 / 接口协议 / 环境工具）见 `.harness/wiki/`。
-> 前端是独立工程 `insurance-web`（同工作区），其上下文见该工程的 `AGENTS.md`。
+> 前端是独立工程 `frontend-web`（同工作区），其上下文见该工程的 `AGENTS.md`。
 
 ## 1. 定位
 
-医保质控后端：与 HIS 对接做医嘱 / 费用的实时合规校验，违规进入 预审 → 内审 → 复审 → 申诉。完整架构与模块清单见 `项目介绍文档.md`。
-接口：WebService（SOAP / XML，对 HIS）+ RESTful `/api`（`{code, msg, data}`，成功码 0）；同步接口前缀 `/syncApi`。
+医疗合规审核后端：与上游临床系统对接做医嘱 / 费用的实时合规校验，违规进入 预审 → 内审 → 复审 → 申诉。完整架构与模块清单见 `项目介绍文档.md`。
+接口：WebService（SOAP / XML，对 上游临床系统）+ RESTful `/api`（`{code, msg, data}`，成功码 0）；同步接口前缀 `/syncApi`。
 
 ## 2. 技术栈
 
@@ -15,8 +15,8 @@
 | --- | --- |
 | 语言 / 运行时 | Java / JDK 1.8 |
 | 后端框架 | Spring Boot 2.0.6 + Spring Cloud Finchley.SR2 + **JFinal ORM（非 MyBatis / JPA）** + EasyRules + Quartz |
-| 数据库 / 缓存 | Oracle（主库 / 病历库）+ MSSQL（HIS）+ Redis + Druid；消息中间件 TODO(待确认) |
-| 前端 | 独立工程 `insurance-web`：layui 2.x + jQuery 3.2.1（无构建工具） |
+| 数据库 / 缓存 | Oracle（主库 / 病历库）+ MSSQL（上游库）+ Redis + Druid；消息中间件 TODO(待确认) |
+| 前端 | 独立工程 `frontend-web`：layui 2.x + jQuery 3.2.1（无构建工具） |
 | 构建 | Maven 多模块（12 个 module） |
 
 ## 3. 必跑命令（每次改完必须验证）
@@ -26,7 +26,7 @@
 | 编译 / 打包 | `mvn -q -pl <module> -am -DskipTests compile`；全量 `mvn clean package -DskipTests` |
 | 测试 | 全量 `mvn -q test`（现存仅 2 个 `*Test.java`）；单个 `mvn -q test -Dtest=<XxxTest>` |
 | Lint / 格式化 | TODO(待确认)：项目暂未配置静态检查 |
-| 本地启动 | `app-main` 的 `cn.com.example.BasicInfoApplication`，端口 **8082** |
+| 本地启动 | `app-main` 的 `cn.com.example.<入口类>`，端口 **8082** |
 | 红线（增量） | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\red-line-scan.ps1 -Files <改动文件>` |
 | 自检 | `verify-harness.ps1`（结构）· `verify-grounding.ps1`（证据与路径）· `metrics.ps1`（度量） |
 
@@ -50,7 +50,7 @@
 
 ## 5. 数据源
 
-用 `com.example.datasource.constant.DatasourceConstant` 的 key 配 `Db.use(key)`：`oracle`（主库）· `dzblOracle`（病历）· `mssql`（HIS）。连接见 `application-dev.properties`；查表与核对数据用 MCP。详见 `.harness/wiki/数据模型.md`。
+用 `com.example.datasource.constant.<数据源常量>` 的 key 配 `Db.use(key)`：`oracle`（主库）· `<病历库>`（病历）· `mssql`（上游临床系统）。连接见 `application-dev.properties`；查表与核对数据用 MCP。详见 `.harness/wiki/数据模型.md`。
 
 ## 6. 环境与工具
 
@@ -75,7 +75,7 @@ MCP 工具链、安装路径与凭据位置、文档索引 → `.harness/wiki/�
 - **单次变更 ≤ 文件总量 40%**，超过必须拆分；改完必过第 3 节命令
 - **必上技能**：收到需求先加载 `request-analysis`；动代码先加载 `coding-skill`；合并前加载 `expert-reviewer`
 - **涉及 SQL 必评审（必上技能）**：新增/修改 SQL、加索引、改分页或批量写入时**必须**加载 `04-sql-review`，按步骤评估后写 `sql_review:`（pre-commit 校验，缺则拒提交）
-- **涉及规则链必读**：加规则、改拦截口径、改退费/放行时先加载 `biz-dev/rule-engine`，确认走门诊/住院/上传哪条链，并按"抓放成对"同步 `SyncHandleDelayService`
+- **涉及规则链必读**：加规则、改拦截口径、改退费/放行时先加载 `biz-dev/rule-engine`，确认走门诊/住院/上传哪条链，并按"抓放成对"同步 `<同步补偿服务>`
 - **改完接口/规则必实测**：用 `main-dev/soap-endpoint-verify` 打真实报文，以返回报文证明命中，不许"只看代码就说好了"
 - **未加载技能不许凭印象编码**；`.harness/skills/README.md` 里没有的技能，按“技能缺失”处理并说明
 - **每任务留痕**：`.harness/changes/<特性>/summary.md` 必须含 `corrections:` 与 `loaded_skills:`
