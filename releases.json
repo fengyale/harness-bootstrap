@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.22.1",
+    "title": "(P2 清理：-WhatIf 不写盘 + grounding 缺口可见)",
+    "body": [
+      "- install-git-hooks：三个 hook 的 .bak-harness 备份移入 ShouldProcess，",
+      "  -WhatIf 演练不再写盘",
+      "- verify-grounding：缺 .harness/stack.json 时显式 WARN（此前技术栈误用检查静默跳过）；",
+      "  无 baseline 时的源码根回退列表与 probe-project 对齐（补 cmd / pkg / internal /",
+      "  packages / apps / modules）"
+    ]
+  },
+  {
     "version": "1.22.0",
     "title": "(自举门禁 + 门禁真实性 + 三态可判定)",
     "body": [

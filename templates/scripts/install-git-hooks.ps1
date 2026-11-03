@@ -225,7 +225,9 @@ exit 0
 
 if (Test-Path -LiteralPath $hookPath) {
     $backup = "$hookPath.bak-harness"
-    if (-not (Test-Path -LiteralPath $backup)) {
+    # -WhatIf must not write anything, including the backup. The backup is part
+    # of the change, so it sits under the same ShouldProcess gate as the hook.
+    if (-not (Test-Path -LiteralPath $backup) -and $PSCmdlet.ShouldProcess($backup, 'back up the existing pre-commit hook')) {
         Copy-Item -LiteralPath $hookPath -Destination $backup
         Write-Host "existing pre-commit backed up to $backup"
     }
@@ -263,7 +265,9 @@ exit 0
 
 if (Test-Path -LiteralPath $postPath) {
     $postBackup = "$postPath.bak-harness"
-    if (-not (Test-Path -LiteralPath $postBackup)) { Copy-Item -LiteralPath $postPath -Destination $postBackup }
+    if (-not (Test-Path -LiteralPath $postBackup) -and $PSCmdlet.ShouldProcess($postBackup, 'back up the existing post-commit hook')) {
+        Copy-Item -LiteralPath $postPath -Destination $postBackup
+    }
 }
 
 if ($PSCmdlet.ShouldProcess($postPath, 'write post-commit hook')) {
@@ -279,7 +283,7 @@ $mergePath = Join-Path $hooksDir 'pre-merge-commit'
 # and uninstall-harness.ps1 restores .bak-harness for every hook it removes.
 if (Test-Path -LiteralPath $mergePath) {
     $mergeBackup = "$mergePath.bak-harness"
-    if (-not (Test-Path -LiteralPath $mergeBackup)) {
+    if (-not (Test-Path -LiteralPath $mergeBackup) -and $PSCmdlet.ShouldProcess($mergeBackup, 'back up the existing pre-merge-commit hook')) {
         Copy-Item -LiteralPath $mergePath -Destination $mergeBackup
         Write-Host "existing pre-merge-commit backed up to $mergeBackup"
     }

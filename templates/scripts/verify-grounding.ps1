@@ -117,7 +117,10 @@ foreach ($bp in $baselineCandidates) {
 # This probe must also run in new-project mode: a brief alone does not prove the
 # code is still absent, and skipping it there let [E0] count as grounded forever.
 if (-not $codeExists) {
-    foreach ($d in @('src', 'app', 'lib', 'source')) {
+    # Mirror the probe's source-root list: Go (cmd/internal/pkg), Python packages
+    # and multi-module repos also carry code here, and the old four-name list made
+    # "no code detected" look true for those layouts.
+    foreach ($d in @('src', 'app', 'lib', 'source', 'cmd', 'pkg', 'internal', 'packages', 'apps', 'modules')) {
         $dp = Join-Path $rootPath $d
         if (Test-Path -LiteralPath $dp) {
             if (@(Get-ChildItem -LiteralPath $dp -Recurse -File -Force -ErrorAction SilentlyContinue |
@@ -159,6 +162,12 @@ if (Test-Path -LiteralPath $skillsRoot) {
     }
 } else {
     Add-Result 'references' 'FAIL' 'missing: .harness\skills'
+}
+
+# A missing stack.json used to skip the technology-misuse check without a word:
+# "no violation" and "never checked" looked identical. Declare the gap instead.
+if (-not $stack -and $skillFiles.Count -gt 0) {
+    Add-Result 'compile' 'WARN' 'no .harness\stack.json: technology misuse is not checked (run scripts\probe-stack.ps1)'
 }
 
 # --------------------------------------------------- 1 references / 2 anchors
