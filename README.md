@@ -1,4 +1,4 @@
-# Agent Harness Bootstrap
+# Harness Bootstrap
 
 **AI 编码的能力已经不是瓶颈。可预测性才是。**
 
@@ -6,23 +6,51 @@
 > constraints, gates, grounding, observability and review loops. Not another prompt collection.
 > [English version](README.en.md)
 
-[![package gate](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml)
-[![version](https://img.shields.io/github/v/release/fengyale/agent-harness-bootstrap?display_name=tag)](https://github.com/fengyale/agent-harness-bootstrap/releases)
+[![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
+[![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![powershell](https://img.shields.io/badge/powershell-5.1%20%2B%20pwsh7-blue.svg)](references/平台适配.md)
-[![stars](https://img.shields.io/github/stars/fengyale/agent-harness-bootstrap?style=social)](https://github.com/fengyale/agent-harness-bootstrap/stargazers)
+[![stars](https://img.shields.io/github/stars/fengyale/harness-bootstrap?style=social)](https://github.com/fengyale/harness-bootstrap/stargazers)
 
 ---
 
-## 这解决的是哪个问题
+## 它在第几层
 
-今天的模型写代码,对绝大多数业务场景**够用了**。真正卡住团队的是另一件事:
+"Harness"这个词有三层用法,这个仓库在第三层:
 
-> **你不敢把活交给它。**
+```
+┌─ 第 1 层 · 底层基座 ────────────────────────────────────┐
+│  与 LLM 相关的底层那套东西:推理内核、上下文管理、          │
+│  工具调用协议、采样与解码控制……                          │
+│  代表: vLLM / llama.cpp / 各家推理服务                    │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ 第 2 层 · Agent 应用 ──────────────────────────────────┐
+│  在基座上构建智能体:怎么装配、怎么给工具、怎么循环、       │
+│  怎么扩展。                                              │
+│  代表: DeepSeek Harness(可插拔的 agent 运行时)、          │
+│        Claude Code / Cursor / LangChain / Coze / Dify     │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ 第 3 层 · AI Coding ───────────────────────────────────┐
+│  把 agent 用于编码,并让整个编码过程                      │
+│  可约束 · 可判定 · 可追溯。                              │
+│  覆盖单人,也覆盖多人协作时的统一规范。                   │
+│                                                          │
+│  ★ 这个仓库在第 3 层                                     │
+└──────────────────────────────────────────────────────────┘
+```
 
-因为它可能理解偏了却看起来很自信;可能漏掉项目里一条不成文的规矩;可能说"完成了",其实编译都没过。
+**第 1、2 层的工具已经卷得很厉害了。** 第 3 层刚开始——而这一层的问题,
+不是"模型够不够聪明",而是:
 
-这不是"提示词写得不够好"能解决的。想靠更好的提示词消除模型的不确定性,是**跟模型的本质对抗**。
+> **你敢不敢把活交给它。**
+
+因为它可能理解偏了却看起来很自信;可能漏掉项目里一条不成文的规矩;
+可能说"完成了",其实编译都没过。
+
+这不是"提示词写得不够好"能解决的。想靠更好的提示词消除模型的不确定性,
+是**跟模型的本质对抗**。
 
 正确做法是**不去改造内核,而是给它套一层确定性的外壳**:
 
@@ -92,8 +120,8 @@ Harness = 规则 + 执行引擎 + 闭环反馈
 ## 60 秒试一下(不用先装进项目)
 
 ```powershell
-git clone https://github.com/fengyale/agent-harness-bootstrap.git
-cd agent-harness-bootstrap
+git clone https://github.com/fengyale/harness-bootstrap.git
+cd harness-bootstrap
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 ```
 

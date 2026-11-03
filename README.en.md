@@ -1,22 +1,48 @@
-# Agent Harness Bootstrap
+# Harness Bootstrap
 
 **AI coding capability is no longer the bottleneck. Predictability is.**
 
 > [中文版](README.md)
 
-[![package gate](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/agent-harness-bootstrap/actions/workflows/verify.yml)
-[![version](https://img.shields.io/github/v/release/fengyale/agent-harness-bootstrap?display_name=tag)](https://github.com/fengyale/agent-harness-bootstrap/releases)
+[![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
+[![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![stars](https://img.shields.io/github/stars/fengyale/agent-harness-bootstrap?style=social)](https://github.com/fengyale/agent-harness-bootstrap/stargazers)
+[![stars](https://img.shields.io/github/stars/fengyale/harness-bootstrap?style=social)](https://github.com/fengyale/harness-bootstrap/stargazers)
 
 ---
 
-## The problem it solves
+## Which layer this sits in
 
-Today's models are **good enough** to write code for most business work. What
-actually blocks teams is something else:
+"Harness" is used at three different levels. This repository is the third:
 
-> **You don't dare hand the work over to it.**
+```
+┌─ Layer 1 · Foundation ───────────────────────────────────┐
+│  The low level that talks to the LLM itself: inference     │
+│  kernels, context management, tool-call protocols,         │
+│  sampling and decoding control.                           │
+│  e.g. vLLM / llama.cpp / inference services               │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ Layer 2 · Agent applications ───────────────────────────┐
+│  Building agents on top of the foundation: how to assemble │
+│  them, give them tools, drive the loop, extend them.      │
+│  e.g. DeepSeek Harness (a pluggable agent runtime),        │
+│       Claude Code / Cursor / LangChain / Coze / Dify       │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ Layer 3 · AI coding ────────────────────────────────────┐
+│  Putting agents to work on coding, and making the whole    │
+│  coding process constrained · checkable · traceable.      │
+│  Covers solo work and multi-person shared conventions.    │
+│                                                          │
+│  ★ This repository is here.                               │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Layers 1 and 2 are already crowded.** Layer 3 is only starting — and the
+question at this layer is not "is the model smart enough", it is:
+
+> **Do you dare hand the work over to it?**
 
 Because it may have misunderstood the requirement while sounding confident; may
 miss an unwritten rule of your project; may say "done" when it does not even
@@ -97,8 +123,8 @@ Bypassing with `--no-verify` is still recorded — `metrics.ps1` computes a
 ## Try it in 60 seconds (no need to install it anywhere yet)
 
 ```powershell
-git clone https://github.com/fengyale/agent-harness-bootstrap.git
-cd agent-harness-bootstrap
+git clone https://github.com/fengyale/harness-bootstrap.git
+cd harness-bootstrap
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 ```
 
