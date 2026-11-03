@@ -11,7 +11,7 @@ jobs:
     # Add a pwsh/ubuntu job once path separators and chmod behaviour are verified.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Package self check
         shell: powershell
