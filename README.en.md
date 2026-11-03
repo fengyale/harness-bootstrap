@@ -120,6 +120,30 @@ Bypassing with `--no-verify` is still recorded — `metrics.ps1` computes a
 
 ---
 
+## How this differs from the rest of the field
+
+There is now a family of repositories sharing this name (`agent-harness-bootstrap`,
+`agentic-harness-bootstrap`, `ai-coding-harness`, …). They are not the same thing:
+
+| | **this repo** | template packs | vertical harnesses |
+| --- | --- | --- | --- |
+| Form | **a meta-skill** | a set of template files | a harness for one stack |
+| What you do | Copy nothing. It probes your repo and **designs one for you** from the evidence | Copy the templates and edit them yourself | Install, configure, trim |
+| Where content comes from | Real code: E1 (a runnable command) / E2 (a file + line) | Written by the author | Written by the author |
+| Evidence | **No E1/E2 means it cannot enter a skill body** — only `TODO(待确认)` | none | none |
+| Enforcement | Red-line scan + 10-stage gate + git hooks + SQL gate | lint config | governance hooks |
+| Closed loop | A `lesson_id` on its 2nd occurrence is promoted to a rule / gate / skill, and recorded in `promoted.txt` | none | benchmarks |
+| Legacy code | **New lines only** — historical violations never block a commit | n/a | mostly n/a |
+| Self-check | **26 cross-file contracts + behavioural tests + its own pre-commit** — a project that sells gates has gates | CI lint | none |
+
+In one line:
+
+> **A template pack assumes you already know what you need.**
+> **This one assumes you don't yet — it takes the evidence from your codebase first,
+> then decides what should exist.**
+
+---
+
 ## Try it in 60 seconds (no need to install it anywhere yet)
 
 ```powershell
