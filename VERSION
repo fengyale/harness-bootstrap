@@ -2,12 +2,16 @@ HARNESS-BOOTSTRAP VERSION 1.22.1
 
 changelog
 ---------
-1.22.1  (P2 清理：-WhatIf 不写盘 + grounding 缺口可见)
+1.22.1  (P2 清理 + 发布与文档补记)
 - install-git-hooks：三个 hook 的 .bak-harness 备份移入 ShouldProcess，
   -WhatIf 演练不再写盘
 - verify-grounding：缺 .harness/stack.json 时显式 WARN（此前技术栈误用检查静默跳过）；
   无 baseline 时的源码根回退列表与 probe-project 对齐（补 cmd / pkg / internal /
   packages / apps / modules）
+- 发布与文档（随本版本一并发布）：README 中英双语重写（含与同类对比、徽章、快速开始）；
+  tools/publish-releases.py / parse-changelog.py / render-terminal.py / desensitize.py
+  与 releases.json；docs/case-study 真实案例与门禁截图；issue forms / PR 模板 / labels；
+  LICENSE 版权人修正；本地工作文档不再跟踪
 
 1.22.0  (自举门禁 + 门禁真实性 + 三态可判定)
 - 新增包级自举门禁 tools/verify-package.ps1：parse / encoding / json / structure /
