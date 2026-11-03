@@ -4,6 +4,12 @@
 
   "requiredFiles": [
     "SKILL.md",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "tests/run-all.ps1",
+    "tests/gate-auto.ps1",
+    "tests/regression.ps1",
     "templates/AGENTS.md",
     "templates/.gitignore",
     "templates/scripts/stage-gate.ps1",
@@ -169,6 +175,18 @@
       "file": "references/核心论述.md",
       "pattern": "实现层的错由机器吸收",
       "why": "三句主题承诺是 SKILL 指向的基调；这一节空着会让所有下游判断失去依据。"
+    },
+    {
+      "id": "license-mit",
+      "file": "LICENSE",
+      "patterns": ["MIT License", "WITHOUT WARRANTY"],
+      "why": "没有许可证的仓库默认保留所有权利，别人不能合法使用；README 也声明了 MIT，两处必须一致。"
+    },
+    {
+      "id": "readme-quickstart",
+      "file": "README.md",
+      "patterns": ["harness-bootstrap", "verify-package.ps1"],
+      "why": "README 是外部用户的第一入口；技能名和自检命令必须与仓库实际一致。"
     }
   ]
 }

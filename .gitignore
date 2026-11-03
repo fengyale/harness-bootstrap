@@ -1,0 +1,8 @@
+.vscode/
+.idea/
+*.bak-harness
+*.tmp
+
+# installed-project artifacts (this repository is the package, not an install)
+.harness/metrics/
+baseline/

@@ -66,7 +66,7 @@ if (-not (Test-Path -LiteralPath $contractPath)) {
 
 # ---------------------------------------------------------------- 1 parse
 $scriptFiles = @()
-foreach ($dir in @('templates\scripts', 'tools')) {
+foreach ($dir in @('templates\scripts', 'tools', 'tests')) {
     $dp = Join-Path $packageRoot $dir
     if (-not (Test-Path -LiteralPath $dp)) { continue }
     $scriptFiles += @(Get-ChildItem -LiteralPath $dp -Filter *.ps1 -File -Force)

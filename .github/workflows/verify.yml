@@ -1,0 +1,22 @@
+name: package-gate
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+
+jobs:
+  verify:
+    # Windows-first: the scripts and tests are validated on Windows PowerShell 5.1.
+    # Add a pwsh/ubuntu job once path separators and chmod behaviour are verified.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package self check
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
+
+      - name: Behaviour tests
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
