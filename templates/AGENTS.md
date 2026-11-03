@@ -108,6 +108,7 @@
 | `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体 |
 | `.trae/agents/red-line-auditor.md` | 全库红线扫描智能体 |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
+| `scripts/update-harness.ps1` | 升级已装项目：`-DryRun`（默认）看差异，`-Apply` 执行；保留历史与项目资产 |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
 | `scripts/check-summary.ps1` | `summary.md` 字段校验：pre-commit 只查基础字段，stage-gate 阶段 10 查收尾字段 |
 

@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.23.0",
+    "title": "(升级支持)",
+    "body": [
+      "- scripts/update-harness.ps1：默认 DryRun，-Apply 执行；只替换 scripts/*.ps1 并备份，",
+      "  scripts/*.json、项目资产、.harness/changes 与 metrics 保留",
+      "- 首次安装写 .harness/.installed-version；老项目升级时从技能目录 VERSION 推断旧版本",
+      "- SKILL.md / AGENTS.md / README / 说明文档：增加升级入口与边界；tests/test-update.ps1",
+      "  覆盖 UPDATE / ADD / MANUAL / KEEP、备份、版本标记与历史保留"
+    ]
+  },
+  {
     "version": "1.22.1",
     "title": "(P2 清理 + 发布与文档补记)",
     "body": [

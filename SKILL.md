@@ -125,6 +125,7 @@ Harness 就是把"看运气"变成"看流程"。
 | "该触发不触发""调触发词" | **调优** | 只读 `references/维护与体检.md` 第三节 |
 | "复盘""这两周有没有用""A7 怎么样" | **两周复盘** | 只读 `references/两周复盘.md`（这是验 A7 的唯一方式） |
 | "加一条红线""补一个技能" | **增量** | 只做那一个小动作，不要重跑全程 |
+| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先看 DryRun 差异，确认后 `-Apply`；不要重跑第 0 步 |
 
 > **只有第一种需要跑完整流程**——其余都是小操作，把它们做成大工程是最常见的误判。
 >
@@ -195,6 +196,13 @@ Copy-Missing "$PKG\templates\.trae\agents" $AgentDir
 $ignore = "<项目根>\.gitignore"
 if (Test-Path -LiteralPath $ignore) { Write-Host "[SKIP] conflict: $ignore (merge the lines listed in templates\.gitignore by hand)" }
 else { Copy-Item "$PKG\templates\.gitignore" $ignore }
+
+# 版本标记：升级脚本靠它判断当前装的是哪一版。首次安装就写入，别等升级时再补。
+$marker = "<项目根>\.harness\.installed-version"
+if (-not (Test-Path -LiteralPath $marker)) {
+    $ver = (Get-Content -LiteralPath "$PKG\VERSION" -TotalCount 1) -replace '^.*VERSION\s+', ''
+    Set-Content -LiteralPath $marker -Value $ver -Encoding ASCII
+}
 
 # 平台入口：只建与探测结果对应的一种（同样先判存在，已存在就 SKIP 并按 3.2 合并）
 # TRAE / Codex / 未知 -> AGENTS.md；Claude Code -> CLAUDE.md
@@ -352,6 +360,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 ### 2.3 自成长机制（**框架不是装完就结束，它必须自己长**）
 
 > 自成长节律见 `references\维护与体检.md`（沉淀 / 体检 / 调优）与 `references\两周复盘.md`。
+
+### 2.4 升级已有项目（**不是重装**）
+
+第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级走独立入口：
+
+```powershell
+# 先看差异，不改任何文件
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
+  -PackagePath <新包根目录>
+
+# 确认后执行：备份旧脚本、写版本标记、重装 hook、跑 verify-harness
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
+  -PackagePath <新包根目录> -Apply
+```
+
+更新边界：
+
+- `scripts\*.ps1`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
+- `scripts\*.json`（项目配置）：**不覆盖**，只提示手工合并新键
+- `.harness\rules|wiki|modules`：只补缺失文件，已存在的一律保留
+- `AGENTS.md`、平台 agents：只报告差异，手工合并
+- `.harness\changes|metrics`：**永不触碰**
+- 首次安装会写 `.harness\.installed-version`；老项目没有也能升级，脚本会从技能目录的 `VERSION` 推断旧版本
+
+升级后先跑阶段 3/5/7/10：新的编译/测试判据会真跑 `AGENTS.md` 的命令。缺行 BLOCKED、占位 SKIP，这是机制在生效，不是回归。
 
 ## 第三部分：约束与坑
 

@@ -102,6 +102,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 `verify-*` 全绿只代表结构正确。A1–A4、A6 要靠跑一个真实任务来验证；A7 需要两个连续 14 天窗口，仓库不替你下结论。
 
+### 5. 升级已有项目
+
+不要重跑第 0 步：它是 Copy-Missing，旧脚本不会被覆盖。升级走独立入口：
+
+```powershell
+# 先看差异，不改文件
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <新包根目录>
+# 确认后执行
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <新包根目录> -Apply
+```
+
+只替换 `scripts\*.ps1`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+
 ## 装完之后
 
 ![安装后的目录结构](docs/installed-layout.png)

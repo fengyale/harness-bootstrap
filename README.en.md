@@ -102,6 +102,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 `verify-*` passing means the structure is correct. A1–A4 and A6 require running a real task; A7 needs two consecutive 14-day windows. The repository does not claim those for you.
 
+### 5. Upgrade an existing install
+
+Do not re-run step 0: it is Copy-Missing and will not replace old scripts. Use the upgrade entry:
+
+```powershell
+# plan only, no files changed
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <new package root>
+# apply
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <new package root> -Apply
+```
+
+Only `scripts\*.ps1` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+
 ## What you get
 
 ![installed layout](docs/installed-layout.png)
