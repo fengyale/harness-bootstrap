@@ -1,0 +1,40 @@
+$ tree /F
+my-project
+├── AGENTS.md                      <- the only always-resident file (<=150 lines)
+├── .harness/
+│   ├── rules/
+│   │   ├── 编码规范.md              <- boundaries: what must never be done
+│   │   ├── 工程结构.md              <- where files go, naming, dependency direction
+│   │   └── 开发流程规范.md           <- stages, quality gates, rollback
+│   ├── skills/
+│   │   ├── README.md               <- index: which skill for which task
+│   │   ├── main-dev/
+│   │   │   ├── request-analysis/   <- load on a new requirement
+│   │   │   ├── coding-skill/       <- load before touching code
+│   │   │   └── expert-reviewer/    <- load before merging
+│   │   └── biz-dev/
+│   │       └── 03-redis-cache/     <- project-specific how-to
+│   ├── wiki/
+│   │   ├── 领域术语.md              <- terms, and the code entity each maps to
+│   │   ├── 业务模型.md              <- entities, flows, message and cache topology
+│   │   ├── 数据模型.md              <- tables (DDL migration scripts are authoritative)
+│   │   └── 接口协议.md              <- endpoints (controllers are authoritative)
+│   ├── modules/
+│   │   └── order-service.md        <- focus / difficulty / traps / verification
+│   ├── changes/
+│   │   └── <feature>/
+│   │       ├── summary.md           <- what changed, why, how it was verified
+│   │       ├── db-migrations.sql
+│   │       └── rollback.sql         <- must be paired with the migration
+│   └── metrics/
+│       ├── gate.jsonl               <- every gate event
+│       └── promoted.txt             <- lesson_ids already promoted
+├── .trae/
+│   ├── skills/                      <- links into .harness/skills (entry points)
+│   └── agents/                      <- reviewer / consistency-verifier / red-line-auditor
+└── scripts/
+    ├── red-line-scan.ps1 / .py      <- the scanner the hooks call
+    ├── stage-gate.ps1               <- 10 stages, computed from disk, no state
+    ├── check-summary.ps1            <- summary.md field validation
+    ├── metrics.ps1                  <- corrections, blocks, bypass rate, skill load rate
+    └── verify-harness / verify-grounding / install-git-hooks / uninstall-harness

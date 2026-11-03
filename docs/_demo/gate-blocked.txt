@@ -1,0 +1,14 @@
+$ git commit -m "feat: add order service"
+[FAIL] red-line scan found 1 violation(s):
+[R3] 异常必须走统一异常体系  -- 1 hit(s)
+     hint: 改用项目统一异常类（见编码规范的异常对照表）
+     src\main\java\demo\OrderServiceImpl.java:6
+         throw new RuntimeException("amount is null");
+Red lines are zero-tolerance: STOP -> FIX -> re-verify from the affected stage.
+(See AGENTS.md 'red lines' and the encoding spec's 'red line summary'.)
+[SKIP] no SQL detected in the staged source lines
+harness gate blocked: fix red lines, complete the summary fields, or add a sql_review note for SQL changes.
+(--no-verify bypasses this gate; the bypass is counted by scripts/metrics.ps1.)
+
+$ echo $?
+1

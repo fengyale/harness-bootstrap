@@ -53,6 +53,26 @@ All three are needed to turn "depends on luck" into "follows a process".
 In one line: **turn "please follow the conventions" into "you cannot pass without
 following them."**
 
+### The gates really block
+
+These are not simulated outputs. They come from a real git repository with the
+gates installed:
+
+**A violation is blocked** (exit code 1, down to the line number):
+
+![The red-line scan blocks a bad commit](docs/gate-blocked.png)
+
+**An incomplete summary is blocked too**:
+
+![The gate validates summary fields](docs/gate-summary.png)
+
+**Only after fixing both does it pass** (exit code 0):
+
+![The gate accepts the commit](docs/gate-passed.png)
+
+Bypassing with `--no-verify` is still recorded — `metrics.ps1` computes a
+`bypassRate` from it.
+
 ### For engineering leads
 
 | Your question | The answer here |
@@ -165,6 +185,8 @@ real task; A7 needs two 14-day windows.
 ---
 
 ## What you end up with
+
+![The layout after install](docs/installed-layout.png)
 
 ```text
 AGENTS.md                    the only always-resident file (<=150 lines)

@@ -1,0 +1,9 @@
+$ git commit -m "feat: add order service"
+[OK] red-line scan passed: 0 violation (1 files scanned)
+[SKIP] no SQL detected in the staged source lines
+[OK] summary fields valid
+[main (root-commit) 0ee10ba] feat: add order service
+ 63 files changed, 7277 insertions(+)
+
+$ echo $?
+0

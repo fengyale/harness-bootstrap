@@ -1,0 +1,11 @@
+$ git commit -m "feat: add order service"
+[OK] red-line scan passed: 0 violation (1 files scanned)
+[SKIP] no SQL detected in the staged source lines
+[FAIL] flow : must be L1, L2 or L3
+[FAIL] corrections : must be a non-negative integer
+[FAIL] impl_corrections : must be a non-negative integer
+check-summary: 3 fail(s)
+harness gate blocked: fix red lines, complete the summary fields, or add a sql_review note for SQL changes.
+
+$ echo $?
+1
