@@ -139,14 +139,17 @@ foreach ($src in Get-ChildItem -LiteralPath $srcScripts -File -Force) {
 foreach ($sub in @('rules', 'wiki', 'modules')) {
     $srcDir = Join-Path $templates ('.harness\' + $sub)
     if (-not (Test-Path -LiteralPath $srcDir)) { continue }
-    foreach ($src in Get-ChildItem -LiteralPath $srcDir -Recurse -File -Force) {
-        $relPath = $src.FullName.Substring($srcDir.Length).TrimStart('\')
+    # -Name returns paths relative to $srcDir. Building the relative path with
+    # Substring(FullName, Length) breaks when the two forms use different short
+    # (8.3) names, which is exactly what happens on GitHub Actions runners.
+    foreach ($relPath in Get-ChildItem -LiteralPath $srcDir -Recurse -File -Force -Name) {
+        $src = Join-Path $srcDir $relPath
         $rel = '.harness\' + $sub + '\' + $relPath
         $dst = Join-Path $rootPath $rel
         if (-not (Test-Path -LiteralPath $dst)) {
-            Add-Plan 'ADD' $rel $src.FullName 'new project asset'
+            Add-Plan 'ADD' $rel $src 'new project asset'
         } else {
-            Add-Plan 'SKIP' $rel $src.FullName 'project-owned; kept as-is'
+            Add-Plan 'SKIP' $rel $src 'project-owned; kept as-is'
         }
     }
 }
@@ -171,18 +174,19 @@ if (Test-Path -LiteralPath $srcSkills) {
             Add-Plan 'MANUAL' $readmeRel $readmeSrc 'installed skill index differs; re-run with -UpdateSkills to replace'
         }
     }
-    foreach ($src in Get-ChildItem -LiteralPath $srcSkills -Recurse -File -Force) {
-        $relPath = $src.FullName.Substring($srcSkills.Length).TrimStart('\')
+    # -Name avoids the short/long path mismatch noted above.
+    foreach ($relPath in Get-ChildItem -LiteralPath $srcSkills -Recurse -File -Force -Name) {
         if ($relPath -eq 'README.md') { continue }
+        $src = Join-Path $srcSkills $relPath
         $rel = '.harness\skills\' + $relPath
         $dst = Join-Path $rootPath $rel
         if (-not (Test-Path -LiteralPath $dst)) { continue }
-        if ((Get-Hash $src.FullName) -eq (Get-Hash $dst)) {
-            Add-Plan 'SAME' $rel $src.FullName ''
+        if ((Get-Hash $src) -eq (Get-Hash $dst)) {
+            Add-Plan 'SAME' $rel $src ''
         } elseif ($UpdateSkills) {
-            Add-Plan 'UPDATE' $rel $src.FullName 'installed skill replaced (-UpdateSkills)'
+            Add-Plan 'UPDATE' $rel $src 'installed skill replaced (-UpdateSkills)'
         } else {
-            Add-Plan 'MANUAL' $rel $src.FullName 'installed skill differs; review or re-run with -UpdateSkills'
+            Add-Plan 'MANUAL' $rel $src 'installed skill differs; review or re-run with -UpdateSkills'
         }
     }
 }
@@ -190,14 +194,14 @@ if (Test-Path -LiteralPath $srcSkills) {
 # Only the change template is added; real change records are history.
 $srcTpl = Join-Path $templates '.harness\changes\_template'
 if (Test-Path -LiteralPath $srcTpl) {
-    foreach ($src in Get-ChildItem -LiteralPath $srcTpl -Recurse -File -Force) {
-        $relPath = $src.FullName.Substring($srcTpl.Length).TrimStart('\')
+    foreach ($relPath in Get-ChildItem -LiteralPath $srcTpl -Recurse -File -Force -Name) {
+        $src = Join-Path $srcTpl $relPath
         $rel = '.harness\changes\_template\' + $relPath
         $dst = Join-Path $rootPath $rel
         if (-not (Test-Path -LiteralPath $dst)) {
-            Add-Plan 'ADD' $rel $src.FullName 'missing change template'
+            Add-Plan 'ADD' $rel $src 'missing change template'
         } else {
-            Add-Plan 'SKIP' $rel $src.FullName 'template exists; kept'
+            Add-Plan 'SKIP' $rel $src 'template exists; kept'
         }
     }
 }
