@@ -29,7 +29,8 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 2. 定位模块，列出受影响的接口、表、前端页面
 3. 与项目硬约束比对，冲突先报，不自行取舍
 4. **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md` 再填（模板已含 corrections / lesson_id / flow / sql_review，不要手写空文件）
-5. 无法确认的标 `TODO(待确认)`，**开工前只问一次**
+5. 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。`/plan` 模式的计划要复制进这份 summary，不能只留在工具的计划面板
+6. 无法确认的标 `TODO(待确认)`，**开工前只问一次**
 
 ### 检查项
 
@@ -37,6 +38,7 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 - [ ] 影响面是否含前端 / 其他仓库
 - [ ] 是否触碰项目红线
 - [ ] summary.md 已建立
+- [ ] `check-summary -Stage initial` 已通过（未通过不得进入编码）
 
 ### 常见错误
 

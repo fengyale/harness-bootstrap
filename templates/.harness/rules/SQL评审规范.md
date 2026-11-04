@@ -13,6 +13,8 @@
 | 3 | 写结论 | `summary.md` 的 `sql_review:` 一行，含表名、预估行数、访问路径 |
 
 缺第 3 条 → pre-commit 拒绝提交（`scripts/sql-review-gate.ps1`）。
+`scripts/harness-required.json` 的 `sqlGate=true` 表示本门禁已启用：规则文件与 gate 脚本必须同时存在且可运行。要关闭门禁，必须在**同一次提交**里把 `sqlGate` 改为 `false` 并删除规则与 gate；分两次提交会被 hook 拦下（off+残留或 on+无规则）。只删规则不改配置会被 `verify-harness` 判 FAIL。
+`sqlGate` 只从 **index / HEAD** 读取；配置还没入库时按 legacy（规则存在即启用）处理，避免工作区里未暂存的 `false` 把门禁关掉。
 
 ## 2. 高危写法
 

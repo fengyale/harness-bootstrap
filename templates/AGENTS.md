@@ -24,6 +24,9 @@
 | 跑单个测试 | `<如 mvn -q test -Dtest=XxxTest>` |
 | Lint / 格式化 | `<如 mvn -q spotless:check>` |
 | 本地启动 | `<如 mvn spring-boot:run>` |
+| 红线扫描（增量） | `git diff --cached -U0 \| powershell -NoProfile -ExecutionPolicy Bypass -File scripts\red-line-scan.ps1 -Root . -DiffFromStdin` |
+
+> 扫描器在 diff 模式下读 **index** blob，所以先 `git add -p` 或 `git add` 再跑；`-Files` 是整文件扫描，会把历史违规一起吐出来，不要拿它做日常增量检查。
 
 ## 🔴 红线（不可违反）
 
@@ -37,8 +40,8 @@
 | R2 | `<如 缓存 Key 必须有统一前缀>` | `<扫描 Key 构造点>` |
 | R3 | `<如 异常必须走统一异常体系>` | `<搜 throw new RuntimeException\|IllegalStateException>` |
 | R4 | `<如 禁止 @Autowired 字段注入>` | `<搜 @Autowired 后接 private>` |
-| R5 | `<如 事务必须声明回滚范围>` | `<搜 @Transactional 缺 rollbackFor>` |
-| R6 | `<如 禁止敏感信息入日志>` | `<搜日志语句里的 password\|token\|手机号>` |
+| R5 | `<如 事务必须声明回滚范围>` | `<扫描器只拦 @Transactional() 空括号；无括号/带属性未声明 rollbackFor 人工复核>` |
+| R6 | `<如 禁止敏感信息入日志>` | `<扫描器覆盖单行/多行 log 调用；嵌套括号或复杂拼接人工复核>` |
 | R7 | `<如 Mapper XML 禁止 ${} 占位>` | `<搜 *mapper*.xml 里的 ${}>` |
 | R8 | `<占位红线：按项目补充，或三处一并删除>` | `<改 red-line-rules.json 的占位 pattern，或删掉三处的 R8>` |
 
@@ -120,6 +123,7 @@
 - **加载范围**：默认只读「本任务涉及的模块卡 + 直接相关的 1–2 份 wiki / 规则」；**技能与模块卡不占此额度**，按流程必上。
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。
+- **先落 summary 再动代码**：收到需求先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md`，运行 `check-summary.ps1 -Feature <特性> -Stage initial` 通过后再改代码；`/plan` 模式的计划必须写进这份 summary，不能只留在工具的计划面板。
 - **必上技能**：收到需求先加载 `request-analysis`；动代码先加载 `coding-skill`；合并前加载 `expert-reviewer`
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`（stage-gate 阶段 10 校验，缺则不能收尾）
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
