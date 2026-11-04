@@ -28,7 +28,15 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Json
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 28 -SkillMinAgeDays 28
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14 -Compare
+
+  RETIREMENT
+    A skill is only a retirement candidate when the observation window is at
+    least 28 days AND the skill itself is at least -SkillMinAgeDays old. A skill
+    added yesterday cannot have been loaded in the last 28 days; listing it as
+    "candidate for deletion" is a false signal. Age comes from the first git
+    commit that added the skill directory, with file timestamps as a fallback.
 
   EXIT CODE
     0 always (report only). Use the printed verdict during the biweekly review.
@@ -42,6 +50,7 @@
 param(
     [string]$Root = (Get-Location).Path,
     [int]$Days = 0,
+    [int]$SkillMinAgeDays = 28,
     [switch]$Compare,
     [switch]$Json,
     [switch]$Quiet
@@ -56,6 +65,58 @@ $promotedPath = Join-Path $rootPath '.harness\metrics\promoted.txt'
 $skillsRoot = Join-Path $rootPath '.harness\skills'
 
 # ------------------------------------------------------------- read once, filter later
+# Skill names appear in two shapes: "04-sql-review" in a summary and
+# "biz-dev/04-sql-review" in a path or index. Compare on the last path segment
+# with the numeric prefix removed, or a loaded skill looks "never loaded".
+function Get-SkillKey {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return '' }
+    $n = $Name.Trim() -replace '\\', '/'
+    $n = ($n -split '/')[-1]
+    return ($n -replace '^\d+-', '')
+}
+
+# A retirement decision needs the skill's own age, not only the observation
+# window: a skill added yesterday cannot have been loaded in the last 28 days.
+# Prefer the first git commit that added the directory; fall back to file
+# timestamps when the project is not a git repo or the skill is untracked.
+function Get-SkillInfo {
+    param([string]$Root, [string]$Category, [string]$Name, [string]$Dir)
+    $rel = '.harness/skills/' + $Category + '/' + $Name
+    $age = $null
+    $source = 'unknown'
+    try {
+        # ACR covers add / copy / rename: a skill that was renamed still gets its
+        # original add commit instead of looking brand new.
+        $dateText = (& git -C $Root log --diff-filter=ACR --format=%cs --reverse -- $rel 2>$null | Select-Object -First 1)
+        if ($dateText) {
+            $d = [datetime]::ParseExact(([string]$dateText).Trim(), 'yyyy-MM-dd', $null)
+            # Clamp negative values (future commit dates / clock skew) to 0.
+            $age = [Math]::Max(0, ((Get-Date).Date - $d.Date).Days)
+            $source = 'git-first-commit'
+        }
+    } catch { }
+    if ($null -eq $age) {
+        # Clone / shallow-clone fallback is conservative: the timestamp may be
+        # the copy date, which makes the skill look younger than it is.
+        $skillFile = Join-Path $Dir 'SKILL.md'
+        foreach ($prop in @('CreationTime', 'LastWriteTime')) {
+            try {
+                $d = (Get-Item -LiteralPath $skillFile).$prop.Date
+                $age = [Math]::Max(0, ((Get-Date).Date - $d.Date).Days)
+                $source = $prop.ToLowerInvariant()
+                break
+            } catch { }
+        }
+    }
+    return [pscustomobject]@{
+        Name = (Get-SkillKey $Name)
+        RawName = $Name
+        AgeDays = $age
+        AgeSource = $source
+    }
+}
+
 # Parsing is split from windowing so that -Compare can reuse the same task and
 # event objects for two windows instead of parsing the files twice (and drifting).
 function Get-SummaryTasks {
@@ -93,10 +154,12 @@ function Get-SummaryTasks {
             # anything after the name (prose, "<...>", CLOSE) is ignored
             $skills = @()
             foreach ($part in $matches[1].Split(',')) {
-                $m = [regex]::Match($part, '^\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)')
+                # Accept both "04-sql-review" and "biz-dev/04-sql-review"; the key
+                # is normalized so the loaded name and the installed name compare.
+                $m = [regex]::Match($part, '^\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-/\\]*)')
                 if ($m.Success) {
-                    $name = $m.Groups[1].Value
-                    if ($name.ToLower() -ne 'none') { $skills += $name }
+                    $name = Get-SkillKey $m.Groups[1].Value
+                    if ($name -and $name.ToLower() -ne 'none') { $skills += $name }
                 }
             }
         }
@@ -252,8 +315,10 @@ $avgImpl = $stats.AvgImpl
 $skillCounts = @{}
 foreach ($t in $tasks) {
     foreach ($s in $t.Skills) {
-        if (-not $skillCounts.ContainsKey($s)) { $skillCounts[$s] = 0 }
-        $skillCounts[$s] = $skillCounts[$s] + 1
+        $key = Get-SkillKey $s
+        if (-not $key) { continue }
+        if (-not $skillCounts.ContainsKey($key)) { $skillCounts[$key] = 0 }
+        $skillCounts[$key] = $skillCounts[$key] + 1
     }
 }
 
@@ -274,19 +339,30 @@ if (Test-Path -LiteralPath $promotedPath) {
 }
 
 # installed skills (for the "never loaded" signal that drives retirement)
+# Keep the age with each skill: the retirement verdict needs both the
+# observation window and the age of the skill itself.
 $installed = @()
 if (Test-Path -LiteralPath $skillsRoot) {
     Get-ChildItem -LiteralPath $skillsRoot -Directory -Force | ForEach-Object {
+        $category = $_.Name
         Get-ChildItem -LiteralPath $_.FullName -Directory -Force | ForEach-Object {
-            if (Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md')) {
-                $installed += ($_.Name -replace '^\d+-', '')
+            $skillDir = $_.FullName
+            if (Test-Path -LiteralPath (Join-Path $skillDir 'SKILL.md')) {
+                $installed += Get-SkillInfo -Root $rootPath -Category $category -Name $_.Name -Dir $skillDir
             }
         }
     }
 }
 
 $skillRate = $stats.SkillRate
-$missingFields = @($tasks | Where-Object { -not $_.HasCorrections -or -not $_.HasSkills -or -not $_.HasImpl })
+# Same normalized name in two categories would be merged into one count; flag it
+# instead of silently making one skill vouch for the other.
+$duplicateSkillNames = @($installed | Group-Object Name | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+# Report each field separately: "7 files missing all three fields" is false when
+# the real gap is only impl_corrections, and it sends the reader to the wrong fix.
+$missingCorr = @($tasks | Where-Object { -not $_.HasCorrections }).Count
+$missingImpl = @($tasks | Where-Object { -not $_.HasImpl }).Count
+$missingSkills = @($tasks | Where-Object { -not $_.HasSkills }).Count
 
 # ------------------------------------------------------------------- trend
 # A6 has two halves: task-level (impl_corrections must be 0) and project-level
@@ -337,8 +413,15 @@ if ($Days -gt 0) {
 if ($tasks.Count -eq 0) {
     $verdict += 'no task summary yet: record at least one real task before judging A7'
 } else {
-    if ($missingFields.Count -gt 0) {
-        $verdict += "$($missingFields.Count) summary file(s) missing corrections/impl_corrections/loaded_skills"
+    $fieldParts = @()
+    if ($missingCorr -gt 0) { $fieldParts += "$missingCorr missing corrections" }
+    if ($missingImpl -gt 0) { $fieldParts += "$missingImpl missing impl_corrections" }
+    if ($missingSkills -gt 0) { $fieldParts += "$missingSkills missing loaded_skills" }
+    if ($fieldParts.Count -gt 0) {
+        $verdict += "$($tasks.Count) summary file(s) checked; $($fieldParts -join '; ')"
+    }
+    if ($duplicateSkillNames.Count -gt 0) {
+        $verdict += "duplicate skill name(s) across categories: $($duplicateSkillNames -join ', ') (loaded and never-loaded counts may be merged)"
     }
     if ($avgCorr -gt 2) {
         $verdict += "avg corrections per task = $avgCorr (target <= 2): harness is not carrying enough weight"
@@ -365,13 +448,19 @@ if ($tasks.Count -eq 0) {
         $verdict += "skill load rate = $skillRate% (< 50%): skills are probably not triggering"
     }
     if ($tasks.Count -ge 5) {
-        foreach ($k in $installed) {
-            if (-not $skillCounts.ContainsKey($k)) {
-                if ($Days -ge 28) {
-                    $verdict += "skill never loaded in last $Days day(s): $k (retire candidate -- confirm with a human before deleting)"
-                } else {
-                    $verdict += "skill never loaded in this window: $k (extend -Days to 28 or more before judging retirement)"
-                }
+        # The skill must have existed for the whole observation window; otherwise
+        # "-Days 90" would call a 30-day-old skill "never loaded in 90 days".
+        $requiredAge = if ($Days -gt 0) { [Math]::Max($SkillMinAgeDays, $Days) } else { $SkillMinAgeDays }
+        foreach ($skill in $installed) {
+            if ($skillCounts.ContainsKey($skill.Name)) { continue }
+            if ($Days -lt 28) {
+                $verdict += "skill never loaded in this window: $($skill.Name) (extend -Days to 28 or more before judging retirement)"
+            } elseif ($null -eq $skill.AgeDays) {
+                $verdict += "skill never loaded in this window: $($skill.Name) (age unknown; confirm the creation date before retiring)"
+            } elseif ($skill.AgeDays -lt $requiredAge) {
+                $verdict += "skill never loaded in this window: $($skill.Name) (added $($skill.AgeDays) day(s) ago; wait until it is $requiredAge day(s) old)"
+            } else {
+                $verdict += "skill never loaded in last $Days day(s): $($skill.Name) (retire candidate -- confirm with a human before deleting)"
             }
         }
     }
@@ -412,6 +501,9 @@ if ($Json) {
         bypassRate = $stats.BypassRate
         skillLoadRate = $skillRate
         skills = $skillCounts
+        skillAges = @($installed | ForEach-Object {
+            [pscustomobject]@{ name = $_.Name; ageDays = $_.AgeDays; source = $_.AgeSource }
+        })
         lessons = $lessonCounts
         promoted = $promoted
         days = $Days
