@@ -20,6 +20,9 @@
     platform agents        ADD missing, MANUAL when different
     .gitignore             MANUAL when .harness/metrics/ or .harness/upgrade/ is absent
     .harness/.installed-version   written on -Apply
+    post-apply             every planned ADD/UPDATE must exist on disk, or the
+                           upgrade exits 1; a missing verify-harness.ps1 is also
+                           a failure (never "verification skipped" + UPDATE OK)
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
@@ -61,6 +64,12 @@ if (-not (Test-Path -LiteralPath $versionFile)) {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $templates 'scripts\stage-gate.ps1'))) {
     Write-Host "not a harness package (templates\scripts missing): $pkgPath" -ForegroundColor Red
+    exit 1
+}
+# The checker itself must be in the package. A truncated package used to result
+# in "verification skipped" and UPDATE OK; fail before touching the project.
+if (-not (Test-Path -LiteralPath (Join-Path $templates 'scripts\verify-harness.ps1'))) {
+    Write-Host "package is incomplete: templates\scripts\verify-harness.ps1 missing" -ForegroundColor Red
     exit 1
 }
 if (-not (Test-Path -LiteralPath (Join-Path $rootPath '.harness'))) {
@@ -115,6 +124,52 @@ function Add-Plan {
     })
 }
 
+# JSON config is project-owned, so the upgrade never rewrites it. It must still
+# tell the user WHAT to merge: a new required entry or the sqlGate flag that an
+# old install does not have yet is otherwise invisible.
+function Get-RequiredDelta {
+    param([string]$SourcePath, [string]$DestPath)
+    try {
+        $src = (Get-Content -LiteralPath $SourcePath -Raw -Encoding UTF8) | ConvertFrom-Json
+        $dst = (Get-Content -LiteralPath $DestPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        $parts = @()
+        $missing = @($src.required | Where-Object { @($dst.required) -notcontains $_ })
+        if ($missing.Count -gt 0) { $parts += ('add required: ' + ($missing -join ', ')) }
+        $removed = @($dst.required | Where-Object { @($src.required) -notcontains $_ })
+        if ($removed.Count -gt 0) { $parts += ('remove required: ' + ($removed -join ', ')) }
+        $srcAnyOf = @()
+        if (($src.PSObject.Properties.Name -contains 'requiredAnyOf') -and $src.requiredAnyOf) {
+            $srcAnyOf = @($src.requiredAnyOf)
+        }
+        $dstHasAnyOf = (($dst.PSObject.Properties.Name -contains 'requiredAnyOf') -and $dst.requiredAnyOf)
+        if ($srcAnyOf.Count -gt 0 -and -not $dstHasAnyOf) {
+            $groups = @($srcAnyOf | ForEach-Object { '[' + (@($_ ) -join ' | ') + ']' })
+            $parts += ('add requiredAnyOf: ' + ($groups -join ', '))
+        }
+        $srcHasFlag = ($src.PSObject.Properties.Name -contains 'sqlGate')
+        $dstHasFlag = ($dst.PSObject.Properties.Name -contains 'sqlGate')
+        if ($srcHasFlag -and -not $dstHasFlag) {
+            $parts += ('add sqlGate: ' + [string]$src.sqlGate)
+        } elseif ($srcHasFlag -and $dstHasFlag -and ([bool]$src.sqlGate -ne [bool]$dst.sqlGate)) {
+            $parts += ('sqlGate differs: project=' + [string]$dst.sqlGate + ' package=' + [string]$src.sqlGate)
+        }
+        # Old projects that followed the previous "delete the rule" opt-out may
+        # have left the gate scripts behind. Without this hint the new pair
+        # contract would fail their next verify with no explanation.
+        $dstRules = @(Get-ChildItem -LiteralPath (Join-Path $rootPath '.harness\rules') -Filter 'SQL*.md' -File -Force -ErrorAction SilentlyContinue)
+        $dstGate = @(
+            (Join-Path $rootPath 'scripts\sql-review-gate.ps1'),
+            (Join-Path $rootPath 'scripts\sql-review-gate.py')
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+        if (-not $dstHasFlag -and $dstRules.Count -eq 0 -and @($dstGate).Count -gt 0) {
+            $parts += 'legacy SQL opt-out left sql-review-gate.* behind: delete it or add "sqlGate": false'
+        }
+        return ($parts -join '; ')
+    } catch {
+        return ('delta unavailable: ' + $_.Exception.Message)
+    }
+}
+
 # ------------------------------------------------------- scripts: machinery
 # .ps1 is package-owned: replace it. *.json is project configuration (red
 # lines, stage thresholds, required files), so it is never overwritten.
@@ -131,7 +186,12 @@ foreach ($src in Get-ChildItem -LiteralPath $srcScripts -File -Force) {
     if ($src.Extension -eq '.ps1' -or $src.Extension -eq '.py') {
         Add-Plan 'UPDATE' $rel $src.FullName 'package-owned script'
     } else {
-        Add-Plan 'MANUAL' $rel $src.FullName 'project config may be edited; merge new keys by hand'
+        $detail = 'project config may be edited; merge new keys by hand'
+        if ($src.Name -eq 'harness-required.json') {
+            $delta = Get-RequiredDelta $src.FullName $dst
+            if ($delta) { $detail = $detail + '; ' + $delta }
+        }
+        Add-Plan 'MANUAL' $rel $src.FullName $detail
     }
 }
 
@@ -303,6 +363,11 @@ foreach ($p in $plan) {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
         try {
             Copy-Item -LiteralPath $p.Source -Destination $dst
+            # A copy that returns without an error can still leave no destination
+            # (locked file, external cleanup, truncated copy). Compare the hash,
+            # not just existence, before claiming the upgrade is complete.
+            if (-not (Test-Path -LiteralPath $dst -PathType Leaf)) { throw 'copy succeeded but destination is missing' }
+            if ((Get-Hash $dst) -ne (Get-Hash $p.Source)) { throw 'copy hash mismatch (truncated or partial file)' }
             $manifest.Add(('ADD {0}' -f $p.Rel))
         } catch {
             Write-Host ("[FAIL] copy {0}: {1}" -f $p.Rel, $_.Exception.Message) -ForegroundColor Red
@@ -315,6 +380,8 @@ foreach ($p in $plan) {
         try {
             Copy-Item -LiteralPath $dst -Destination $bak
             Copy-Item -LiteralPath $p.Source -Destination $dst -Force
+            if (-not (Test-Path -LiteralPath $dst -PathType Leaf)) { throw 'update copy succeeded but destination is missing' }
+            if ((Get-Hash $dst) -ne (Get-Hash $p.Source)) { throw 'update copy hash mismatch (truncated or partial file)' }
             $manifest.Add(('UPDATE {0} (old copy in backup)' -f $p.Rel))
         } catch {
             Write-Host ("[FAIL] update {0}: {1}" -f $p.Rel, $_.Exception.Message) -ForegroundColor Red
@@ -322,21 +389,6 @@ foreach ($p in $plan) {
         }
     }
 }
-
-$manifestPath = Join-Path $backupRoot 'manifest.txt'
-$manifestLines = @(
-    ('harness upgrade {0} -> {1}' -f $installedVersion, $newVersion),
-    ('applied: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
-    ''
-) + $manifest
-Set-Content -LiteralPath $manifestPath -Value $manifestLines -Encoding ASCII
-
-# The marker lets the next upgrade name the version it starts from.
-$marker = Join-Path $rootPath '.harness\.installed-version'
-Set-Content -LiteralPath $marker -Value @(
-    $newVersion,
-    ('updated: ' + (Get-Date -Format 'yyyy-MM-dd'))
-) -Encoding ASCII
 
 if (-not $SkipHooks) {
     $hookScript = Join-Path $rootPath 'scripts\install-git-hooks.ps1'
@@ -365,14 +417,37 @@ if (-not $SkipVerify) {
             $failed++
         }
     } else {
-        Write-Host 'scripts\verify-harness.ps1 is missing; verification skipped' -ForegroundColor Yellow
+        Write-Host 'scripts\verify-harness.ps1 is missing; verification cannot run: upgrade is incomplete' -ForegroundColor Red
+        $failed++
     }
 }
+
+# The manifest records the whole attempt, including hook/verify failures. It
+# must be written after those checks, not before.
+$manifestPath = Join-Path $backupRoot 'manifest.txt'
+$manifestLines = @(
+    ('harness upgrade {0} -> {1}' -f $installedVersion, $newVersion),
+    ('applied: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
+    ('failed: {0}' -f $failed),
+    ''
+) + $manifest
+Set-Content -LiteralPath $manifestPath -Value $manifestLines -Encoding ASCII
 
 Write-Host ''
 if ($failed -gt 0) {
     Write-Host ("UPDATE FINISHED WITH {0} FAILURE(S); see messages above" -f $failed) -ForegroundColor Red
+    Write-Host 'version marker was NOT advanced; fix the failures and re-run the upgrade.' -ForegroundColor Yellow
     exit 1
 }
+
+# The marker lets the next upgrade name the version it starts from. Advance it
+# only after every check passed; otherwise the next upgrade would believe this
+# incomplete state is the new version.
+$marker = Join-Path $rootPath '.harness\.installed-version'
+Set-Content -LiteralPath $marker -Value @(
+    $newVersion,
+    ('updated: ' + (Get-Date -Format 'yyyy-MM-dd'))
+) -Encoding ASCII
+
 Write-Host ("UPDATE OK: {0} -> {1}; backup: {2}" -f $installedVersion, $newVersion, $backupRoot) -ForegroundColor Green
 exit 0

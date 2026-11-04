@@ -73,13 +73,22 @@ Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value 'histor
 Add-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Value ' ' -Encoding UTF8
 $jsonBefore = Get-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Raw
 
+# Deliberately old required list (no sqlGate, legacy ps1 entry): the upgrade
+# must print a machine-readable delta so a human can merge the new entries and
+# remove the ps1-only requirement in favour of requiredAnyOf.
+Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value '{"_note":"old install","required":["AGENTS.md","scripts/red-line-scan.ps1"]}' -Encoding UTF8
+
 # ------------------------------------------------------------ fake package
 Set-Content -LiteralPath "$newPkg\VERSION" -Value 'HARNESS-BOOTSTRAP VERSION 9.9.9' -Encoding ASCII
+# update-harness fails early when the package's checker is missing, so the fake
+# package must carry it even though this test runs with -SkipVerify.
+Copy-Item -LiteralPath "$pkg\templates\scripts\verify-harness.ps1" -Destination "$newPkg\templates\scripts\verify-harness.ps1"
 Copy-Item -LiteralPath "$pkg\templates\scripts\stage-gate.ps1" -Destination "$newPkg\templates\scripts\stage-gate.ps1"
 Add-Content -LiteralPath "$newPkg\templates\scripts\stage-gate.ps1" -Value '# upgrade-test-marker' -Encoding ASCII
 Set-Content -LiteralPath "$newPkg\templates\scripts\new-tool.ps1" -Value '# new tool' -Encoding ASCII
 # The new package must carry the config for the MANUAL branch to be exercised.
 Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-rules.json" -Destination "$newPkg\templates\scripts\red-line-rules.json"
+Copy-Item -LiteralPath "$pkg\templates\scripts\harness-required.json" -Destination "$newPkg\templates\scripts\harness-required.json"
 # Python scanners are package-owned machinery: they must be UPDATE, not MANUAL.
 Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-scan.py" -Destination "$newPkg\templates\scripts\red-line-scan.py"
 Add-Content -LiteralPath "$newPkg\templates\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
@@ -105,6 +114,10 @@ Check 'dry-run plans stage-gate UPDATE' ($dry -match '\[UPDATE\]\s+scripts\\stag
 Check 'dry-run plans new-tool ADD'         ($dry -match '\[ADD\s*\]\s+scripts\\new-tool\.ps1')
 Check 'dry-run marks AGENTS.md MANUAL'     ($dry -match '\[MANUAL\]\s+AGENTS\.md')
 Check 'dry-run marks JSON config MANUAL'   ($dry -match '\[MANUAL\]\s+scripts\\red-line-rules\.json')
+Check 'dry-run reports required delta'     ($dry -match 'add required:')
+Check 'dry-run reports requiredAnyOf'      ($dry -match 'add requiredAnyOf:')
+Check 'dry-run reports required removal'   ($dry -match 'remove required:.*scripts/red-line-scan\.ps1')
+Check 'dry-run reports sqlGate delta'      ($dry -match 'add sqlGate: true')
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
 Check 'dry-run marks installed skill MANUAL' ($dry -match '\[MANUAL\]\s+\.harness\\skills\\main-dev\\coding-skill\\SKILL\.md')
 Check 'dry-run marks .gitignore MANUAL'    (($dry -match '\[MANUAL\]\s+\.gitignore') -and ($dry -match 'add by hand: \.harness/upgrade/'))
