@@ -1,5 +1,26 @@
 [
   {
+    "version": "1.24.0",
+    "title": "(SQL 门禁 fail-closed / 升级自检 / 度量与红线边界)",
+    "body": [
+      "- SQL 门禁：新增 sqlGate 三态与 requiredAnyOf；hook 按 index/HEAD 读取策略，",
+      "  校验规则 / gate / 扫描器 / check-summary / 规则表成对与工作区一致性；",
+      "  空 diff 不再跳过前置检查",
+      "- verify-harness：SQL 门禁增加 empty-diff + positive probe；requiredAnyOf；",
+      "  非布尔 sqlGate 直接 FAIL；要求目标项目的 harness-required.json",
+      "- sql-review-gate：只认 sql_review 字段形态，模板说明文字不再能伪造评审；",
+      "  .ps1 / .py 同步",
+      "- metrics：技能名归一化（04-sql-review / biz-dev/...）；退役候选增加技能年龄",
+      "  门槛；-Days 与年龄取 max；修正字段缺失提示与重名 / 重命名边界",
+      "- 红线：R6 开启 multiline；R5/R6 文案限定为扫描器可判范围；AGENTS 增量扫描",
+      "  改为 --cached",
+      "- 流程：summary 先落盘写入 AGENTS / 开发流程 / request-analysis / coding-skill",
+      "- 升级：verify-harness 缺失 fail-closed；落盘后 hash 校验；仅成功时推进版本；",
+      "  harness-required.json 输出 required / requiredAnyOf / sqlGate delta",
+      "- 测试与文档：新增 SQL 门禁 / 升级 / 替换探针用例；同步踩坑、维护、CI、Agent 文档"
+    ]
+  },
+  {
     "version": "1.23.1",
     "title": "(升级修复：.py / 技能同步 / 备份忽略 / 文档口径)",
     "body": [
