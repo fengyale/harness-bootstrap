@@ -60,14 +60,15 @@ def get_note(path):
             text = f.read()
     except OSError:
         return None
-    m = re.search(r'^[^\r\n]*sql_review\b[^\r\n]*', text, re.M)
+    # Require "sql_review:" (or a full-width colon), not a prose mention like
+    # "`sql_review` 由阶段 10 查". The old pattern matched boilerplate prose and
+    # treated it as a valid review note.
+    m = re.search(r'^[^\r\n]*?sql_review\s*`?\s*[:\uFF1A](?P<v>[^\r\n]*)', text, re.M)
     if not m:
         return None
-    v = m.group(0)
-    i = v.find('sql_review')
-    if i >= 0:
-        v = v[i + len('sql_review'):]
-    return v.lstrip(':- \uFF1A').strip()
+    # Capture the value after the field colon directly; find() used to return
+    # the first prose mention instead of the matched field.
+    return m.group('v').strip().strip('`')
 
 
 def add_placeholder(path):
@@ -76,7 +77,7 @@ def add_placeholder(path):
             text = f.read()
     except OSError:
         return False
-    if 'sql_review' in text:
+    if re.search(r'^[^\r\n]*sql_review\s*`?\s*[:\uFF1A]', text, re.M):
         return False
     sep = '' if text.endswith('\n') else '\n'
     with open(path, 'w', encoding='utf-8', newline='') as f:

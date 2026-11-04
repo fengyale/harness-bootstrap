@@ -19,7 +19,7 @@
     10. metrics      task summaries exist (field validity is check 12)
     11. modules      .harness/modules cards have sections and evidence
     12. summary      task summaries pass scripts/check-summary.ps1 (same rules as the gates)
-    13. sql-gate     a SQL rule implies a runnable sql-review-gate and hook wiring
+    13. sql-gate     sqlGate policy: rule + runnable gate + hook wiring, or explicit opt-out
 
   USAGE  (no pwsh on Windows PowerShell 5.1 boxes; Bypass is required by policy)
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1
@@ -58,7 +58,7 @@ function Add-Result {
 function Test-RelativePath {
     param([string]$Rel, [string]$Kind)
     $full = Join-Path $rootPath $Rel
-    if (Test-Path -LiteralPath $full) {
+    if (Test-Path -LiteralPath $full -PathType Leaf) {
         Add-Result $Kind 'PASS' $Rel
         return $true
     }
@@ -70,7 +70,13 @@ function Test-RelativePath {
 # The list of required files lives in harness-required.json: this script must
 # stay pure ASCII (PS 5.1 parses .ps1 as ANSI without a BOM), while the file
 # names are Chinese. Edit the JSON, not this script, to trim the checklist.
-$requiredPath = Join-Path $PSScriptRoot 'harness-required.json'
+# Prefer the target project's config. A package copy of verify-harness.ps1 is
+# often run with -Root D:\proj; reading only $PSScriptRoot would then apply the
+# package's sqlGate policy to a different project.
+$requiredPath = Join-Path $rootPath 'scripts\harness-required.json'
+if (-not (Test-Path -LiteralPath $requiredPath)) {
+    $requiredPath = Join-Path $PSScriptRoot 'harness-required.json'
+}
 $required = @()
 $cfg = $null
 if (Test-Path -LiteralPath $requiredPath) {
@@ -90,6 +96,26 @@ foreach ($rel in $required) {
     if (-not (Test-RelativePath $rel 'structure')) { $missing++ }
 }
 if ($missing -gt 0) { Add-Result 'structure' 'FAIL' "$missing required file(s) missing" }
+
+# Any-of groups: at least one runtime per capability. The scanner ships as
+# .ps1 + .py; a project may keep only one. Both missing is still a FAIL.
+$anyGroups = @()
+if ($cfg -and $cfg.requiredAnyOf) { $anyGroups = @($cfg.requiredAnyOf) }
+$anyMiss = 0
+foreach ($group in $anyGroups) {
+    $rels = @($group | ForEach-Object { ([string]$_ -replace '/', '\') })
+    $found = $false
+    foreach ($rel in $rels) {
+        if (Test-Path -LiteralPath (Join-Path $rootPath $rel) -PathType Leaf) { $found = $true; break }
+    }
+    if (-not $found) {
+        Add-Result 'structure' 'FAIL' ('missing: at least one of ' + ($rels -join ' | '))
+        $anyMiss++
+    }
+}
+if ($anyGroups.Count -gt 0 -and $anyMiss -eq 0) {
+    Add-Result 'structure' 'PASS' "$($anyGroups.Count) any-of group(s) satisfied"
+}
 
 # Hollow files: a required file that exists but is empty passes the "does it
 # exist" check while its content is silently gone. A truncated handbook is worse
@@ -381,30 +407,124 @@ if ($null -eq $scanCode) {
 }
 
 # --------------------------------------------------------------- 6b sql gate
-# A SQL rule with no runtime is the most common silent hole: the file says "SQL
-# must be reviewed" and nothing enforces it. Fail-closed, same contract as the
-# installed pre-commit hook. Rule file names are Chinese, so match the ASCII
-# prefix "SQL" -- the same trick the POSIX hook uses.
+# Three states, because "no rule" used to be indistinguishable from "the rule
+# was deleted":
+#   sqlGate=true   -> rule + runtime + hook wiring + a real run are all required
+#   sqlGate=false  -> the project opted out; the artifacts must be gone as well
+#   no sqlGate key -> legacy install: rule and gate must appear as a pair
+# A runnability probe is part of the gate: a shipped script that cannot execute
+# on this host is the same silent hole as a missing script.
+# Rule file names are Chinese, so match the ASCII prefix "SQL" -- the same trick
+# the POSIX hook uses.
+$sqlGateFlag = $null
+$hasSqlFlag = $false
+$sqlGateInvalid = $false
+if ($cfg -and $cfg.PSObject.Properties.Name -contains 'sqlGate') {
+    $hasSqlFlag = $true
+    if ($cfg.sqlGate -is [bool]) {
+        $sqlGateFlag = [bool]$cfg.sqlGate
+    } else {
+        # [bool]"false" is True in PowerShell; accepting a string here would
+        # silently invert the policy. A non-boolean value is a config error.
+        $sqlGateInvalid = $true
+    }
+}
+
+# Run the gate against a throw-away root. The empty diff must pass (0); a diff
+# with SQL but no summary must FAIL (1). Exit 0 on the positive probe means the
+# script is a no-op stub that would let every SQL change through.
+function Invoke-SqlGateProbe {
+    param([string]$GatePs, [string]$GatePy, [string]$ProbeRoot, [string]$DiffPath)
+    $code = $null
+    if ((Test-Path -LiteralPath $GatePs -PathType Leaf) -and $psHost) {
+        if ($psHost -eq 'powershell') {
+            $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $GatePs -Root $ProbeRoot -DiffFile $DiffPath 2>&1
+        } else {
+            $null = & pwsh -NoProfile -File $GatePs -Root $ProbeRoot -DiffFile $DiffPath 2>&1
+        }
+        $code = $LASTEXITCODE
+    } elseif ((Test-Path -LiteralPath $GatePy -PathType Leaf) -and $pyHost) {
+        $null = & $pyHost $GatePy --root $ProbeRoot --diff-file $DiffPath 2>&1
+        $code = $LASTEXITCODE
+    }
+    return $code
+}
+
 $rulesDir = Join-Path $rootPath '.harness\rules'
+$sqlRules = @()
 if (Test-Path -LiteralPath $rulesDir) {
     $sqlRules = @(Get-ChildItem -LiteralPath $rulesDir -Filter 'SQL*.md' -File -Force -ErrorAction SilentlyContinue)
-    if ($sqlRules.Count -gt 0) {
-        $sqlPs = Join-Path $rootPath 'scripts\sql-review-gate.ps1'
-        $sqlPy = Join-Path $rootPath 'scripts\sql-review-gate.py'
-        if ((Test-Path -LiteralPath $sqlPs) -or (Test-Path -LiteralPath $sqlPy)) {
-            Add-Result 'sql-gate' 'PASS' "SQL rule present and sql-review-gate shipped"
-        } else {
-            Add-Result 'sql-gate' 'FAIL' 'SQL rule present but scripts\sql-review-gate.ps1|.py is missing (the rule cannot be enforced)'
-        }
-        $sqlHook = $hookPath
-        if (Test-Path -LiteralPath $sqlHook) {
-            $sqlHookText = [System.IO.File]::ReadAllText($sqlHook, [System.Text.Encoding]::UTF8)
-            if ($sqlHookText -notmatch 'sql-review-gate') {
-                Add-Result 'sql-gate' 'FAIL' 'pre-commit hook does not call sql-review-gate (re-run install-git-hooks.ps1)'
-            }
-        }
+}
+$sqlPs = Join-Path $rootPath 'scripts\sql-review-gate.ps1'
+$sqlPy = Join-Path $rootPath 'scripts\sql-review-gate.py'
+$sqlGateShipped = (Test-Path -LiteralPath $sqlPs -PathType Leaf) -or (Test-Path -LiteralPath $sqlPy -PathType Leaf)
+
+if ($sqlGateInvalid) {
+    Add-Result 'sql-gate' 'FAIL' 'sqlGate must be a JSON boolean (true/false); a string/null value is not accepted'
+} elseif ($hasSqlFlag -and -not $sqlGateFlag) {
+    if ($sqlRules.Count -gt 0 -or $sqlGateShipped) {
+        Add-Result 'sql-gate' 'FAIL' 'sqlGate=false but SQL rule/gate artifacts are still present; delete them or set sqlGate=true'
     } else {
-        Add-Result 'sql-gate' 'PASS' 'no SQL rule installed (SQL gate intentionally off)'
+        Add-Result 'sql-gate' 'PASS' 'SQL gate disabled by project config (sqlGate=false)'
+    }
+} elseif ($sqlRules.Count -eq 0 -and -not $sqlGateShipped -and -not ($hasSqlFlag -and $sqlGateFlag)) {
+    Add-Result 'sql-gate' 'PASS' 'no SQL rule and no SQL gate (legacy project: SQL gate intentionally off)'
+} elseif ($sqlRules.Count -eq 0) {
+    Add-Result 'sql-gate' 'FAIL' 'SQL gate is required/enabled but .harness/rules/SQL*.md is missing'
+} elseif (-not $sqlGateShipped) {
+    Add-Result 'sql-gate' 'FAIL' 'SQL rule present but scripts\sql-review-gate.ps1|.py is missing (the rule cannot be enforced)'
+} else {
+    $gateFile = if (Test-Path -LiteralPath $sqlPs -PathType Leaf) { $sqlPs } else { $sqlPy }
+    $gateText = [System.IO.File]::ReadAllText($gateFile, [System.Text.Encoding]::UTF8)
+    $gateUsable = $true
+    if ($gateText.Length -lt 200 -or $gateText -notmatch 'sql_review') {
+        Add-Result 'sql-gate' 'FAIL' "gate file looks hollow or truncated (no sql_review logic): $gateFile"
+        $gateUsable = $false
+    }
+
+    if ($gateUsable) {
+        $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('hb-sql-probe-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        $emptyDiff = [System.IO.Path]::GetTempFileName()
+        $sqlDiff = [System.IO.Path]::GetTempFileName()
+        try {
+            New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+            Set-Content -LiteralPath $emptyDiff -Value '' -Encoding ASCII
+            Set-Content -LiteralPath $sqlDiff -Value @(
+                'diff --git a/probe.sql b/probe.sql',
+                'new file mode 100644',
+                'index 0000000..1111111',
+                '--- /dev/null',
+                '+++ b/probe.sql',
+                '@@ -0,0 +1 @@',
+                '+select * from t'
+            ) -Encoding ASCII
+            $emptyCode = Invoke-SqlGateProbe $sqlPs $sqlPy $probeRoot $emptyDiff
+            $sqlCode = Invoke-SqlGateProbe $sqlPs $sqlPy $probeRoot $sqlDiff
+            if ($null -eq $emptyCode -or $null -eq $sqlCode) {
+                Add-Result 'sql-gate' 'FAIL' 'sql-review-gate exists but no PowerShell/Python host can run it on this machine'
+            } elseif ($emptyCode -ne 0) {
+                Add-Result 'sql-gate' 'FAIL' "sql-review-gate exited $emptyCode on an empty diff (the gate itself is broken)"
+            } elseif ($sqlCode -ne 1) {
+                Add-Result 'sql-gate' 'FAIL' "sql-review-gate exited $sqlCode on SQL without a summary (expected 1; the gate is not enforcing)"
+            } else {
+                Add-Result 'sql-gate' 'PASS' 'SQL rule present; gate runs and rejects SQL without a summary (empty-diff + positive probe)'
+            }
+        } finally {
+            Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $emptyDiff, $sqlDiff -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $sqlHook = $hookPath
+    if (Test-Path -LiteralPath $sqlHook) {
+        $sqlHookText = [System.IO.File]::ReadAllText($sqlHook, [System.Text.Encoding]::UTF8)
+        if ($sqlHookText -notmatch 'sql-review-gate') {
+            Add-Result 'sql-gate' 'FAIL' 'pre-commit hook does not call sql-review-gate (re-run install-git-hooks.ps1)'
+        } elseif ($hasSqlFlag -and $sqlGateFlag -and $sqlHookText -notmatch 'SQL_POLICY') {
+            Add-Result 'sql-gate' 'FAIL' 'pre-commit hook predates the sqlGate policy; re-run install-git-hooks.ps1'
+        } elseif ($sqlHookText -notmatch 'SQL_POLICY') {
+            Add-Result 'sql-gate' 'WARN' 'legacy hook does not honor sqlGate; re-run install-git-hooks.ps1 for full fail-closed'
+        }
     }
 }
 

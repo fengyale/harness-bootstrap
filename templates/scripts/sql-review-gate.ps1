@@ -60,19 +60,22 @@ function Get-NoteValue {
     param([string]$Path)
     if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $null }
     $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
-    $m = [regex]::Match($text, '(?m)^[^\r\n]*sql_review\b[^\r\n]*')
+    # Require "sql_review:" (or a full-width colon), not a prose mention like
+    # "sql_review is checked at stage 10". The old pattern matched the
+    # template's explanatory sentence and treated it as a valid review note,
+    # which made the gate spoofable by boilerplate.
+    $m = [regex]::Match($text, '(?m)^[^\r\n]*?sql_review\s*`?\s*[:\uFF1A](?<v>[^\r\n]*)')
     if (-not $m.Success) { return $null }
-    $v = $m.Value
-    $i = $v.IndexOf('sql_review')
-    if ($i -ge 0) { $v = $v.Substring($i + 10) }
-    $fullColon = [char]0xFF1A
-    return $v.TrimStart([char[]]@(':', '-', ' ', $fullColon)).Trim()
+    # Capture the value after the field colon directly; IndexOf('sql_review')
+    # used to return the first prose mention instead of the matched field.
+    return $m.Groups['v'].Value.Trim().Trim('`')
 }
 
 function Add-Placeholder {
     param([string]$Path)
     $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
-    if ($text -match 'sql_review') { return $false }
+    # Only a real field line counts; a prose mention must not suppress the TODO.
+    if ($text -match '(?m)^[^\r\n]*sql_review\s*`?\s*[:\uFF1A]') { return $false }
     $line = '- sql_review: TODO(evaluate tables / estimated rows / access path)'
     $nl = if ($text.EndsWith("`n")) { '' } else { "`r`n" }
     [System.IO.File]::WriteAllText($Path, $text + $nl + $line + "`r`n", (New-Object System.Text.UTF8Encoding($false)))

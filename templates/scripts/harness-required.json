@@ -1,5 +1,11 @@
 {
   "_说明": "verify-harness.ps1 的必需文件清单、AGENTS.md 必含章节与平台入口。agentsSections 顺序固定：[0]技术栈 [1]必跑命令 [2]红线 [3]文件索引 [4]AI 编码纪律。",
+  "_sqlGate说明": "true = SQL 门禁必须启用：规则文件 + 至少一个 gate 运行时 + hook 调用 + 本机可运行；false = 项目明确关闭（同时应删除 SQL 规则与 gate 脚本）；字段缺省 = 旧项目，按「规则与 gate 必须成对」判定，不做强启用。",
+  "_requiredAnyOf说明": "每组至少存在一个文件；用于「同一能力有多个运行时」的场景。扫描器的 ps1/py 只保留一个也算完整。",
+  "sqlGate": true,
+  "requiredAnyOf": [
+    ["scripts/red-line-scan.ps1", "scripts/red-line-scan.py"]
+  ],
   "agentsSections": ["技术栈", "必跑命令", "红线", "文件索引", "AI 编码纪律"],
   "platformEntries": {
     "skillDirs": [".trae/skills", ".claude/skills"],
@@ -26,7 +32,6 @@
     ".harness/changes/README.md",
     ".harness/modules/README.md",
     "scripts/red-line-rules.json",
-    "scripts/red-line-scan.ps1",
     "scripts/probe-stack.ps1",
     "scripts/probe-project.ps1",
     "scripts/install-git-hooks.ps1",

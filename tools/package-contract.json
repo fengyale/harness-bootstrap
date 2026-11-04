@@ -187,6 +187,30 @@
       "file": "README.md",
       "patterns": ["harness-bootstrap", "verify-package.ps1"],
       "why": "README 是外部用户的第一入口；技能名和自检命令必须与仓库实际一致。"
+    },
+    {
+      "id": "sqlGate-data",
+      "file": "templates/scripts/harness-required.json",
+      "pattern": "\"sqlGate\"",
+      "why": "sqlGate 是 SQL 门禁的显式启用/关闭开关，必须存在于项目配置模板里。"
+    },
+    {
+      "id": "sqlGate-hook-index",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "patterns": ["SQL_POLICY", "git cat-file -e :scripts/harness-required.json"],
+      "why": "hook 必须按 index 里的 sqlGate 判定，不能被工作区未暂存改动关掉。"
+    },
+    {
+      "id": "sqlGate-hook-pair",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "SQL_RULE=1",
+      "why": "规则与 gate 必须成对校验，删一侧时 hook 要 fail-closed。"
+    },
+    {
+      "id": "sqlGate-verify-probe",
+      "file": "templates/scripts/verify-harness.ps1",
+      "patterns": ["sqlGate", "Invoke-SqlGateProbe"],
+      "why": "自检必须同时覆盖 sqlGate 三态和正向探针，不能只检查脚本是否存在。"
     }
   ]
 }

@@ -19,11 +19,17 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\red-line-scan.ps1 -Rules R1,R4
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\red-line-scan.ps1 -ListRules
 
-  NEW-CHANGES-ONLY MODE (this is what the git hook uses)
+  INCREMENTAL MODE (added lines only; this is what the git hook uses)
+    powershell ... -File scripts\red-line-scan.ps1 -DiffFile .git\harness-diff.tmp
+    git diff --cached -U0 --diff-filter=ACMR | powershell ... -File scripts\red-line-scan.ps1 -DiffFromStdin
+    Only the added lines of the diff are scanned, so a legacy project with
+    hundreds of historical violations still gets a usable gate ("block new only").
+
+  WHOLE-FILE FILTER MODE (every line of the listed files is scanned)
     powershell ... -File scripts\red-line-scan.ps1 -Files a.java,b.kt
     git diff --cached --name-only --diff-filter=ACM | powershell ... -FilesFromStdin
-    In this mode only the listed files are scanned, so a legacy project with
-    hundreds of historical violations still gets a usable gate ("block new only").
+    Use this for a deliberate full review of a few files, not for routine
+    incremental checks: historical violations in those files will be reported.
 
   EXIT CODE
     0 = clean, 1 = violations found (usable as a gate)
@@ -170,8 +176,10 @@ if ($FilesFromStdin) {
 }
 
 if ($Files -and $Files.Count -gt 0) {
-    # explicit list: hook / CI / "new changes only". Missing paths are skipped
-    # on purpose -- a commit can legitimately contain deletions and renames.
+    # Explicit list = whole-file filter. Missing paths are skipped on purpose --
+    # a commit can legitimately contain deletions and renames. For added-lines
+    # only, use -DiffFile / -DiffFromStdin above.
+
     $allFiles = @()
     foreach ($f in $Files) {
         $p = $f

@@ -11,7 +11,18 @@ function Expect([string]$Label, [int]$Code, [int]$Want) {
 
 if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
+New-Item -ItemType Directory -Force -Path "$proj\.harness\rules" | Out-Null
 Copy-Item "$pkg\templates\scripts" "$proj\scripts" -Recurse
+# The template harness-required.json ships sqlGate=true. The hook is fail-closed
+# when the rule is missing, so the fixture must carry a rule for the normal
+# summary commits below to pass.
+Set-Content -LiteralPath "$proj\.harness\rules\SQL-review.md" -Value @(
+    '# SQL review',
+    '',
+    '- evaluate tables',
+    '- estimate rows',
+    '- check the access path'
+) -Encoding UTF8
 
 Step 'flow value with a trailing note'
 $tpl = Get-Content "$pkg\templates\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
@@ -111,12 +122,132 @@ git -C $proj add -A
 git -C $proj commit -q -m init
 Expect 'commit of an initial summary' $LASTEXITCODE 0
 
+Step 'worktree check-summary replacement is rejected'
+Set-Content -LiteralPath "$proj\scripts\check-summary.ps1" -Value '' -Encoding ASCII
+$toolSum = Get-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
+$toolSum = ($toolSum -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_\-])corrections:' }) -join "`r`n"
+Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $toolSum -Encoding UTF8
+git -C $proj add .harness/changes/demo/summary.md
+git -C $proj commit -q -m local-empty-check-summary
+Expect 'commit with worktree check-summary replaced' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+
+Step 'worktree red-line scanner replacement is rejected'
+Set-Content -LiteralPath "$proj\scripts\red-line-scan.ps1" -Value '' -Encoding ASCII
+Set-Content -LiteralPath "$proj\A.java" -Value 'public class A { void f() { throw new RuntimeException(); } }' -Encoding UTF8
+git -C $proj add A.java
+git -C $proj commit -q -m local-empty-redline
+Expect 'commit with worktree red-line scanner replaced' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\A.java" -Force -ErrorAction SilentlyContinue
+
+Step 'worktree SQL gate replacement is rejected'
+Set-Content -LiteralPath "$proj\scripts\sql-review-gate.ps1" -Value '' -Encoding ASCII
+$toolSum = Get-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
+$toolSum = ($toolSum -split "`r?`n" | Where-Object { $_ -notmatch 'sql_review:' }) -join "`r`n"
+Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $toolSum -Encoding UTF8
+Set-Content -LiteralPath "$proj\SqlDemo.sql" -Value 'select * from t' -Encoding UTF8
+git -C $proj add .harness/changes/demo/summary.md SqlDemo.sql
+git -C $proj commit -q -m local-empty-sql-gate
+Expect 'commit with worktree SQL gate replaced' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\SqlDemo.sql" -Force -ErrorAction SilentlyContinue
+
+Step 'worktree red-line-rules replacement is rejected'
+Set-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Value '{"rules":[{"id":"R1","name":"x","pattern":"__never__","include":["*.java"]}]}' -Encoding UTF8
+Set-Content -LiteralPath "$proj\A.java" -Value 'public class A { void f() { throw new RuntimeException(); } }' -Encoding UTF8
+git -C $proj add A.java
+git -C $proj commit -q -m local-weakened-rules
+Expect 'commit with worktree red-line rules replaced' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\A.java" -Force -ErrorAction SilentlyContinue
+
+Step 'deleting red-line-rules.json alone is blocked'
+git -C $proj reset --hard HEAD -q
+git -C $proj rm -q scripts/red-line-rules.json
+git -C $proj commit -q -m rm-rules-json
+Expect 'commit with only red-line-rules.json deleted' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+
 # removing a basic field must still be blocked by the hook
 $s2 = ($s -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_\-])corrections:' }) -join "`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $s2 -Encoding UTF8
 git -C $proj add -A
 git -C $proj commit -q -m missing-field
 Expect 'commit without corrections field' $LASTEXITCODE 1
+
+Step 'sqlGate=true: an unstaged sqlGate=false must not bypass the gate'
+# Reset the failed staged summary so the fixture is clean before the next probe.
+git -C $proj reset --hard HEAD -q
+$req = Get-Content -LiteralPath "$proj\scripts\harness-required.json" -Raw -Encoding UTF8
+$req = $req -replace '"sqlGate"\s*:\s*true', '"sqlGate": false'
+Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value $req -Encoding UTF8
+# The summary is staged without sql_review; the config edit stays unstaged.
+$sum = Get-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
+$sum = ($sum -split "`r?`n" | Where-Object { $_ -notmatch 'sql_review:' }) -join "`r`n"
+Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $sum -Encoding UTF8
+Set-Content -LiteralPath "$proj\SqlDemo.sql" -Value 'select * from t' -Encoding UTF8
+git -C $proj add .harness/changes/demo/summary.md SqlDemo.sql
+git -C $proj commit -q -m workspace-config-bypass
+Expect 'commit with unstaged sqlGate=false and SQL change' $LASTEXITCODE 1
+
+Step 'sqlGate=true: deleting only the rule blocks the empty-diff path'
+git -C $proj reset --hard HEAD -q
+git -C $proj rm -q .harness/rules/SQL-review.md
+git -C $proj commit -q -m rm-rule-only
+Expect 'commit with only the SQL rule deleted' $LASTEXITCODE 1
+
+Step 'sqlGate=true: deleting the rule and adding source blocks the commit'
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\.harness\rules\SQL-review.md" -Force
+Set-Content -LiteralPath "$proj\Demo.java" -Value 'public class Demo {}' -Encoding UTF8
+git -C $proj add -A
+git -C $proj commit -q -m no-sql-rule
+Expect 'commit with sqlGate=true and no rule' $LASTEXITCODE 1
+
+Step 'sqlGate=false: explicit opt-out is respected'
+$reqPath = "$proj\scripts\harness-required.json"
+$req = Get-Content -LiteralPath $reqPath -Raw -Encoding UTF8
+$req = $req -replace '"sqlGate"\s*:\s*true', '"sqlGate": false'
+Set-Content -LiteralPath $reqPath -Value $req -Encoding UTF8
+Remove-Item -LiteralPath "$proj\scripts\sql-review-gate.ps1" -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$proj\scripts\sql-review-gate.py" -Force -ErrorAction SilentlyContinue
+git -C $proj add -A
+git -C $proj commit -q -m sql-off
+Expect 'commit with sqlGate=false' $LASTEXITCODE 0
+
+Step 'sqlGate=false with leftover SQL artifacts is rejected'
+git -C $proj reset --hard HEAD -q
+Set-Content -LiteralPath "$proj\.harness\rules\SQL-review.md" -Value '# SQL review' -Encoding UTF8
+Set-Content -LiteralPath "$proj\scripts\sql-review-gate.ps1" -Value '# leftover gate' -Encoding ASCII
+git -C $proj add -A
+git -C $proj commit -q -m false-with-artifacts
+Expect 'commit with sqlGate=false and leftover artifacts' $LASTEXITCODE 1
+
+Step 'legacy gate-only state is rejected'
+git -C $proj reset --hard HEAD -q
+$req = Get-Content -LiteralPath "$proj\scripts\harness-required.json" -Raw -Encoding UTF8
+$req = $req -replace '(?m)^\s*"sqlGate"\s*:\s*false,\s*\r?\n', ''
+Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value $req -Encoding UTF8
+Set-Content -LiteralPath "$proj\scripts\sql-review-gate.ps1" -Value '# leftover gate' -Encoding ASCII
+git -C $proj add -A
+git -C $proj commit -q -m legacy-gate-only
+Expect 'commit with legacy gate-only state' $LASTEXITCODE 1
+
+Step 'deleting check-summary.ps1 alone is blocked even with an empty diff'
+git -C $proj reset --hard HEAD -q
+git -C $proj rm -q scripts/check-summary.ps1
+git -C $proj commit -q -m rm-summary-check
+Expect 'commit with only check-summary.ps1 deleted' $LASTEXITCODE 1
+
+Step 'deleting the last tracked scanner is blocked'
+git -C $proj reset --hard HEAD -q
+# --cached leaves the worktree copies, so the hook reaches the tracked-scanner
+# check instead of failing earlier on "no scanner in the worktree".
+git -C $proj rm --cached -q scripts/red-line-scan.ps1 scripts/red-line-scan.py
+git -C $proj commit -q -m rm-last-scanner
+Expect 'commit that removes the last tracked scanner' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
 
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }

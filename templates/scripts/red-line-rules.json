@@ -1,5 +1,6 @@
 {
   "_说明": "红线规则表。与根 AGENTS.md 的「🔴 红线」表、.harness/rules/编码规范.md 的「红线汇总」三处必须一致（编号 R1、R2、R3… 连续，不要跳号）。",
+  "_能力边界": "正则只判定可判定的子集，不承诺覆盖完整语义。R5 只拦空括号 @Transactional()；无括号或带属性但未声明 rollbackFor 的形式需人工复核。R6 覆盖单行/多行日志调用，但参数内嵌套括号可能截断敏感词，复杂拼接需人工复核。文案必须与这里的 scoped 说明一致，禁止在 AGENTS/编码规范里写成「全部都能扫」。",
   "_字段": {
     "id": "规则编号，与 AGENTS.md 红线表的「#」列一一对应",
     "name": "规则名（可以写中文：本文件由脚本按 UTF-8 读取，不受 PS 5.1 编码限制）",
@@ -46,14 +47,15 @@
       "name": "事务必须声明回滚范围",
       "pattern": "@Transactional\\s*\\(\\s*\\)",
       "include": ["*.java", "*.kt"],
-      "hint": "补上 rollbackFor（如 rollbackFor = Exception.class）"
+      "hint": "扫描器只拦空括号 @Transactional()；无括号或带属性但未声明 rollbackFor 的形式需人工复核"
     },
     {
       "id": "R6",
       "name": "禁止把敏感信息写进日志",
       "pattern": "(log|logger)\\.(info|warn|error|debug)\\s*\\([^)]*(password|passwd|token|secret|mobile|phone)",
       "include": ["*.java", "*.kt", "*.ts", "*.tsx"],
-      "hint": "禁止把密码/令牌/完整手机号写入日志"
+      "multiline": true,
+      "hint": "覆盖单行/多行日志调用；参数内嵌套括号可能截断敏感词，复杂拼接需人工复核"
     },
     {
       "id": "R7",

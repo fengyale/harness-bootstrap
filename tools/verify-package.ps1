@@ -250,6 +250,52 @@ if (-not $Fast) {
             }
         }
 
+        # Negative probe: sqlGate=true + a SQL rule with no gate runtime must be
+        # a FAIL. This is the fail-open that used to leave the SQL gate silently
+        # disabled when the script was deleted.
+        if ($smokeBad -eq 0) {
+            New-Item -ItemType Directory -Force -Path (Join-Path $tmp '.harness\rules') | Out-Null
+            # ASCII file name: this script is pure ASCII by design (PS 5.1 rule);
+            # the hook/verify matcher only needs the "SQL*.md" prefix.
+            Set-Content -LiteralPath (Join-Path $tmp '.harness\rules\SQL-review.md') -Value @(
+                '# SQL review',
+                '',
+                '- evaluate tables',
+                '- estimate rows',
+                '- check the access path'
+            ) -Encoding UTF8
+            Remove-Item -LiteralPath (Join-Path $tmp 'scripts\sql-review-gate.ps1') -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath (Join-Path $tmp 'scripts\sql-review-gate.py') -Force -ErrorAction SilentlyContinue
+            $sqlOut = & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\verify-harness.ps1') -Root $tmp 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0 -or $sqlOut -notmatch '\[FAIL\]\s+sql-gate') {
+                Add-Result 'smoke' 'FAIL' 'verify-harness did not FAIL sql-gate when the gate runtime was missing'
+                $smokeBad++
+            }
+        }
+
+        # Negative probe: a hollow gate (0 bytes) must not pass the runnability
+        # check just because PowerShell can execute an empty script.
+        if ($smokeBad -eq 0) {
+            Set-Content -LiteralPath (Join-Path $tmp 'scripts\sql-review-gate.ps1') -Value '' -Encoding ASCII
+            $hollowOut = & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\verify-harness.ps1') -Root $tmp 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0 -or $hollowOut -notmatch '\[FAIL\]\s+sql-gate') {
+                Add-Result 'smoke' 'FAIL' 'verify-harness accepted an empty sql-review-gate.ps1'
+                $smokeBad++
+            }
+        }
+
+        # Negative probe: a no-op gate with a sql_review comment passes the
+        # content check but lets SQL through. The positive probe must catch it.
+        if ($smokeBad -eq 0) {
+            $noop = '# sql_review' + ("`n# padding line" * 200)
+            Set-Content -LiteralPath (Join-Path $tmp 'scripts\sql-review-gate.ps1') -Value $noop -Encoding ASCII
+            $noopOut = & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\verify-harness.ps1') -Root $tmp 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0 -or $noopOut -notmatch '\[FAIL\]\s+sql-gate') {
+                Add-Result 'smoke' 'FAIL' 'verify-harness accepted a no-op sql-review-gate.ps1'
+                $smokeBad++
+            }
+        }
+
         if ($smokeBad -eq 0) {
             & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\uninstall-harness.ps1') -Root $tmp | Out-Null
             if ($LASTEXITCODE -ne 0) { Add-Result 'smoke' 'FAIL' 'uninstall-harness.ps1 failed'; $smokeBad++ }
@@ -261,7 +307,7 @@ if (-not $Fast) {
             }
         }
 
-        if ($smokeBad -eq 0) { Add-Result 'smoke' 'PASS' 'install -> stage 4 -> unfilled summary rejected -> uninstall, in a temp copy' }
+        if ($smokeBad -eq 0) { Add-Result 'smoke' 'PASS' 'install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy' }
     } catch {
         Add-Result 'smoke' 'FAIL' $_.Exception.Message
         $smokeBad++
