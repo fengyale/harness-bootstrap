@@ -61,8 +61,11 @@ $rootPath = (Resolve-Path -LiteralPath $Root).Path
 
 $changesRoot = Join-Path $rootPath '.harness\changes'
 $logPath = Join-Path $rootPath '.harness\metrics\gate.jsonl'
-$promotedPath = Join-Path $rootPath '.harness\metrics\promoted.txt'
+# Durable team knowledge, not local machine state: keep the promoted list next
+# to the lessons index so every clone sees the same "already promoted" status.
+$promotedPath = Join-Path $rootPath '.harness\lessons-promoted.txt'
 $skillsRoot = Join-Path $rootPath '.harness\skills'
+$smallBad = 0
 
 # ------------------------------------------------------------- read once, filter later
 # Skill names appear in two shapes: "04-sql-review" in a summary and
@@ -165,10 +168,14 @@ function Get-SummaryTasks {
         }
         # one lesson_id per correction: collect ALL of them, dedupe within the task
         # (the same lesson twice in one task is still one task, not two occurrences)
+        # The optional "-- note" is the one-line summary used by lessons.md.
         $lessons = @()
-        foreach ($m in [regex]::Matches($text, '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?lesson_id:\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)')) {
+        $lessonNotes = @{}
+        foreach ($m in [regex]::Matches($text, '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?lesson_id:\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)(?:\s*(?:--|\|)\s*([^\r\n`]*))?')) {
             $id = $m.Groups[1].Value
             if ($lessons -notcontains $id) { $lessons += $id }
+            $note = $m.Groups[2].Value.Trim()
+            if ($note -and -not $lessonNotes.ContainsKey($id)) { $lessonNotes[$id] = $note }
         }
         $out += [pscustomobject]@{
             Feature = $_.Name
@@ -178,9 +185,123 @@ function Get-SummaryTasks {
             ImplCorrections = $impl
             Skills = $skills
             Lessons = $lessons
+            LessonNotes = $lessonNotes
             HasCorrections = ($null -ne $corr)
             HasImpl = ($null -ne $impl)
             HasSkills = $hasSkillsField
+            HasRealSkill = ($skills.Count -gt 0)
+        }
+    }
+    return $out
+}
+
+function Get-SmallTasks {
+    $out = @()
+    $smallPath = Join-Path $changesRoot '_small.md'
+    if (-not (Test-Path -LiteralPath $smallPath)) { return $out }
+    $text = [System.IO.File]::ReadAllText($smallPath, [System.Text.Encoding]::UTF8)
+    $fileDate = (Get-Item -LiteralPath $smallPath).LastWriteTime.Date
+    foreach ($line in ($text -split "`r?`n")) {
+        $trim = $line.Trim()
+        if (-not $trim.StartsWith('|')) { continue }
+        $cols = @($trim.Trim('|') -split '\|' | ForEach-Object { $_.Trim() })
+        # A data row must have exactly 9 columns. Short rows are almost always a
+        # missed field; silently dropping them would make the L1 task invisible.
+        if ($cols.Count -ne 9) {
+            $script:smallBad++
+            continue
+        }
+        $dateText = $cols[0].Trim().Trim('`')
+        # Header, separator and the template placeholder are not data rows.
+        if ($dateText -match '^<') { continue }
+        if ($dateText -match '^-{2,}$') { continue }
+        if ($dateText -notmatch '\d{4}-\d{2}-\d{2}') {
+            # The localized header is the only non-ASCII non-date first cell.
+            if ($dateText -match '[^\x00-\x7F]') { continue }
+            $script:smallBad++
+            continue
+        }
+        $taskDate = $null
+        $dated = $false
+        try { $taskDate = [datetime]::ParseExact($dateText, 'yyyy-MM-dd', $null); $dated = $true } catch { }
+        if (-not $dated) {
+            $script:smallBad++
+            $taskDate = $fileDate
+        }
+        $feature = $cols[1].Trim().Trim('`')
+        if ($feature -match '^<') { continue }
+        if (-not $feature) {
+            $script:smallBad++
+            continue
+        }
+        if ($cols[2].Trim() -notmatch '^L1\b') {
+            $script:smallBad++
+            continue
+        }
+
+        $skills = @()
+        $rawSkills = $cols[3].Trim().Trim('`')
+        if ($rawSkills -and $rawSkills.ToLower() -ne 'none') {
+            foreach ($part in $rawSkills.Split(',')) {
+                $m = [regex]::Match($part, '^\s*`?\s*([A-Za-z0-9][A-Za-z0-9_.\-/\\]*)')
+                if ($m.Success) {
+                    $name = Get-SkillKey $m.Groups[1].Value
+                    if ($name -and $name.ToLower() -ne 'none') { $skills += $name }
+                }
+            }
+        }
+
+        $corr = -1
+        if ($cols[4].Trim() -match '^(\d+)$') { $corr = [int]$matches[1] } else {
+            $script:smallBad++
+            continue
+        }
+        $impl = -1
+        if ($cols[5].Trim() -match '^(\d+)$') { $impl = [int]$matches[1] } else {
+            $script:smallBad++
+            continue
+        }
+        if ($impl -gt $corr) {
+            $script:smallBad++
+            continue
+        }
+
+        $lessons = @()
+        $lessonNotes = @{}
+        $rawLessons = $cols[6].Trim().Trim('`')
+        if ($rawLessons -and $rawLessons -ne '-') {
+            foreach ($part in $rawLessons.Split(';')) {
+                $part = $part.Trim().Trim('`')
+                if (-not $part -or $part -eq '-') { continue }
+                $m = [regex]::Match($part, '^([A-Za-z0-9][A-Za-z0-9_.\-]*)(?:\s*(?:--|\|)\s*(.*))?$')
+                if (-not $m.Success) {
+                    $script:smallBad++
+                    continue
+                }
+                $id = $m.Groups[1].Value
+                if ($id -eq 'none') {
+                    $script:smallBad++
+                    continue
+                }
+                if ($lessons -notcontains $id) { $lessons += $id }
+                $note = $m.Groups[2].Value.Trim().Trim('`')
+                if ($note -and -not $lessonNotes.ContainsKey($id)) { $lessonNotes[$id] = $note }
+            }
+        }
+
+        $out += [pscustomobject]@{
+            Feature = $feature
+            Date = $taskDate
+            Dated = $dated
+            Corrections = $corr
+            ImplCorrections = $impl
+            Skills = $skills
+            Lessons = $lessons
+            LessonNotes = $lessonNotes
+            Flow = 'L1'
+            HasCorrections = ($null -ne $corr)
+            HasImpl = ($null -ne $impl)
+            HasSkills = $true
             HasRealSkill = ($skills.Count -gt 0)
         }
     }
@@ -276,7 +397,7 @@ function Get-WindowStats {
 # so -Days 1 compared 2 days against 1.
 $cutoff = if ($Days -gt 0) { (Get-Date).Date.AddDays(-($Days - 1)) } else { $null }
 $now = (Get-Date).Date.AddDays(1)   # "today" belongs to the current window
-$allTasks = @(Get-SummaryTasks)
+$allTasks = @(Get-SummaryTasks) + @(Get-SmallTasks)
 $allEvents = @(Get-GateEvents)
 
 $curWindow = if ($Days -gt 0) {
@@ -322,12 +443,34 @@ foreach ($t in $tasks) {
     }
 }
 
-# lessons seen in more than one task are candidates for promotion (rule / gate / skill)
+# Lesson promotion is cumulative across sessions: count all summaries and small
+# records, not only the current -Days window. The generated table is the lookup
+# aid the model uses before writing a new lesson_id.
 $lessonCounts = @{}
-foreach ($t in $tasks) {
-    foreach ($id in $t.Lessons) {
-        if (-not $lessonCounts.ContainsKey($id)) { $lessonCounts[$id] = 0 }
+$lessonFirst = @{}
+$lessonLast = @{}
+$lessonNotes = @{}
+$lessonNoteDate = @{}
+foreach ($t in $allTasks) {
+    foreach ($id in @($t.Lessons)) {
+        if (-not $lessonCounts.ContainsKey($id)) {
+            $lessonCounts[$id] = 0
+            $lessonFirst[$id] = $null
+            $lessonLast[$id] = $null
+            $lessonNotes[$id] = ''
+        }
         $lessonCounts[$id] = $lessonCounts[$id] + 1
+        if ($null -ne $t.Date) {
+            if ($null -eq $lessonFirst[$id] -or $t.Date -lt $lessonFirst[$id]) { $lessonFirst[$id] = $t.Date }
+            if ($null -eq $lessonLast[$id] -or $t.Date -gt $lessonLast[$id]) { $lessonLast[$id] = $t.Date }
+        }
+        if ($t.LessonNotes -and $t.LessonNotes.ContainsKey($id) -and $t.LessonNotes[$id]) {
+            $newer = ($null -eq $lessonNoteDate[$id]) -or ($null -ne $t.Date -and $t.Date -gt $lessonNoteDate[$id])
+            if (-not $lessonNotes[$id] -or $newer) {
+                $lessonNotes[$id] = $t.LessonNotes[$id]
+                $lessonNoteDate[$id] = $t.Date
+            }
+        }
     }
 }
 
@@ -336,6 +479,49 @@ $promoted = @()
 if (Test-Path -LiteralPath $promotedPath) {
     $promoted = @(Get-Content -LiteralPath $promotedPath -Encoding UTF8 |
         ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+}
+
+# Write the lessons lookup table. The script stays pure ASCII; the note values
+# may be Chinese and are written with UTF-8 without BOM. The index is tracked
+# (.harness/lessons.md), not hidden under the gitignored metrics directory: a
+# team must be able to share the lesson ids across clones.
+$lessonsPath = Join-Path $rootPath '.harness\lessons.md'
+$lessonsDir = Split-Path -Parent $lessonsPath
+if (-not (Test-Path -LiteralPath $lessonsDir)) {
+    New-Item -ItemType Directory -Force -Path $lessonsDir | Out-Null
+}
+$lessonRows = @()
+foreach ($id in $lessonCounts.Keys) {
+    $status = if ($promoted -contains $id) { 'promoted' } elseif ($lessonCounts[$id] -ge 2) { 'promote' } else { 'watch' }
+    $first = if ($null -ne $lessonFirst[$id]) { $lessonFirst[$id].ToString('yyyy-MM-dd') } else { '-' }
+    $last = if ($null -ne $lessonLast[$id]) { $lessonLast[$id].ToString('yyyy-MM-dd') } else { '-' }
+    $note = if ($lessonNotes[$id]) { $lessonNotes[$id] -replace '\|', '/' } else { '-' }
+    $lessonRows += [pscustomobject]@{
+        Id = $id
+        Note = $note
+        Count = $lessonCounts[$id]
+        First = $first
+        Last = $last
+        Status = $status
+    }
+}
+$lessonRows = @($lessonRows | Sort-Object @{Expression = { $_.Count }; Descending = $true }, @{Expression = { $_.Id }; Descending = $false })
+$lessonLines = @(
+    '# Lessons index (generated by metrics.ps1)',
+    '',
+    '> Count = number of summaries + _small.md rows, not the number of corrections.',
+    '> Reuse the id when the same pit appears; write the one-line note after -- in lesson_id.',
+    '',
+    '| id | summary | tasks | first | last | status |',
+    '| --- | --- | --- | --- | --- | --- |'
+)
+foreach ($row in $lessonRows) {
+    $lessonLines += ('| {0} | {1} | {2} | {3} | {4} | {5} |' -f $row.Id, $row.Note, $row.Count, $row.First, $row.Last, $row.Status)
+}
+try {
+    [System.IO.File]::WriteAllText($lessonsPath, (($lessonLines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+} catch {
+    Write-Host ("[WARN] could not write lessons index {0}: {1}" -f $lessonsPath, $_.Exception.Message) -ForegroundColor Yellow
 }
 
 # installed skills (for the "never loaded" signal that drives retirement)
@@ -470,6 +656,11 @@ if ($tasks.Count -eq 0) {
         }
     }
 }
+# Bad small rows are reported even when the window has no valid task; otherwise
+# a typo in _small.md would look like "no tasks" with no explanation.
+if ($smallBad -gt 0) {
+    $verdict += "$smallBad small-record row(s) malformed; fix .harness/changes/_small.md"
+}
 if ($Compare) { $verdict += "trend: $trendVerdict" }
 
 # gate health is reported even when no task summary exists yet
@@ -506,6 +697,8 @@ if ($Json) {
         })
         lessons = $lessonCounts
         promoted = $promoted
+        lessonIndex = $lessonsPath
+        smallRecordErrors = $smallBad
         days = $Days
         cutoff = $(if ($Days -gt 0) { $cutoff.ToString('yyyy-MM-dd') } else { $null })
         undatedTasks = @($undatedTasks)

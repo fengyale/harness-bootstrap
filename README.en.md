@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <new package root> -Apply
 ```
 
-`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. Installed skill bodies only report a difference unless `-UpdateSkills` is given. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. `AGENTS.md` and `harness-required.json` only merge known framework lines/keys (`-NoMergeKnown` prints the difference instead); the red-line summary only replaces the R5/R6 checked cell. Old L1 summary directories move to the upgrade backup and are deleted after verification (`-KeepL1` keeps them); L2/L3 history is never touched. Installed skill bodies only report a difference unless `-UpdateSkills` is given. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
 
 ## What you get
 
@@ -126,8 +126,11 @@ AGENTS.md                    the only resident file (<=150 lines): stack, comman
   skills/                    skill bodies, loaded on demand through platform entries
   wiki/                      domain terms, business model, data model, interfaces
   modules/                   module cards: key points, difficulty, pitfalls, verification
-  changes/<feature>/         summary.md, migration and rollback scripts
-  metrics/                   gate.jsonl, promoted.txt
+  changes/_small.md          rolling L1 small-change rows (one per task)
+  changes/<feature>/         L2/L3 summary.md, migration and rollback scripts
+  lessons.md                 shared lesson index (check before writing lesson_id)
+  lessons-promoted.txt       shared promoted-lesson list
+  metrics/                   gate.jsonl (local gate log)
 .trae/                       platform discovery entries: skill links, agents, hooks
 scripts/                     probe, scan, stage gate, field checks, metrics, uninstall
 ```
@@ -138,7 +141,7 @@ scripts/                     probe, scan, stage gate, field checks, metrics, uni
 - **The gate has a real interception point**: git hooks do not depend on an editor; `pre-commit` and `pre-merge-commit` both run the red-line scan, and `post-commit` records bypasses.
 - **Stage gates are decidable**: 10 stages; compile and test criteria really run the commands in `AGENTS.md`. A missing row is BLOCKED, a placeholder row is SKIP, a non-zero exit is BLOCKED.
 - **Project claims need evidence**: without E1/E2, content may only be written as `TODO(待确认)` and cannot enter a skill body.
-- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion and records it in `promoted.txt`.
+- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion and records it in `.harness/lessons-promoted.txt`; the lookup index is `.harness/lessons.md`.
 
 ## Proof
 

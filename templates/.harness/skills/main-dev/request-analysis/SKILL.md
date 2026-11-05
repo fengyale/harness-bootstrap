@@ -12,7 +12,8 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 - 用户说"加个功能 / 改个逻辑 / 优化一下"，且改动可能跨文件或跨模块
 - 需求里出现业务词但含义不明确
 
-> **需求落到 summary 后先定档**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `flow: L1 / L2 / L3`。拿不准就升档。
+> **先定档，再选记录方式**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `L0 / L1 / L2 / L3`。
+> L0 不建记录；L1 只在 `.harness/changes/_small.md` 追加一行；L2/L3 才建 `summary.md`。拿不准就升档。
 
 ## 项目绑定（编译时替换）
 
@@ -28,8 +29,8 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 1. 复述需求，写成**一句可验证的验收描述**
 2. 定位模块，列出受影响的接口、表、前端页面
 3. 与项目硬约束比对，冲突先报，不自行取舍
-4. **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md` 再填（模板已含 corrections / lesson_id / flow / sql_review，不要手写空文件）
-5. 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。`/plan` 模式的计划要复制进这份 summary，不能只留在工具的计划面板
+4. 按档位落盘：L0 不建记录；L1 在 `.harness/changes/_small.md` 追加一行（字段按表头填齐）；L2/L3 **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md` 再填
+5. L2/L3 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。L1 的 `_small.md` 行由 `metrics.ps1` 解析。`/plan` 模式的计划要复制进对应记录，不能只留在工具的计划面板
 6. 无法确认的标 `TODO(待确认)`，**开工前只问一次**
 
 ### 检查项
@@ -37,8 +38,8 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 - [ ] 模块归属明确
 - [ ] 影响面是否含前端 / 其他仓库
 - [ ] 是否触碰项目红线
-- [ ] summary.md 已建立
-- [ ] `check-summary -Stage initial` 已通过（未通过不得进入编码）
+- [ ] 档位已定：L0 无记录 / L1 已追加 `_small.md` 行 / L2-L3 已建 summary.md
+- [ ] L2/L3 的 `check-summary -Stage initial` 已通过（未通过不得进入编码）
 
 ### 常见错误
 

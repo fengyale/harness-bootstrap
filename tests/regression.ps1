@@ -70,6 +70,32 @@ Step 'metrics -Days 14 -Compare'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Compare
 if ($LASTEXITCODE -ne 0) { Write-Host "METRICS FAILED" -ForegroundColor Red; $script:fail++ }
 
+Step '_small.md L1 row is counted and lessons.md is generated'
+$smallDate = Get-Date -Format 'yyyy-MM-dd'
+$small = @(
+    '| 日期 | 特性 | 档位 | 加载技能 | 纠正 | 实现纠正 | 教训 | 触及模块 | 说明 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ('| {0} | small-demo | L1 | none | 1 | 0 | small-lesson -- 小改 | demo | 小改 |' -f $smallDate)
+) -join "`r`n"
+Set-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value $small -Encoding UTF8
+$m = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$j = $m | ConvertFrom-Json
+if ($j.tasks -ne 2) { Write-Host "SMALL RECORD NOT COUNTED: tasks=$($j.tasks)" -ForegroundColor Red; $script:fail++ }
+if (-not $j.lessons.'small-lesson') { Write-Host "SMALL LESSON NOT COUNTED" -ForegroundColor Red; $script:fail++ }
+$idx = Get-Content "$proj\.harness\lessons.md" -Raw -Encoding UTF8
+if ($idx -notmatch 'small-lesson') { Write-Host "LESSONS INDEX MISSING small-lesson" -ForegroundColor Red; $script:fail++ }
+
+Step '_small.md malformed rows are reported, not silently dropped'
+Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
+    '| | broken | L1 | none | 1 | 0 | bad | demo | short |',
+    '| 2026-11-05 | short | L1 | none | 1 | 0 |'
+) -Encoding UTF8
+$m2 = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$j2 = $m2 | ConvertFrom-Json
+if ($j2.smallRecordErrors -lt 1) { Write-Host "MALFORMED SMALL ROWS NOT REPORTED" -ForegroundColor Red; $script:fail++ }
+if ($j2.tasks -ne 2) { Write-Host "MALFORMED SMALL ROWS CHANGED task count: $($j2.tasks)" -ForegroundColor Red; $script:fail++ }
+if (($j2.verdict -join "`n") -notmatch 'malformed') { Write-Host "MALFORMED SMALL ROWS NOT IN VERDICT" -ForegroundColor Red; $script:fail++ }
+
 Step 'A3+ spoof must fail'
 $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
 $s2 = $s -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', ''

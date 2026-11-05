@@ -35,10 +35,19 @@ function Test-AnyFile {
     return $false
 }
 
+# Stack detection must only see project source. A project-level skill install
+# lives under .trae/skills, and .harness/upgrade holds old copies; scanning them
+# can make a template/backup look like the project's real build or stack.
+function Get-ScanFiles {
+    param([string]$Pattern = '*')
+    Get-ChildItem -LiteralPath $rootPath -Recurse -File -Filter $Pattern -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/]([.]harness|[.]trae|[.]git|node_modules|target|build|dist|out|bin|obj|coverage|vendor|[.]idea)[\\/]' }
+}
+
 function Find-Marker {
     param([string[]]$Patterns, [string[]]$Includes)
     foreach ($pat in $Patterns) {
-        $hit = Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force -ErrorAction SilentlyContinue |
+        $hit = Get-ScanFiles |
             Where-Object { $ext = $_.Extension.ToLower(); $Includes -contains $ext } |
             Select-String -Pattern $pat -SimpleMatch -List -ErrorAction SilentlyContinue |
             Select-Object -First 1
@@ -106,7 +115,7 @@ if ($codeExts.Count -gt 0) {
 }
 
 # --------------------------------------------------------------------- test
-$testFiles = @(Get-ChildItem -LiteralPath $rootPath -Recurse -File -Filter '*Test.*' -Force -ErrorAction SilentlyContinue |
+$testFiles = @(Get-ScanFiles -Pattern '*Test.*' |
     Where-Object { $_.Extension -in @('.java', '.kt', '.ts', '.js', '.py', '.go') })
 
 # ----------------------------------------------------------------- frontend

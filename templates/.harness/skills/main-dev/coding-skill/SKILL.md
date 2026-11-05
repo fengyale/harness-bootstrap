@@ -11,7 +11,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 - 需求已分析完，进入实现或重构
 
-> **开工前先定档**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `flow: L1 / L2 / L3`，写进 `summary.md`。拿不准就升档。
+> **开工前先定档**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `L0 / L1 / L2 / L3`；L0 不建记录，L1 写 `_small.md`，L2/L3 写 `summary.md`。拿不准就升档。
 
 ## 项目绑定（编译时替换）
 
@@ -27,7 +27,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 ### 步骤
 
-1. **确认 summary.md 已存在且 `scripts\check-summary.ps1 -Feature <特性> -Stage initial` 通过；不存在或不通过就退回阶段 1**，不要先改代码再补文档
+1. **确认记录已落盘**：L0 无记录；L1 已在 `.harness/changes/_small.md` 追加一行；L2/L3 的 `summary.md` 已存在且 `scripts\check-summary.ps1 -Feature <特性> -Stage initial` 通过。不满足就退回阶段 1，不要先改代码再补文档
 2. 确认模块与包路径
 3. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
 4. 实现；跨模块改动写进 `summary.md` 影响面
@@ -36,7 +36,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 ### 检查项
 
-- [ ] `summary.md` 已存在且 initial 校验通过
+- [ ] 记录已落盘：L0 无 / L1 有 `_small.md` 行 / L2-L3 有 `summary.md` 且 initial 校验通过
 - [ ] 没有新增项目禁止的写法（见红线）
 - [ ] 数据访问 / 缓存走统一入口
 - [ ] 日志不含敏感信息

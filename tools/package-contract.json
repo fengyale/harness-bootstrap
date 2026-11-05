@@ -12,6 +12,8 @@
     "tests/regression.ps1",
     "templates/AGENTS.md",
     "templates/.gitignore",
+    "templates/.harness/changes/_small.md",
+    "templates/.harness/lessons-promoted.txt",
     "templates/scripts/stage-gate.ps1",
     "templates/scripts/stage-gate-rules.json",
     "templates/scripts/check-summary.ps1",
@@ -160,8 +162,8 @@
     {
       "id": "summary-flow-placeholder",
       "file": "templates/.harness/changes/_template/summary.md",
-      "pattern": "flow: <L1",
-      "why": "模板里的 flow 必须是占位符；写死 L2 会让未定档的任务直接通过校验。"
+      "pattern": "flow: <L2",
+      "why": "L2/L3 summary 的 flow 必须是占位符；L1 不建本文件，写死 L2 会让未定档的任务直接通过校验。"
     },
     {
       "id": "summary-lesson-rule",
@@ -211,6 +213,30 @@
       "file": "templates/scripts/verify-harness.ps1",
       "patterns": ["sqlGate", "Invoke-SqlGateProbe"],
       "why": "自检必须同时覆盖 sqlGate 三态和正向探针，不能只检查脚本是否存在。"
+    },
+    {
+      "id": "small-record",
+      "file": "templates/.harness/changes/_small.md",
+      "patterns": ["L1", "lesson"],
+      "why": "L1 轻量路径必须有一个固定的滚动记录文件，否则小改又会建 summary 目录。"
+    },
+    {
+      "id": "lesson-index",
+      "file": "templates/scripts/metrics.ps1",
+      "patterns": ["Get-SmallTasks", "lessons.md", ".harness\\\\lessons.md", ".harness\\\\lessons-promoted.txt"],
+      "why": "metrics 必须解析 _small.md 并在 tracked 的 .harness/lessons.md 生成索引，团队才能共享。"
+    },
+    {
+      "id": "upgrade-cleanup",
+      "file": "templates/scripts/update-harness.ps1",
+      "patterns": ["KeepBackup", "PruneBackups"],
+      "why": "升级验证后默认删除备份，同时保留显式保留与旧备份清理开关。"
+    },
+    {
+      "id": "upgrade-known-merge",
+      "file": "templates/scripts/update-harness.ps1",
+      "patterns": ["Merge-AgentsKnown", "Merge-RequiredJson", "Merge-RedlineRows", "NoMergeKnown", "KeepL1"],
+      "why": "升级只自动合并已知框架行/键和 R5/R6 检查格；项目内容与 L2/L3 历史保留，L1 可显式保留。"
     }
   ]
 }

@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <新包根目录> -Apply
 ```
 
-替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。已装技能正文默认只提示差异，确认要同步时加 `-UpdateSkills`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。`AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键（`-NoMergeKnown` 退回只打印差异）；红线汇总只替换 R5/R6 的脚本检查格。旧 L1 summary 目录移到升级备份并随验证删除（`-KeepL1` 保留），L2/L3 历史不动。已装技能正文默认只提示差异，确认要同步时加 `-UpdateSkills`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
 ## 装完之后
 
@@ -126,8 +126,11 @@ AGENTS.md                    唯一常驻文件（≤150 行）：技术栈、�
   skills/                    技能正文，按需加载，由平台入口链接
   wiki/                      领域术语、业务模型、数据模型、接口协议
   modules/                   模块卡：重点、难点、坑点、验证方式
-  changes/<feature>/         summary.md、迁移脚本、回滚脚本
-  metrics/                   gate.jsonl、promoted.txt
+  changes/_small.md          L1 小改滚动记录（一行一次）
+  changes/<feature>/         L2/L3 summary.md、迁移脚本、回滚脚本
+  lessons.md                 教训索引（团队共享，写 lesson_id 前先查）
+  lessons-promoted.txt       已晋升教训清单（团队共享）
+  metrics/                   gate.jsonl（本机门禁日志）
 .trae/                       平台发现入口：skills 链接、agents、hooks
 scripts/                     探测、扫描、阶段门、字段校验、度量、卸载
 ```
@@ -138,7 +141,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 - **门禁有真实拦截点**：git hook 不依赖编辑器，`pre-commit` 与 `pre-merge-commit` 都调用红线扫描；`post-commit` 记录绕过。
 - **阶段门可判定**：10 个阶段，编译与测试判据会真跑 `AGENTS.md` 里的命令；整行缺失 BLOCKED，占位行 SKIP，退出码非 0 BLOCKED。
 - **项目断言要有证据**：没有 E1/E2 的内容只能写 `TODO(待确认)`，不能进技能正文。
-- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升，写进 `promoted.txt`。
+- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升，写进 `.harness/lessons-promoted.txt`；索引在 `.harness/lessons.md`。
 
 ## 证据
 

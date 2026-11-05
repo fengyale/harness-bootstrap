@@ -1,0 +1,4 @@
+# Promoted lesson ids (one per line).
+# metrics.ps1 reads this file. Keep it tracked so every clone sees the same
+# "already promoted" status; append an id only after the lesson was promoted
+# into a rule, a gate or a skill.

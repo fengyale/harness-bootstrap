@@ -182,7 +182,11 @@ $harnessBasenames = @{}
 foreach ($base in @('.harness', 'scripts')) {
     $bp = Join-Path $rootPath $base
     if (Test-Path -LiteralPath $bp) {
+        # Upgrade backups are not live harness files. Including them would let a
+        # stale or mistyped reference look valid because a deleted file exists
+        # only in .harness/upgrade/<timestamp>/.
         Get-ChildItem -LiteralPath $bp -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/][.]harness[\\/]upgrade[\\/]' } |
             ForEach-Object { $harnessBasenames[$_.Name] = $true }
     }
 }

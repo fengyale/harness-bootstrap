@@ -2,6 +2,7 @@
 
 > 由 `request-analysis` 技能在阶段 1–2 产出；部署后在末尾补「部署记录」。
 > 复制本文件到 `.harness/changes/<特性名>/summary.md` 再填写。
+> **L0 不建记录；L1 只写 `.harness/changes/_small.md` 一行；L2 / L3 才用本模板建目录。**
 
 ## 计数（必填，度量依赖这些字段）
 
@@ -11,8 +12,8 @@
 - 触及模块：`touched_modules: <module1, module2>`
 - 纠正次数：`corrections: <N>`
 - 实现层纠正：`impl_corrections: <N>`（属于实现细节的纠正数；没有就填 0）
-- 流程档位：`flow: <L1|L2|L3>`（L1 轻量 / L2 标准 / L3 完整，判据见 `.harness/rules/开发流程规范.md` 第 1.1 节；未定档就留占位）
-- 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace / ->`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
+- 流程档位：`flow: <L2|L3>`（L2 标准 / L3 完整，判据见 `.harness/rules/开发流程规范.md` 第 1.1 节；L1 不建本文件，只写 `_small.md`）
+- 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace> -- <一句话摘要>`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
 - SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 预估行数 / 访问路径；无 SQL 写"无 SQL 变更")`
 
 > 上面这些字段由 `scripts/check-summary.ps1` 分两档校验：**阶段 1 与 pre-commit 只查基础字段**
@@ -20,8 +21,10 @@
 > **缺字段或留占位符 = 任务未完成。**
 >
 > `lesson_id` 是"第 2 次才落盘"的机器判据：**每条纠正写一行**（多条就写多行），
-> 同一条教训必须复用同一个 id。`metrics.ps1` 统计到同一个 id 出现在 ≥2 个任务里时，
-> 会直接提示"该升级成规则/门禁/技能"。
+> 同一条教训必须复用同一个 id，并在 `--` 后写一句话摘要；**写之前先看
+> `.harness/lessons.md`**（`metrics.ps1` 自动刷新、团队共享），同一个坑复用原 id，不要起新名。
+> `metrics.ps1` 统计到同一个 id 出现在 ≥2 个任务里时，会直接提示"该升级成规则/门禁/技能"。
+> 表里的"任务数"是出现在几个 summary / `_small.md` 行里，不是纠正次数。
 
 ## 需求概述
 

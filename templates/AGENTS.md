@@ -99,7 +99,8 @@
 
 | 位置 | 用途 |
 | --- | --- |
-| `.harness/changes/<特性名>/summary.md` | 变更摘要、验收标准、回滚方案 |
+| `.harness/changes/_small.md` | L1 小改滚动记录（一行一次；L0 不写） |
+| `.harness/changes/<特性名>/summary.md` | L2/L3 变更摘要、验收标准、回滚方案 |
 | `.harness/changes/<特性名>/db-migrations.sql` | 迁移脚本（与 `rollback.sql` **必须成对**） |
 | `.harness/changes/<特性名>/rollback.sql` | 回滚脚本 |
 
@@ -110,6 +111,8 @@
 | `.trae/agents/code-reviewer.md` | 代码评审智能体（独立上下文，多维度分级评审） |
 | `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体 |
 | `.trae/agents/red-line-auditor.md` | 全库红线扫描智能体 |
+| `.harness/lessons.md` | 教训索引（`metrics.ps1` 自动刷新、团队共享）；写 `lesson_id` 前先查表 |
+| `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；晋升后追加 id，`metrics` 不再重复提醒 |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
 | `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-UpdateSkills` 同时替换已装技能正文 |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
@@ -123,8 +126,8 @@
 - **加载范围**：默认只读「本任务涉及的模块卡 + 直接相关的 1–2 份 wiki / 规则」；**技能与模块卡不占此额度**，按流程必上。
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。
-- **先落 summary 再动代码**：收到需求先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md`，运行 `check-summary.ps1 -Feature <特性> -Stage initial` 通过后再改代码；`/plan` 模式的计划必须写进这份 summary，不能只留在工具的计划面板。
+- **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md`，运行 `check-summary.ps1 -Feature <特性> -Stage initial` 通过后再改代码。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
 - **必上技能**：收到需求先加载 `request-analysis`；动代码先加载 `coding-skill`；合并前加载 `expert-reviewer`
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`（stage-gate 阶段 10 校验，缺则不能收尾）
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
-- **任务摘要必须可判定**：`summary.md` 的 `loaded_skills / flow / corrections / impl_corrections / touched_modules / lesson_id / sql_review` 由 `scripts/check-summary.ps1` 校验。分工：**pre-commit 只查基础字段**（提交太频繁，收尾字段强查会被 `--no-verify` 绕过），**收尾字段由 `stage-gate` 阶段 10 查**（`lesson_id`、`sql_review`）。**缺字段或留占位符 = 任务未完成**
+- **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed。分工：**pre-commit 只查 summary 基础字段**，`lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查。**缺字段或留占位符 = 任务未完成**

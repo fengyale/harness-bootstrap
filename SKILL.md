@@ -7,6 +7,12 @@ description: AI 编码 Harness 化元技能：搭框架、沉淀、技能体检�
 
 > **你不是在复制一套模板。你是在为一个具体项目，从零设计它自己的 AI 编码框架。**
 > `templates/` 是**参考样本**，不是要铺进去的东西。多数情况下应该改写、裁剪、重建。
+>
+> **运行时 vs 包源**：安装后日常任务只读项目 `AGENTS.md`、`.harness/wiki`、`.harness/rules`、
+> `.harness/modules`、`.harness/skills`、`.harness/project-brief.md`；`templates/` 只在安装、升级、
+> 自建技能/模块/适配器时读，**不能当项目事实**。默认**项目级安装**（每个项目独立，不跨项目串文件）；
+> 日常任务不读 `templates/`；`probe-stack` / `red-line-scan` 已排除 `.trae`。
+> `.harness/upgrade/` 只用于升级回滚；验证通过后默认删除，日常任务不读。
 
 ---
 
@@ -125,7 +131,7 @@ Harness 就是把"看运气"变成"看流程"。
 | "该触发不触发""调触发词" | **调优** | 只读 `references/维护与体检.md` 第三节 |
 | "复盘""这两周有没有用""A7 怎么样" | **两周复盘** | 只读 `references/两周复盘.md`（这是验 A7 的唯一方式） |
 | "加一条红线""补一个技能" | **增量** | 只做那一个小动作，不要重跑全程 |
-| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先不加 `-Apply` 看差异，确认后 `-Apply`；要同步已装技能正文再加 `-UpdateSkills`；不要重跑第 0 步 |
+| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先不加 `-Apply` 看差异，确认后 `-Apply`；脚本替换、`AGENTS.md`/`harness-required.json` 只自动合并已知行/键；要同步已装技能正文再加 `-UpdateSkills`；不要重跑第 0 步 |
 
 > **只有第一种需要跑完整流程**——其余都是小操作，把它们做成大工程是最常见的误判。
 >
@@ -174,6 +180,12 @@ Copy-Missing "$PKG\templates\.harness\rules"   "<项目根>\.harness\rules"
 Copy-Missing "$PKG\templates\.harness\wiki"    "<项目根>\.harness\wiki"
 Copy-Missing "$PKG\templates\.harness\modules" "<项目根>\.harness\modules"
 Copy-Missing "$PKG\templates\.harness\changes" "<项目根>\.harness\changes"
+
+# 已晋升清单是单个 tracked 文件，Copy-Missing 只接目录，这里单独补。
+$promotedFile = "<项目根>\.harness\lessons-promoted.txt"
+if (-not (Test-Path -LiteralPath $promotedFile)) {
+    Copy-Item "$PKG\templates\.harness\lessons-promoted.txt" $promotedFile
+}
 
 # 技能只落索引；25 个技能模板带 <!-- slot: --> 未填，整目录复制会让
 # verify-grounding 全部 FAIL，也违背「首轮只建 3–5 个」。技能在第 2 步按启用集编译。
@@ -378,12 +390,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
-- `scripts\*.json`（项目配置）：**不覆盖**，只提示手工合并新键
-- `.harness\rules|wiki|modules`：只补缺失文件，已存在的一律保留
+- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate`），其余键保留，`-NoMergeKnown` 退回只打印差异
+- `.harness\rules|wiki|modules`：只补缺失文件；红线汇总（含 R5/R6 行）只替换这两行的脚本检查格，规则名和其余内容保留
 - `.harness\skills`：README 缺失才补；**已装技能正文**默认标 MANUAL，确认要同步时加 `-UpdateSkills` 才替换；未安装的模板技能不会补装
-- `AGENTS.md`、平台 agents：只报告差异，手工合并
-- `.harness\changes|metrics`：**永不触碰**
-- `.gitignore` 只提示缺的 `.harness/metrics/` 与 `.harness/upgrade/`，不重写用户文件
+- `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id），其余行保留；平台 agents 只报告差异
+- `.harness\changes|metrics`：L2/L3 历史**永不触碰**；旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除，`-KeepL1` 保留）；`_small.md` 缺失时才补模板；`lessons.md` / `lessons-promoted.txt` 从旧 `metrics\` 迁移一次
+- `.gitignore` 只追加缺的 `.harness/metrics/` 与 `.harness/upgrade/` 两行，不重写用户文件
+- 验证通过后**默认删除** `.harness\upgrade\<时间戳>` 备份，审计写进 `.harness\.installed-version`；需要回滚点加 `-KeepBackup`，清理旧备份加 `-PruneBackups`
 - 首次安装会写 `.harness\.installed-version`；老项目没有也能升级，脚本会从技能目录的 `VERSION` 推断旧版本
 
 升级后先跑阶段 3/5/7/10：新的编译/测试判据会真跑 `AGENTS.md` 的命令。缺行 BLOCKED、占位 SKIP，这是机制在生效，不是回归。
