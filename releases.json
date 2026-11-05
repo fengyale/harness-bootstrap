@@ -1,5 +1,30 @@
 [
   {
+    "version": "1.25.0",
+    "title": "(L0/L1 轻量路径 / lessons 索引 / 升级备份清理)",
+    "body": [
+      "- 流程：新增 L0 不记录、L1 只写 .harness/changes/_small.md 一行；L2/L3 才建",
+      "  summary 目录；summary 模板、开发流程、request-analysis、coding-skill 同步",
+      "- metrics：解析 _small.md；技能名归一化；退役年龄门槛；生成",
+      "  .harness/lessons.md（团队共享、可提交；任务数 / 首次 / 最近 / 状态）",
+      "  与 .harness/lessons-promoted.txt（已晋升清单，团队共享）",
+      "- lesson_id：支持 `id -- 一句话摘要`；写前查 lessons.md 复用原 id；",
+      "  跨会话按任务数累计，不同 id 的语义合并仍由模型/人确认",
+      "- 升级：验证通过后默认删除 .harness/upgrade/<时间戳>，审计写进",
+      "  .installed-version；需要回滚点用 -KeepBackup，清理旧备份用 -PruneBackups",
+      "- 升级合并：AGENTS.md 只合并已知框架行、harness-required.json 只合并已知键、",
+      "  .harness/rules 红线汇总只替换 R5/R6 的脚本检查格，其余项目内容原样保留；",
+      "  -NoMergeKnown 退回只打印差异",
+      "- 升级清理：旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除）；",
+      "  -KeepL1 保留；L2/L3 历史始终不动",
+      "- 升级统计：plan 输出增加 merge / move / compact 计数",
+      "- 安装边界：默认项目级安装；.trae 已存在时只提示 templates 是包源，不再推荐全局安装",
+      "- 上下文：verify-grounding / probe-stack 排除 .harness/upgrade 与 .trae；",
+      "  .gitignore 自动追加 runtime 行；SKILL/接地协议明确日常禁读 templates 与 upgrade",
+      "- 测试：_small/lessons、升级备份删除、工作区脚本替换、SQL 门禁等"
+    ]
+  },
+  {
     "version": "1.24.0",
     "title": "(SQL 门禁 fail-closed / 升级自检 / 度量与红线边界)",
     "body": [
