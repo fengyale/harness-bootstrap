@@ -144,7 +144,10 @@ Check 'new package skill exists' (Test-Path -LiteralPath "$newPkg\templates\.har
 Check 'dry-run plans stage-gate UPDATE' ($dry -match '\[UPDATE\]\s+scripts\\stage-gate\.ps1')
 Check 'dry-run plans new-tool ADD'         ($dry -match '\[ADD\s*\]\s+scripts\\new-tool\.ps1')
 Check 'dry-run marks AGENTS.md MERGE'      ($dry -match '\[MERGE\s*\]\s+AGENTS\.md')
-$redlineRel = $redline.Substring($proj.Length + 1)
+# Build the relative path from the known layout, not with Substring: on CI the
+# TEMP env var can be a short name (RUNNER~1) while Get-ChildItem returns long
+# names (runneradmin), and the two lengths do not match.
+$redlineRel = '.harness\rules\' + (Split-Path -Leaf $redline)
 Check 'dry-run marks red-line MERGE'       ($dry -match ('\[MERGE\s*\]\s+' + [regex]::Escape($redlineRel)))
 Check 'dry-run marks JSON config MANUAL'   ($dry -match '\[MANUAL\]\s+scripts\\red-line-rules\.json')
 Check 'dry-run reports required delta'     ($dry -match 'add required:')
