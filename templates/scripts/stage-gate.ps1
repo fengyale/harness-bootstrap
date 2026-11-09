@@ -382,6 +382,12 @@ function Test-Criterion {
             if ($preBody -notmatch 'red-line-scan' -or $preBody -notmatch [regex]::Escape($marker)) {
                 return @{ Ok=$false; Detail='pre-commit is not the harness gate (marker or scanner missing)' }
             }
+            # The summary-order guard is part of the gate. Without it, "code
+            # first, summary later" is undetectable; report the stale hook here
+            # too so stage 4/7 and verify-harness never disagree.
+            if (($preBody -notmatch 'LATE_SUMMARY') -or ($preBody -notmatch 'REPLAY_CONTEXT')) {
+                return @{ Ok=$false; Detail='pre-commit predates the summary-order guard (re-run install-git-hooks.ps1)' }
+            }
             # a merge commit never fires pre-commit; without the merge hook the
             # gate is only half installed
             if (-not (Test-Path -LiteralPath $merge)) {
@@ -390,6 +396,9 @@ function Test-Criterion {
             $mergeBody = Get-Content -LiteralPath $merge -Raw -Encoding UTF8
             if ($mergeBody -notmatch 'red-line-scan' -or $mergeBody -notmatch [regex]::Escape($marker)) {
                 return @{ Ok=$false; Detail='pre-merge-commit is not the harness gate (marker or scanner missing)' }
+            }
+            if (($mergeBody -notmatch 'LATE_SUMMARY') -or ($mergeBody -notmatch 'REPLAY_CONTEXT')) {
+                return @{ Ok=$false; Detail='pre-merge-commit predates the summary-order guard (re-run install-git-hooks.ps1)' }
             }
             return @{ Ok=$true; Detail='pre-commit and pre-merge-commit are harness hooks calling red-line-scan' }
         }

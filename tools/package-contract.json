@@ -237,6 +237,30 @@
       "file": "templates/scripts/update-harness.ps1",
       "patterns": ["Merge-AgentsKnown", "Merge-RequiredJson", "Merge-RedlineRows", "NoMergeKnown", "KeepL1"],
       "why": "升级只自动合并已知框架行/键和 R5/R6 检查格；项目内容与 L2/L3 历史保留，L1 可显式保留。"
+    },
+    {
+      "id": "summary-order-gate",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "LATE_SUMMARY",
+      "why": "「先编码后补 summary」只能靠提交顺序判定：新增 summary 与 .harness/ 之外的改动同提交必须被拒。"
+    },
+    {
+      "id": "summary-order-verified",
+      "file": "templates/scripts/verify-harness.ps1",
+      "pattern": "summary-order guard",
+      "why": "升级默认会重装 hook；但 -SkipHooks、手工替换或未升级的项目会留下旧 hook，体检必须能指出，否则机制静默失效。"
+    },
+    {
+      "id": "summary-template-two-stage",
+      "file": "templates/.harness/changes/_template/summary.md",
+      "patterns": ["第一阶段：先落盘", "第二阶段：收尾"],
+      "why": "模板按 initial / final 分段，才不会诱导一次成稿；两段必须与 check-summary 的两档一致。"
+    },
+    {
+      "id": "summary-order-in-flow",
+      "file": "templates/.harness/rules/开发流程规范.md",
+      "pattern": "初始 summary 必须单独提交一次",
+      "why": "流程规范必须与 pre-commit 的顺序门禁同一口径，否则 agent 按文档操作会被门禁拦。"
     }
   ]
 }

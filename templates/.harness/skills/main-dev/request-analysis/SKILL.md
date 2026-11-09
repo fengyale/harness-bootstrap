@@ -30,7 +30,7 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 2. 定位模块，列出受影响的接口、表、前端页面
 3. 与项目硬约束比对，冲突先报，不自行取舍
 4. 按档位落盘：L0 不建记录；L1 在 `.harness/changes/_small.md` 追加一行（字段按表头填齐）；L2/L3 **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md` 再填
-5. L2/L3 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。L1 的 `_small.md` 行由 `metrics.ps1` 解析。`/plan` 模式的计划要复制进对应记录，不能只留在工具的计划面板
+5. L2/L3 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。通过后**单独提交一次**（只含 `.harness/` 下文件），再进入编码。L1 的 `_small.md` 行由 `metrics.ps1` 解析。`/plan` 模式的计划要复制进对应记录，不能只留在工具的计划面板
 6. 无法确认的标 `TODO(待确认)`，**开工前只问一次**
 
 ### 检查项

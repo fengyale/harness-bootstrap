@@ -114,13 +114,175 @@ git -C $proj config user.email t@t.t
 git -C $proj config user.name t
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\install-git-hooks.ps1" -Root $proj | Out-Null
 
+# Harness scaffolding lands first, without any feature summary: the summary-order
+# guard refuses a commit that adds a summary together with changes outside
+# .harness/, so setup and the record must be separate commits.
+git -C $proj add scripts AGENTS.md .harness/rules
+git -C $proj commit -q -m scaffold
+Expect 'commit of harness scaffolding' $LASTEXITCODE 0
+
 # an initial-stage summary has no lesson_id / sql_review yet: it must commit
 $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
 $s = ($s -split "`r?`n" | Where-Object { $_ -notmatch 'lesson_id:' -and $_ -notmatch 'sql_review:' }) -join "`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $s -Encoding UTF8
-git -C $proj add -A
-git -C $proj commit -q -m init
-Expect 'commit of an initial summary' $LASTEXITCODE 0
+git -C $proj add .harness/changes/demo/summary.md
+git -C $proj commit -q -m 'docs: initial summary'
+Expect 'commit of an initial summary (record only)' $LASTEXITCODE 0
+
+Step 'a new summary cannot be committed together with code'
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo2" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\demo2\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\Late.java" -Value 'public class Late {}' -Encoding UTF8
+git -C $proj add .harness/changes/demo2/summary.md Late.java
+# Redirecting native stderr turns each line into an ErrorRecord; EAP=Stop would
+# abort the suite before the assertion, so relax it for this capture only.
+$savedEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$lateOut = (& git -C $proj commit -m late-summary 2>&1 | Out-String)
+$lateCode = $LASTEXITCODE
+$ErrorActionPreference = $savedEap
+Expect 'commit that adds a summary together with code' $lateCode 1
+if ($lateOut -match 'committed together with changes outside') { Write-Host 'ok: blocked by the summary-order guard' }
+else { Write-Host 'BAD: late summary not reported by the order guard' -ForegroundColor Red; $fail++ }
+
+# Keep the summary staged, unstage the code: the record alone is accepted, and
+# the code commit after it is accepted too. (git reset --hard would delete the
+# staged-but-uncommitted summary, so only the path is reset.)
+git -C $proj reset -q HEAD -- Late.java
+git -C $proj commit -q -m summary-first
+Expect 'commit of a new summary alone' $LASTEXITCODE 0
+git -C $proj add Late.java
+git -C $proj commit -q -m code-after-summary
+Expect 'commit of code after its summary' $LASTEXITCODE 0
+git -C $proj reset --hard HEAD -q
+
+Step 'order guard: allowed and exempt shapes'
+# an EXISTING summary may be edited together with code; only a NEW summary is constrained
+Add-Content -LiteralPath "$proj\.harness\changes\demo2\summary.md" -Value '- 评审备注：existing summary updated with code' -Encoding UTF8
+Set-Content -LiteralPath "$proj\Late.java" -Value 'public class Late { int n; }' -Encoding UTF8
+git -C $proj add .harness/changes/demo2/summary.md Late.java
+git -C $proj commit -q -m 'final fields with code'
+Expect 'existing summary edited together with code' $LASTEXITCODE 0
+
+# the shipped template is excluded from the guard
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\_template" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\_template\summary.md" -Value '# template' -Encoding UTF8
+Set-Content -LiteralPath "$proj\TemplateCode.java" -Value 'public class TemplateCode {}' -Encoding UTF8
+git -C $proj add .harness/changes/_template/summary.md TemplateCode.java
+git -C $proj commit -q -m 'template plus code'
+Expect '_template summary plus code' $LASTEXITCODE 0
+
+# git mv into a new feature dir shows up as an add because the hook uses --no-renames
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo3" | Out-Null
+git -C $proj mv .harness/changes/demo2/summary.md .harness/changes/demo3/summary.md
+Set-Content -LiteralPath "$proj\Renamed.java" -Value 'public class Renamed {}' -Encoding UTF8
+git -C $proj add .harness/changes/demo3/summary.md Renamed.java
+git -C $proj commit -q -m renamed-summary-with-code
+Expect 'renamed summary together with code' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\.harness\changes\demo3" -Recurse -Force -ErrorAction SilentlyContinue
+
+Step 'order guard: merge and squash are exempt'
+$mainBranch = (& git -C $proj rev-parse --abbrev-ref HEAD).Trim()
+git -C $proj checkout -q -b feat-merge
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\feat-merge" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\feat-merge\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\MergeCode.java" -Value 'public class MergeCode {}' -Encoding UTF8
+# stage only the feature files: tracking .harness/metrics/gate.jsonl would make
+# every later hook append a local change and block the checkout below
+git -C $proj add .harness/changes/feat-merge/summary.md MergeCode.java
+# --no-verify stands in for a branch created before the gate was installed.
+# post-commit still runs, so count only from here: that commit is audited (it
+# really is a late summary) and must not be attributed to the merge below.
+git -C $proj commit -q --no-verify -m 'branch work'
+git -C $proj checkout -q $mainBranch
+$beforeMerge = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+git -C $proj merge --no-ff -q -m 'merge feature branch' feat-merge
+Expect 'merge --no-ff that brings a summary and code' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$proj\MergeCode.java") { Write-Host 'ok: the merge really landed on the main branch' }
+else { Write-Host 'BAD: merge did not land (stale branch state)' -ForegroundColor Red; $fail++ }
+$afterMerge = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+if ($afterMerge -eq $beforeMerge) { Write-Host 'ok: merge produced no summary_order audit event' }
+else { Write-Host 'BAD: merge was flagged by the post-commit audit' -ForegroundColor Red; $fail++ }
+
+git -C $proj checkout -q -b feat-squash
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\feat-squash" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\feat-squash\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\SquashCode.java" -Value 'public class SquashCode {}' -Encoding UTF8
+git -C $proj add .harness/changes/feat-squash/summary.md SquashCode.java
+git -C $proj commit -q --no-verify -m 'branch work'
+git -C $proj checkout -q $mainBranch
+$beforeSquash = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+git -C $proj merge --squash -q feat-squash
+git -C $proj commit -q -m 'squash feature branch'
+Expect 'squash commit that brings a summary and code' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$proj\SquashCode.java") { Write-Host 'ok: the squash really landed on the main branch' }
+else { Write-Host 'BAD: squash did not land (stale branch state)' -ForegroundColor Red; $fail++ }
+$afterSquash = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+if ($afterSquash -eq $beforeSquash) { Write-Host 'ok: squash produced no summary_order audit event' }
+else { Write-Host 'BAD: squash was flagged by the post-commit audit' -ForegroundColor Red; $fail++ }
+
+Step 'order guard: --amend is audited after the commit'
+$beforeAmend = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+Set-Content -LiteralPath "$proj\AmendCode.java" -Value 'public class AmendCode {}' -Encoding UTF8
+git -C $proj add AmendCode.java
+git -C $proj commit -q -m 'code only'
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\amend" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\amend\summary.md" -Value $s -Encoding UTF8
+git -C $proj add .harness/changes/amend/summary.md
+git -C $proj commit -q --amend --no-edit
+Expect 'amend that adds a late summary' $LASTEXITCODE 0
+$afterAmend = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+$headShort = (& git -C $proj rev-parse --short HEAD).Trim()
+$lastEvent = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue) | Select-Object -Last 1
+if (($afterAmend -eq ($beforeAmend + 1)) -and ($lastEvent.Line -match [regex]::Escape($headShort))) {
+    Write-Host 'ok: the amended commit is the one recorded by post-commit'
+}
+else { Write-Host 'BAD: amend audit event missing or not tied to HEAD' -ForegroundColor Red; $fail++ }
+
+Step 'order guard: cherry-pick replay is not flagged'
+git -C $proj checkout -q -b cp-feat
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\cp-feat" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\cp-feat\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\CpCode.java" -Value 'public class CpCode {}' -Encoding UTF8
+git -C $proj add .harness/changes/cp-feat/summary.md CpCode.java
+git -C $proj commit -q --no-verify -m 'branch work for cherry-pick'
+$cpSha = (& git -C $proj rev-parse HEAD).Trim()
+git -C $proj checkout -q $mainBranch
+# count after the --no-verify branch commit: post-commit runs even with --no-verify
+$beforeCp = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+git -C $proj cherry-pick $cpSha
+Expect 'non-conflict cherry-pick replay' $LASTEXITCODE 0
+$afterCp = @(Select-String -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Pattern '"event":"summary_order"' -ErrorAction SilentlyContinue).Count
+if ($afterCp -eq $beforeCp) { Write-Host 'ok: cherry-pick produced no summary_order audit event' }
+else { Write-Host 'BAD: cherry-pick was flagged by the post-commit audit' -ForegroundColor Red; $fail++ }
+
+Step 'order guard: stale replay state does not exempt an unrelated commit'
+# cherry-pick --no-commit leaves CHERRY_PICK_HEAD; a path-level reset keeps it.
+# An unrelated new summary must still be blocked by the order guard.
+git -C $proj checkout -q -b cp-stale
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\cp-stale" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\cp-stale\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\StaleCode.java" -Value 'public class StaleCode {}' -Encoding UTF8
+git -C $proj add .harness/changes/cp-stale/summary.md StaleCode.java
+git -C $proj commit -q --no-verify -m 'branch work for stale state'
+$staleSha = (& git -C $proj rev-parse HEAD).Trim()
+git -C $proj checkout -q $mainBranch
+git -C $proj cherry-pick --no-commit $staleSha | Out-Null
+git -C $proj reset -q HEAD -- .
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\unrelated" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\unrelated\summary.md" -Value $s -Encoding UTF8
+Set-Content -LiteralPath "$proj\Unrelated.java" -Value 'public class Unrelated {}' -Encoding UTF8
+git -C $proj add .harness/changes/unrelated/summary.md Unrelated.java
+git -C $proj commit -q -m 'unrelated late summary'
+Expect 'stale CHERRY_PICK_HEAD must not exempt another feature' $LASTEXITCODE 1
+git -C $proj reset -q --hard HEAD
+git -C $proj cherry-pick --quit 2>$null
+# reset --hard keeps untracked files; drop them or a later `git add -A` would
+# stage a new summary plus code and trip the guard in an unrelated test.
+Remove-Item -LiteralPath "$proj\.harness\changes\cp-stale" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$proj\.harness\changes\unrelated" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$proj\StaleCode.java" -Force -ErrorAction SilentlyContinue
 
 Step 'worktree check-summary replacement is rejected'
 Set-Content -LiteralPath "$proj\scripts\check-summary.ps1" -Value '' -Encoding ASCII

@@ -11,6 +11,13 @@
       - git pre-commit hook  -> the reliable gate (this script)
       - .trae/hooks.json     -> fast feedback inside the editor
 
+    The hook enforces four things at commit time: red-line scan, SQL review,
+    summary field validity, and summary ORDER. The order check exists because
+    "write the summary before coding" cannot be observed from file contents:
+    git records commit order, not edit order. So a commit that ADDS a summary
+    while also changing anything outside .harness/ is refused; the initial
+    summary must land as its own commit first.
+
   ENCODING NOTE
     Pure ASCII on purpose (PS 5.1 reads .ps1 as ANSI without a BOM).
     The generated hook is a POSIX sh script with LF line endings, which is what
@@ -249,9 +256,83 @@ if [ "$SQL_STATUS" -ne 0 ]; then
   gate_fail 'SQL gate configuration is inconsistent'
 fi
 
+# Summary ORDER guard. git cannot see when a file was created, only when it was
+# committed. A commit that ADDS .harness/changes/<feature>/summary.md while also
+# changing anything outside .harness/ is the shape of "code first, summary added
+# afterwards"; it is refused so the initial summary must land as its own commit.
+# Commits after that may freely mix summary updates and code.
+# Merges, squash integrations and cherry-pick / revert / rebase replays carry
+# history that already landed, so the same shape is expected there. The same
+# body also runs as pre-merge-commit; git 2.54 no longer has MERGE_HEAD at that
+# point, so the hook name is the reliable signal there.
+# The marker LATE_SUMMARY is also checked by scripts/verify-harness.ps1 and
+# scripts/stage-gate.ps1, which use it to detect a hook installed before this
+# guard existed.
+LATE_SUMMARY=0
+# The staged new summaries are needed by the guard and by the replay check: a
+# stale replay state file must not silence the gate for an unrelated commit.
+NEW_SUMMARIES=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=A -- .harness/changes 2>/dev/null | grep -E '^\.harness/changes/[^/]+/summary\.md$' | grep -v '^\.harness/changes/_template/' || true)
+
+# True when the replayed ref itself adds every staged new summary. Without this,
+# `git reset HEAD -- .` after a blocked replay leaves CHERRY_PICK_HEAD /
+# MERGE_HEAD behind and exempts one unrelated commit from the order guard.
+replay_adds_summaries() {
+  [ -z "$NEW_SUMMARIES" ] && return 0
+  added=$(git -c core.quotepath=false diff --name-only --no-renames --diff-filter=A HEAD "$1" -- .harness/changes 2>/dev/null | grep -E '^\.harness/changes/[^/]+/summary\.md$' | grep -v '^\.harness/changes/_template/' || true)
+  [ -z "$added" ] && return 1
+  printf '%s\n' "$NEW_SUMMARIES" | while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    printf '%s\n' "$added" | grep -Fxq -- "$p" || exit 1
+  done
+  return $?
+}
+
+REPLAY_CONTEXT=0
+case "$0" in
+  *pre-merge-commit) REPLAY_CONTEXT=1 ;;
+esac
+if [ -f "$GIT_DIR/MERGE_HEAD" ] && replay_adds_summaries "$(cat "$GIT_DIR/MERGE_HEAD" 2>/dev/null)"; then REPLAY_CONTEXT=1; fi
+if [ -f "$GIT_DIR/CHERRY_PICK_HEAD" ] && replay_adds_summaries "$(cat "$GIT_DIR/CHERRY_PICK_HEAD" 2>/dev/null)"; then REPLAY_CONTEXT=1; fi
+[ -f "$GIT_DIR/REVERT_HEAD" ] && REPLAY_CONTEXT=1
+# SQUASH_MSG has no source commit to compare against, so a blocked squash that
+# is followed by a path-level reset (git reset HEAD -- .) can still exempt one
+# unrelated commit. The rule doc tells users to use reset --hard/--mixed or
+# --abort after a blocked replay; MERGE_HEAD / CHERRY_PICK_HEAD do not have this
+# gap because their summaries are checked against the replayed commit above.
+[ -f "$GIT_DIR/SQUASH_MSG" ] && REPLAY_CONTEXT=1
+[ -d "$GIT_DIR/rebase-merge" ] && REPLAY_CONTEXT=1
+[ -d "$GIT_DIR/rebase-apply" ] && REPLAY_CONTEXT=1
+# A stale marker left by a blocked commit must not silence the next audit.
+rm -f "$GIT_DIR/harness-replay.tmp" 2>/dev/null
+if [ "$REPLAY_CONTEXT" -eq 0 ]; then
+  if [ -n "$NEW_SUMMARIES" ]; then
+    # No --diff-filter: any index change outside .harness/ counts (add / modify /
+    # delete / typechange), not just the four common states. --no-renames also
+    # counts a move out of .harness/ as a change on the source side.
+    OUTSIDE_CHANGES=$(git -c core.quotepath=false diff --cached --name-only --no-renames 2>/dev/null | grep -v '^\.harness/' || true)
+    if [ -n "$OUTSIDE_CHANGES" ]; then
+      echo "[FAIL] a new summary.md is committed together with changes outside .harness/:" >&2
+      printf '%s\n' "$NEW_SUMMARIES" | while IFS= read -r p; do
+        if [ -n "$p" ]; then echo "       new summary: $p" >&2; fi
+      done
+      echo "       commit order is the only evidence git has, so land the summary first:" >&2
+      echo "         1) git add .harness/changes/<feature>/summary.md" >&2
+      echo "         2) git commit -m 'docs(<feature>): initial summary'" >&2
+      echo "         3) then stage and commit the code" >&2
+      LATE_SUMMARY=1
+    fi
+  fi
+fi
+
 if [ ! -s "$DIFF_FILE" ]; then
+  # Fail closed: an empty diff must not be able to hide an order violation
+  # (a custom diff driver or a future filter change could produce one).
+  if [ "$LATE_SUMMARY" -ne 0 ]; then
+    gate_fail 'a new summary.md must be committed on its own'
+  fi
   printf '{"event":"scan","ts":"%s","blocked":0,"files":%s,"hunks":0}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
   git write-tree > "$GIT_DIR/harness-gate-ok" 2>/dev/null
+  if [ "$REPLAY_CONTEXT" -eq 1 ]; then git write-tree > "$GIT_DIR/harness-replay.tmp" 2>/dev/null; fi
   rm -f "$DIFF_FILE"
   exit 0
 fi
@@ -350,16 +431,21 @@ EOF
 fi
 rm -f "$DIFF_FILE"
 
-if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ]; then
+if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ] || [ $LATE_SUMMARY -ne 0 ]; then
   printf '{"event":"scan","ts":"%s","blocked":1,"files":%s,"hunks":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" "$HUNKS_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
   echo ""
-  echo "harness gate blocked: fix red lines, complete the summary fields, or add a sql_review note for SQL changes."
+  echo "harness gate blocked: fix red lines, complete the summary fields, add a sql_review note for SQL changes,"
+  echo "or commit the initial summary before the code."
   echo "(--no-verify bypasses this gate; the bypass is counted by scripts/metrics.ps1.)"
   exit 1
 fi
 
 printf '{"event":"scan","ts":"%s","blocked":0,"files":%s,"hunks":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" "$HUNKS_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
 git write-tree > "$GIT_DIR/harness-gate-ok" 2>/dev/null
+# Tell post-commit this commit was a replay (squash / merge conclusion /
+# cherry-pick). The tree hash binds the marker to this exact commit: a marker
+# left behind by a blocked commit-msg hook must not exempt a later commit.
+if [ "$REPLAY_CONTEXT" -eq 1 ]; then git write-tree > "$GIT_DIR/harness-replay.tmp" 2>/dev/null; fi
 exit 0
 '@ -replace "`r`n", "`n"
 
@@ -400,6 +486,37 @@ if [ -f "$MARK" ]; then
 fi
 mkdir -p "$ROOT/.harness/metrics" 2>/dev/null
 printf '{"event":"commit","ts":"%s","hash":"%s","scanned":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse --short HEAD)" "$SCANNED" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
+
+# Audit the commit that just landed. pre-commit cannot detect `git commit
+# --amend` (the code is already in HEAD), so the same order rule is re-checked
+# against the final commit. Replays (merge / squash / cherry-pick / revert /
+# rebase) are exempt: they carry history that already landed. SQUASH_MSG is
+# already gone by now, so pre-commit drops harness-replay.tmp for that path.
+# The violation is recorded, not reverted: the commit already exists.
+REPLAY_CONTEXT=0
+[ -f "$GIT_DIR/CHERRY_PICK_HEAD" ] && REPLAY_CONTEXT=1
+[ -f "$GIT_DIR/REVERT_HEAD" ] && REPLAY_CONTEXT=1
+[ -d "$GIT_DIR/rebase-merge" ] && REPLAY_CONTEXT=1
+[ -d "$GIT_DIR/rebase-apply" ] && REPLAY_CONTEXT=1
+if [ -f "$GIT_DIR/harness-replay.tmp" ]; then
+  # The marker holds the index tree of that commit; only trust it for HEAD.
+  REPLAY_TREE=$(cat "$GIT_DIR/harness-replay.tmp" 2>/dev/null)
+  HEAD_TREE=$(git rev-parse "HEAD^{tree}" 2>/dev/null)
+  if [ -n "$REPLAY_TREE" ] && [ "$REPLAY_TREE" = "$HEAD_TREE" ]; then REPLAY_CONTEXT=1; fi
+  rm -f "$GIT_DIR/harness-replay.tmp"
+fi
+PARENTS=$(git rev-list --parents -n 1 HEAD 2>/dev/null | wc -w | tr -d ' ')
+if [ "${PARENTS:-0}" -le 2 ] && [ "$REPLAY_CONTEXT" -eq 0 ]; then
+  ADDED=$(git -c core.quotepath=false diff-tree --root --no-commit-id --no-renames --name-only -r --diff-filter=A HEAD -- .harness/changes 2>/dev/null | grep -E '^\.harness/changes/[^/]+/summary\.md$' | grep -v '^\.harness/changes/_template/' || true)
+  if [ -n "$ADDED" ]; then
+    TOUCHED=$(git -c core.quotepath=false diff-tree --root --no-commit-id --no-renames --name-only -r HEAD 2>/dev/null | grep -v '^\.harness/' || true)
+    if [ -n "$TOUCHED" ]; then
+      printf '{"event":"summary_order","ts":"%s","hash":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse --short HEAD)" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
+      echo "[WARN] this commit adds a summary.md together with code outside .harness/." >&2
+      echo "       pre-commit could not see it (usually --amend); record the deviation in the summary." >&2
+    fi
+  fi
+fi
 exit 0
 '@ -replace "`r`n", "`n"
 

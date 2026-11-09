@@ -4,19 +4,33 @@
 > 复制本文件到 `.harness/changes/<特性名>/summary.md` 再填写。
 > **L0 不建记录；L1 只写 `.harness/changes/_small.md` 一行；L2 / L3 才用本模板建目录。**
 
-## 计数（必填，度量依赖这些字段）
+## 分两段写（不许一次成稿）
+
+1. **阶段 1：先落盘** —— 复制后先填完「第一阶段」，跑
+   `scripts/check-summary.ps1 -Feature <特性名> -Stage initial`；通过后**单独提交一次**
+   （该提交只包含 `.harness/` 下的文件），再开始改代码。
+2. **阶段 5–10：收尾** —— 补「验证方式 / 评审结论 / 部署记录 / 待沉淀」，再填「第二阶段」字段。
+
+> pre-commit 会拒绝「**新增** summary + `.harness/` 之外的改动」同一个提交（合并 / 压缩合并除外）。
+> 它只能看提交、看不到编辑顺序：**先提交代码、再单独提交 summary 不会被本地 hook 拦住**，
+> 这条工序靠流程本身保证；已存在的 summary 后续与代码一起提交不受影响。
+
+## 第一阶段：先落盘（动代码前必填）
 
 - 日期：`YYYY-MM-DD`（`metrics.ps1` 按这个日期分窗口；不写就退回文件修改时间并标 undated）
 - 加载技能：`loaded_skills: <request-analysis, coding-skill>`
 - 未加载技能原因：`load_skip_reason: <一句话；loaded_skills 为 none 时必填>`
 - 触及模块：`touched_modules: <module1, module2>`
-- 纠正次数：`corrections: <N>`
-- 实现层纠正：`impl_corrections: <N>`（属于实现细节的纠正数；没有就填 0）
+- 纠正次数：`corrections: 0`（先写 0，收尾时按实际改）
+- 实现层纠正：`impl_corrections: 0`（属于实现细节的纠正数；没有就填 0）
 - 流程档位：`flow: <L2|L3>`（L2 标准 / L3 完整，判据见 `.harness/rules/开发流程规范.md` 第 1.1 节；L1 不建本文件，只写 `_small.md`）
+
+## 第二阶段：收尾（阶段 5–10 再填）
+
 - 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace> -- <一句话摘要>`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
 - SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 预估行数 / 访问路径；无 SQL 写"无 SQL 变更")`
 
-> 上面这些字段由 `scripts/check-summary.ps1` 分两档校验：**阶段 1 与 pre-commit 只查基础字段**
+> 两个阶段的字段由 `scripts/check-summary.ps1` 分档校验：**阶段 1 与 pre-commit 只查第一阶段**
 > （加载技能 / 档位 / 纠正次数 / 实现层纠正 / 触及模块）；`lesson_id` 与 `sql_review` 由**阶段 10** 查。
 > **缺字段或留占位符 = 任务未完成。**
 >
@@ -83,13 +97,13 @@
 
 涉及文件总量：`<N>`；是否触发 40% 阈值需要分批：`<是/否>`
 
-## 验证方式
+## 验证方式（阶段 5 填）
 
 - 怎么验的：`<命令 / 手工路径 / 证据位置>`
 - 测试结果：`<命令 -> exit 0 / 0 tests allowed / 跳过原因>`
 - 集成路径：`<已验 / 跳过原因>`
 
-## 评审结论
+## 评审结论（阶段 6 填）
 
 - 评审人：`<人 / 子代理 / 无>`
 - 未关闭问题：`<无 / 编号 + 级别>`
@@ -105,13 +119,13 @@
 - 代码回滚：`<…>`
 - 数据回滚：`.harness/changes/<特性名>/rollback.sql`
 
-## 部署记录
+## 部署记录（阶段 8 填）
 
 | 时间 | 环境 | 版本 | 验证人 | 结果 | 异常与处理 |
 | --- | --- | --- | --- | --- | --- |
 | | | | | | |
 
-## 待沉淀
+## 待沉淀（阶段 10 填）
 
 - 待沉淀：`<该升级成规则 / 门禁 / 技能 / 模块卡的教训；没有就写"无">`
 - 去向：`<.harness/rules/<文件> / scripts/<脚本> / .harness/skills/<分类>/<名> / .harness/modules/<名>.md>`

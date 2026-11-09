@@ -330,10 +330,15 @@ if (-not $gitDir) {
                 $execOk = $true
             }
         }
-        if ($execOk) {
-            Add-Result 'gate' 'PASS' 'git pre-commit hook calls red-line-scan'
-        } else {
+        if (-not $execOk) {
             Add-Result 'gate' 'FAIL' 'pre-commit hook is not executable (chmod +x .git/hooks/pre-commit)'
+        } elseif (($hookBody -notmatch 'LATE_SUMMARY') -or ($hookBody -notmatch 'REPLAY_CONTEXT')) {
+            # A hook installed before the summary-order guard existed still looks
+            # like the harness gate, so report exactly one FAIL instead of a PASS
+            # plus a FAIL for the same hook.
+            Add-Result 'gate' 'FAIL' 'pre-commit hook predates the summary-order guard; re-run install-git-hooks.ps1'
+        } else {
+            Add-Result 'gate' 'PASS' 'git pre-commit hook calls red-line-scan and enforces summary order'
         }
     } else {
         Add-Result 'gate' 'FAIL' 'pre-commit hook exists but is not the harness gate (marker or scanner missing; re-run install-git-hooks.ps1)'
@@ -341,6 +346,7 @@ if (-not $gitDir) {
 } else {
     Add-Result 'gate' 'FAIL' 'no git pre-commit hook (run scripts\install-git-hooks.ps1)'
 }
+
 $postHook = Join-Path $hooksDir 'post-commit'
 if ($gitDir -and -not (Test-Path -LiteralPath $postHook)) {
     Add-Result 'gate' 'WARN' 'post-commit missing: bypass rate cannot be measured (re-run install-git-hooks.ps1)'
@@ -356,10 +362,13 @@ if ($gitDir) {
         $mergeBody = [System.IO.File]::ReadAllText($mergePath, [System.Text.Encoding]::UTF8)
         # FAIL, not WARN: stage-gate already treats a foreign merge hook as a
         # blocked merge, so verify-harness must not call the same state PASS-ish.
-        if ($mergeBody -match 'red-line-scan' -and $mergeBody -match 'harness pre-commit gate') {
-            Add-Result 'gate' 'PASS' 'pre-merge-commit hook is the harness gate calling red-line-scan'
-        } else {
+        if ($mergeBody -notmatch 'red-line-scan' -or $mergeBody -notmatch 'harness pre-commit gate') {
             Add-Result 'gate' 'FAIL' 'pre-merge-commit exists but is not the harness gate: merge commits are not scanned (re-run install-git-hooks.ps1)'
+        } elseif (($mergeBody -notmatch 'LATE_SUMMARY') -or ($mergeBody -notmatch 'REPLAY_CONTEXT')) {
+            # Same body, so a stale merge hook means a half-updated installation.
+            Add-Result 'gate' 'FAIL' 'pre-merge-commit predates the summary-order guard; re-run install-git-hooks.ps1'
+        } else {
+            Add-Result 'gate' 'PASS' 'pre-merge-commit hook is the harness gate calling red-line-scan'
         }
     }
 }

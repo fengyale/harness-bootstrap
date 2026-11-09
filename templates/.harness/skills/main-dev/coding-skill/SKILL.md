@@ -27,7 +27,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 ### 步骤
 
-1. **确认记录已落盘**：L0 无记录；L1 已在 `.harness/changes/_small.md` 追加一行；L2/L3 的 `summary.md` 已存在且 `scripts\check-summary.ps1 -Feature <特性> -Stage initial` 通过。不满足就退回阶段 1，不要先改代码再补文档
+1. **确认记录已落盘**：L0 无记录；L1 已在 `.harness/changes/_small.md` 追加一行；L2/L3 的 `summary.md` 已存在、`scripts\check-summary.ps1 -Feature <特性> -Stage initial` 通过，且**初始 summary 已单独提交**（该提交只含 `.harness/` 下文件）。不满足就退回阶段 1，不要先改代码再补文档——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交
 2. 确认模块与包路径
 3. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
 4. 实现；跨模块改动写进 `summary.md` 影响面
