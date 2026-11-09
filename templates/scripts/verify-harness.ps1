@@ -332,7 +332,7 @@ if (-not $gitDir) {
         }
         if (-not $execOk) {
             Add-Result 'gate' 'FAIL' 'pre-commit hook is not executable (chmod +x .git/hooks/pre-commit)'
-        } elseif (($hookBody -notmatch 'LATE_SUMMARY') -or ($hookBody -notmatch 'REPLAY_CONTEXT')) {
+        } elseif (($hookBody -notmatch 'LATE_SUMMARY') -or ($hookBody -notmatch 'REPLAY_CONTEXT') -or ($hookBody -notmatch 'ASSOC_MISS')) {
             # A hook installed before the summary-order guard existed still looks
             # like the harness gate, so report exactly one FAIL instead of a PASS
             # plus a FAIL for the same hook.
@@ -364,7 +364,7 @@ if ($gitDir) {
         # blocked merge, so verify-harness must not call the same state PASS-ish.
         if ($mergeBody -notmatch 'red-line-scan' -or $mergeBody -notmatch 'harness pre-commit gate') {
             Add-Result 'gate' 'FAIL' 'pre-merge-commit exists but is not the harness gate: merge commits are not scanned (re-run install-git-hooks.ps1)'
-        } elseif (($mergeBody -notmatch 'LATE_SUMMARY') -or ($mergeBody -notmatch 'REPLAY_CONTEXT')) {
+        } elseif (($mergeBody -notmatch 'LATE_SUMMARY') -or ($mergeBody -notmatch 'REPLAY_CONTEXT') -or ($mergeBody -notmatch 'ASSOC_MISS')) {
             # Same body, so a stale merge hook means a half-updated installation.
             Add-Result 'gate' 'FAIL' 'pre-merge-commit predates the summary-order guard; re-run install-git-hooks.ps1'
         } else {

@@ -17,6 +17,7 @@
 4. 部署完成后**回写** `summary.md` 的「部署记录」章节。
 5. 特性交付后，把特性登记到 `.harness/rules/开发流程规范.md` 的「变更特性清单」和根 `AGENTS.md` 的文件索引。
 6. **初始 `summary.md` 单独提交**：新增 summary 的提交只应包含 `.harness/` 下的文件，之后再提交代码。pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交——git 看不到编辑顺序，提交顺序是唯一可判定的证据。
+7. **源码提交要能归因**：在 `feature/<名>` / `fix/<名>` 分支（或 `HARNESS_TASK=<名>`）上，HEAD 必须先有 `.harness/changes/<名>/summary.md`；L1 则在同一提交里改 `_small.md`。主分支没有特性指针时不做此检查；L0 / 一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行。
 
 ## `db-migrations.sql` 模板
 

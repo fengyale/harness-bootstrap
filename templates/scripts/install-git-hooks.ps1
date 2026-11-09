@@ -324,11 +324,52 @@ if [ "$REPLAY_CONTEXT" -eq 0 ]; then
   fi
 fi
 
+# Record association. "Write the summary first" only helps when a code commit
+# can be traced back to a record. A source change is accepted when one of these
+# holds: HEAD already has .harness/changes/<feature>/summary.md, this commit
+# stages a summary, or it stages a _small.md row (L1). The feature name comes
+# from HARNESS_TASK, else from a feature/fix/hotfix/bugfix branch (last segment,
+# matching the "directory name = branch name" rule in changes/README.md).
+# On main/develop there is no feature pointer, so the check is skipped: the gate
+# cannot attribute the code, and blocking every commit there would be unusable.
+# HARNESS_ALLOW_NO_RECORD=1 is the explicit exception for L0 / one-off imports.
+ASSOC_MISS=0
+SOURCE_CHANGES=$(git -c core.quotepath=false diff --cached --name-only --no-renames 2>/dev/null | grep -E '\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less|json|yml|yaml|properties|toml|ini)$' | grep -Ev '^(\.harness|\.trae|\.claude|scripts|docs|node_modules|dist|build|target)/' || true)
+if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW_NO_RECORD:-0}" != "1" ]; then
+  if git cat-file -e HEAD:.harness/changes 2>/dev/null; then
+    TASK_NAME="${HARNESS_TASK:-}"
+    if [ -z "$TASK_NAME" ]; then
+      BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+      case "$BRANCH" in
+        feature/*|fix/*|hotfix/*|bugfix/*) TASK_NAME=${BRANCH#*/}; TASK_NAME=${TASK_NAME##*/} ;;
+      esac
+    fi
+    if [ -n "$TASK_NAME" ]; then
+      HAS_RECORD=0
+      git cat-file -e "HEAD:.harness/changes/$TASK_NAME/summary.md" 2>/dev/null && HAS_RECORD=1
+      STAGED_SUMMARY=$(git -c core.quotepath=false diff --cached --name-only --no-renames -- .harness/changes 2>/dev/null | grep -E '^\.harness/changes/[^/]+/summary\.md$' | grep -v '^\.harness/changes/_template/' || true)
+      [ -n "$STAGED_SUMMARY" ] && HAS_RECORD=1
+      git -c core.quotepath=false diff --cached --name-only -- .harness/changes/_small.md 2>/dev/null | grep -q . && HAS_RECORD=1
+      if [ "$HAS_RECORD" -eq 0 ]; then
+        echo "[FAIL] source changes are not traceable to a change record (feature: $TASK_NAME):" >&2
+        echo "       fix it with one of:" >&2
+        echo "         1) L2/L3: copy .harness/changes/_template/summary.md, run check-summary -Stage initial, commit it first" >&2
+        echo "         2) L1: append one row to .harness/changes/_small.md and include it in this commit" >&2
+        echo "         3) declare the right feature: HARNESS_TASK=<name>; L0 / one-off: HARNESS_ALLOW_NO_RECORD=1" >&2
+        ASSOC_MISS=1
+      fi
+    fi
+  fi
+fi
+
 if [ ! -s "$DIFF_FILE" ]; then
   # Fail closed: an empty diff must not be able to hide an order violation
   # (a custom diff driver or a future filter change could produce one).
   if [ "$LATE_SUMMARY" -ne 0 ]; then
     gate_fail 'a new summary.md must be committed on its own'
+  fi
+  if [ "$ASSOC_MISS" -ne 0 ]; then
+    gate_fail 'source changes need a change record'
   fi
   printf '{"event":"scan","ts":"%s","blocked":0,"files":%s,"hunks":0}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
   git write-tree > "$GIT_DIR/harness-gate-ok" 2>/dev/null
@@ -431,11 +472,11 @@ EOF
 fi
 rm -f "$DIFF_FILE"
 
-if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ] || [ $LATE_SUMMARY -ne 0 ]; then
+if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ] || [ $LATE_SUMMARY -ne 0 ] || [ $ASSOC_MISS -ne 0 ]; then
   printf '{"event":"scan","ts":"%s","blocked":1,"files":%s,"hunks":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" "$HUNKS_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
   echo ""
   echo "harness gate blocked: fix red lines, complete the summary fields, add a sql_review note for SQL changes,"
-  echo "or commit the initial summary before the code."
+  echo "commit the initial summary before the code, or give the code a change record."
   echo "(--no-verify bypasses this gate; the bypass is counted by scripts/metrics.ps1.)"
   exit 1
 fi

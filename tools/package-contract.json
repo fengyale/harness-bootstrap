@@ -261,6 +261,18 @@
       "file": "templates/.harness/rules/开发流程规范.md",
       "pattern": "初始 summary 必须单独提交一次",
       "why": "流程规范必须与 pre-commit 的顺序门禁同一口径，否则 agent 按文档操作会被门禁拦。"
+    },
+    {
+      "id": "record-association-gate",
+      "file": "templates/scripts/install-git-hooks.ps1",
+      "pattern": "ASSOC_MISS",
+      "why": "只拦「同提交混排」仍会放过完全没有记录的源码提交；源码变更必须能归因到 summary / _small.md。"
+    },
+    {
+      "id": "record-association-in-flow",
+      "file": "templates/.harness/rules/开发流程规范.md",
+      "pattern": "源码提交必须能归因到记录",
+      "why": "流程规范必须写明 feature 分支 / HARNESS_TASK 的归因方式与逃生口，否则 agent 被拦后不知道怎么办。"
     }
   ]
 }

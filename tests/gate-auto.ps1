@@ -182,6 +182,43 @@ Expect 'renamed summary together with code' $LASTEXITCODE 1
 git -C $proj reset --hard HEAD -q
 Remove-Item -LiteralPath "$proj\.harness\changes\demo3" -Recurse -Force -ErrorAction SilentlyContinue
 
+Step 'record association: source commits need a summary or _small.md'
+$mainBranch = (& git -C $proj rev-parse --abbrev-ref HEAD).Trim()
+git -C $proj checkout -q -b feature/assoc
+Set-Content -LiteralPath "$proj\AssocCode.java" -Value 'public class AssocCode {}' -Encoding UTF8
+git -C $proj add AssocCode.java
+git -C $proj commit -q -m 'code without a record'
+Expect 'feature branch code without any record' $LASTEXITCODE 1
+
+# keep the code out of the record commit, otherwise the order guard blocks it
+git -C $proj reset -q HEAD -- AssocCode.java
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\assoc" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\assoc\summary.md" -Value $s -Encoding UTF8
+git -C $proj add .harness/changes/assoc/summary.md
+git -C $proj commit -q -m 'docs: assoc summary'
+Expect 'record committed before the code' $LASTEXITCODE 0
+git -C $proj add AssocCode.java
+git -C $proj commit -q -m 'code after record'
+Expect 'code after its record on a feature branch' $LASTEXITCODE 0
+
+# L1 path: a _small.md row in the same commit replaces the summary
+Set-Content -LiteralPath "$proj\AssocL1.java" -Value 'public class AssocL1 {}' -Encoding UTF8
+Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value '- 2026-11-09 | assoc-l1 | AssocL1.java | test | lesson: none' -Encoding UTF8
+git -C $proj add AssocL1.java .harness/changes/_small.md
+git -C $proj commit -q -m 'L1 record with code'
+Expect '_small.md row allows code without a summary' $LASTEXITCODE 0
+
+# explicit exception for L0 / one-off imports
+Set-Content -LiteralPath "$proj\AssocL0.java" -Value 'public class AssocL0 {}' -Encoding UTF8
+git -C $proj add AssocL0.java
+$env:HARNESS_ALLOW_NO_RECORD = '1'
+git -C $proj commit -q -m 'L0 exception'
+$assocEscape = $LASTEXITCODE
+Remove-Item Env:HARNESS_ALLOW_NO_RECORD -ErrorAction SilentlyContinue
+Expect 'HARNESS_ALLOW_NO_RECORD escape' $assocEscape 0
+
+git -C $proj checkout -q $mainBranch
+
 Step 'order guard: merge and squash are exempt'
 $mainBranch = (& git -C $proj rev-parse --abbrev-ref HEAD).Trim()
 git -C $proj checkout -q -b feat-merge
