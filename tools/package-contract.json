@@ -273,6 +273,54 @@
       "file": "templates/.harness/rules/开发流程规范.md",
       "pattern": "源码提交必须能归因到记录",
       "why": "流程规范必须写明 feature 分支 / HARNESS_TASK 的归因方式与逃生口，否则 agent 被拦后不知道怎么办。"
+    },
+    {
+      "id": "core-skill-stop-conditions",
+      "file": "templates/.harness/skills/main-dev/request-analysis/SKILL.md",
+      "patterns": ["### 定档判据", "### 什么时候必须停下来问"],
+      "why": "需求分析的价值在开工前定档并问清影响面；只有步骤没有停止条件，agent 仍会边写边猜。"
+    },
+    {
+      "id": "core-skill-minimal-change",
+      "file": "templates/.harness/skills/main-dev/coding-skill/SKILL.md",
+      "patterns": ["### 三类改动怎么下手", "同一错误最多修 2 轮"],
+      "why": "编码技能必须给出改动类型的分支与失败处理上限，否则会顺手重构或无限重试。"
+    },
+    {
+      "id": "core-skill-severity-scope",
+      "file": "templates/.harness/skills/main-dev/expert-reviewer/SKILL.md",
+      "patterns": ["## 评审范围", "## 分级标准"],
+      "why": "评审没有范围声明会审到未改动代码；没有分级判据会把建议写成阻断。"
+    },
+    {
+      "id": "sql-rule-explain-criteria",
+      "file": "templates/.harness/rules/SQL评审规范.md",
+      "patterns": ["Using filesort", "最左前缀"],
+      "why": "SQL 规范必须给出执行计划与索引判据，否则「看执行计划」只是一句口号。"
+    },
+    {
+      "id": "rules-cache-order",
+      "file": "templates/.harness/rules/缓存与一致性.md",
+      "patterns": ["先更新库，再删除缓存", "缓存异常必须降级"],
+      "why": "更新顺序与降级是缓存最容易写反的两条边界，必须固定在规则里。"
+    },
+    {
+      "id": "rules-mq-idempotent",
+      "file": "templates/.harness/rules/消息与异步.md",
+      "patterns": ["必须幂等", "死信"],
+      "why": "消息的第一性问题是重复投递；不写幂等与死信，重试就会写重或丢消息。"
+    },
+    {
+      "id": "rules-migration-pair",
+      "file": "templates/.harness/rules/数据迁移与回滚.md",
+      "patterns": ["扩展 → 迁移 → 收缩", "回滚脚本与迁移脚本同目录"],
+      "why": "迁移的风险在不可回退；必须固定三阶段与成对脚本。"
+    },
+    {
+      "id": "agents-horizontal-rules-index",
+      "file": "templates/AGENTS.md",
+      "patterns": ["缓存与一致性.md", "消息与异步.md", "数据迁移与回滚.md"],
+      "why": "新增规则文件必须登记到常驻索引；不登记等于没装。"
     }
   ]
 }

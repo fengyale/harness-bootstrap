@@ -62,6 +62,9 @@
 | `.harness/rules/编码规范.md` | 单文件内代码怎么写（含 🔴/🟡 图例定义） |
 | `.harness/rules/工程结构.md` | 文件放哪、怎么命名、依赖方向 |
 | `.harness/rules/开发流程规范.md` | 阶段流程、质量门、回滚、变更管理、AI 编码纪律 |
+| `.harness/rules/缓存与一致性.md` | 该不该缓存、Key/TTL、更新顺序、穿透/击穿/雪崩预案（无缓存项目删除） |
+| `.harness/rules/消息与异步.md` | 该不该异步、发送失败处理、消费幂等、重试与死信（无 MQ 项目删除） |
+| `.harness/rules/数据迁移与回滚.md` | 扩展→迁移→收缩、DDL 红线、回填校验、回滚触发条件（无 DB 项目删除） |
 
 ### 技能（按需加载）
 
@@ -132,3 +135,4 @@
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed。分工：**pre-commit 只查 summary 基础字段**，`lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查。**缺字段或留占位符 = 任务未完成**
 - **源码提交必须能归因到记录**：在 `feature/<名>` / `fix/<名>` 分支或 `HARNESS_TASK=<名>` 下，HEAD 需已有 `.harness/changes/<名>/summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
+- **提交信息用中文**：格式仍是 `<type>(<scope>): <中文说明>`，type 取 `<feat|fix|refactor|test|docs|chore>`；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子

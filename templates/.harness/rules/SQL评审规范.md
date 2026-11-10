@@ -1,16 +1,17 @@
 # SQL 评审规范
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **定位**：改代码时的事前评审——SQL 会不会慢、索引够不够、数据量与回滚条件是否清楚。
+> `<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
 > 触发：新增 / 修改 SQL、加字段、加索引、改分页或批量写入。
-> 改代码时看本文；线上慢查询排查看 `trouble-shooting/01-slow-sql`。
+> 线上已经变慢的排查走 `trouble-shooting/01-slow-sql`，不要用本文代替。
 
 ## 1. 三条必做
 
 | # | 动作 | 判据 |
 | --- | --- | --- |
 | 1 | 估数据量 | 查询 count 或表统计；大表（> 10 万行）必须有可用索引 |
-| 2 | 看执行计划 | <!-- slot:db.explain --> |
-| 3 | 写结论 | `summary.md` 的 `sql_review:` 一行，含表名、预估行数、访问路径 |
+| 2 | 看执行计划 | `<!-- slot:db.explain -->`；结论写进 `summary.md` 的 `sql_review:` |
+| 3 | 写结论 | 含表名、预估行数、访问路径、结论 |
 
 缺第 3 条 → pre-commit 拒绝提交（`scripts/sql-review-gate.ps1`）。
 `scripts/harness-required.json` 的 `sqlGate=true` 表示本门禁已启用：规则文件与 gate 脚本必须同时存在且可运行。要关闭门禁，必须在**同一次提交**里把 `sqlGate` 改为 `false` 并删除规则与 gate；分两次提交会被 hook 拦下（off+残留或 on+无规则）。只删规则不改配置会被 `verify-harness` 判 FAIL。
@@ -24,24 +25,66 @@
 | `not in (子查询)` | 空值导致结果错误、难以走索引 | 改 `not exists` |
 | `like '%x'` | 前导通配索引失效 | 前缀匹配，或另建索引列 |
 | 大 offset 分页 | 先扫前 N 行 | 游标 / 延迟关联 |
-| 循环单条 insert | N 次往返 | 批量，单批有上限 |
+| 循环单条 insert / update | N 次往返 | 批量，单批有上限 |
 | 索引列套函数 | 索引失效 | 改写条件，慎建函数索引 |
 | 隐式类型转换 | 索引失效 | 参数类型与列一致 |
+| 无 where 的 update / delete | 全表误操作 | 先 select 同条件确认范围，再执行 |
+| `or` 跨不同列 | 难以命中单索引 | 拆成 `union all` 或补组合索引 |
 
-## 3. 方言差异
+## 3. 执行计划怎么看
 
-| 项 | <!-- slot:db.dialectA --> | <!-- slot:db.dialectB --> |
-| --- | --- | --- |
-| 分页 | <!-- slot:db.paging.a --> | <!-- slot:db.paging.b --> |
-| 空值 | <!-- slot:db.null.a --> | <!-- slot:db.null.b --> |
-| 日期 | <!-- slot:db.date.a --> | <!-- slot:db.date.b --> |
-| 执行计划 | <!-- slot:db.explain.a --> | <!-- slot:db.explain.b --> |
+| 指标 | 健康 | 有问题 | 动作 |
+| --- | --- | --- | --- |
+| `type` / 访问方式 | `const` / `eq_ref` / `ref` / `range` | `ALL` / `index` 全扫 | 补索引或改写条件 |
+| `key` | 命中预期索引 | `NULL` | 查 where / join 列与顺序 |
+| `rows` | 与预估返回量同量级 | 数量级偏差 | 更新统计信息或改写 |
+| `Extra` | `Using index` / `Using where` | `Using filesort` / `Using temporary` | 排序字段进索引；拆子查询 |
+
+- 执行计划是**估算**，不替代实测；关键查询在预发用真实参数跑一次
+- 一次只看一条 SQL；多表 join 逐个表看访问方式
+- 深分页、批量写入、报表聚合必须单独评估，不能只看单表索引
+
+## 4. 索引判据
+
+- **最左前缀**：组合索引 `(a,b,c)` 只能从 `a` 开始用；where 里跳过 `a` 就等于没用
+- **选择性**：不重复值 / 总行数；低于 10% 通常不值得单独建索引（先看数据分布）
+- **覆盖索引**：查询列都在索引里可避免回表；只读接口优先考虑
+- **冗余**：已有 `(a,b)` 时不再建 `(a)`；同一列上的单列索引要定期清理
+- **写入成本**：每个索引都拖慢写入；新增索引要说明收益，删除索引要走评审
+- **大表变更**：加索引 / 改结构用 online 或并发方式：`<!-- slot:db.online.ddl -->`
+
+## 5. 方言差异（默认值，按项目裁剪）
+
+| 项 | MySQL | Oracle | SQL Server | PostgreSQL |
+| --- | --- | --- | --- | --- |
+| 分页 | `LIMIT/OFFSET` | `FETCH FIRST` / `ROWNUM` | `OFFSET ... FETCH` | `LIMIT/OFFSET` |
+| 空字符串 | `''` 与 `NULL` 不同 | `''` 即 `NULL` | `''` 与 `NULL` 不同 | `''` 与 `NULL` 不同 |
+| 当前时间 | `NOW()` | `SYSDATE` | `GETDATE()` | `now()` |
+| 执行计划 | `EXPLAIN` | `EXPLAIN PLAN` | `SET SHOWPLAN` | `EXPLAIN (ANALYZE)` |
+| 批量写入 | 多值 `INSERT` | `INSERT ALL` | 表值参数 | `COPY` / 多值 |
 
 **禁止**把一处方言的 SQL 直接复用到另一数据源。
+本项目数据源与版本：`<!-- slot:db.sources -->`
 
-## 4. 与 slow-sql 的分工
+## 6. 大表、批量与事务
 
-- 事前（改代码时）→ 本规范 + 本技能
+- 单批上限建议 500–1000 行，按主键分段，可断点重跑
+- 批量失败要能定位到具体批次；禁止整批吞异常
+- 避免长事务：循环内不调用远程服务、不 sleep
+- 大表 DDL 要提前说明锁表时间与执行窗口，并准备回滚
+- 深分页改游标 / 延迟关联；报表类查询考虑离线表
+
+## 7. 结论模板（写进 `summary.md` 的 `sql_review:`）
+
+```
+<表名> · 预估 <行数> · 访问路径 <索引名 / 全表> · 结论 <通过 / 已改写 / 待 DBA 评审>
+```
+
+示例：`t_order · 预估 12 万行 · idx_user_status(user_id,status) · 通过`
+
+## 8. 与 slow-sql 的分工
+
+- 事前（改代码时）→ 本规范 + 技能 `biz-dev/14-sql-review`
 - 事后（已变慢）→ `trouble-shooting/01-slow-sql`：日志拿完整 SQL → 执行计划 → 索引
 
 ## 证据锚点
