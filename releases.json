@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.27.0",
+    "title": "(CI 反序审计 / 自检数字断言)",
+    "body": [
+      "- 审计：新增 scripts/audit-order.ps1，对提交区间检查「源码提交前是否已有",
+      "  该特性 summary」；合并提交跳过，提交信息含 [L0] 显式豁免，",
+      "  无特性指针时 SKIP；CI 接入示例见 .github/workflows/verify.yml",
+      "- 自检：verify-package 增加 README 契约数断言，加契约却不改文档会直接 FAIL",
+      "- 安装：audit-order.ps1 加入必需文件清单，升级时随新脚本补齐",
+      "- 测试：test-audit-order.ps1 覆盖反序拦截、先文档后代码、同提交混排、",
+      "  [L0]、_small.md、无特性指针与缺少 base 七个场景"
+    ]
+  },
+  {
     "version": "1.26.0",
     "title": "(归因门禁 / 升级安全 / 度量闭环)",
     "body": [
