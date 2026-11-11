@@ -15,6 +15,8 @@
     4. structure  required files exist; must-not-exist files are absent
     5. contracts  the same rule is not written differently in two places
                   (patterns and forbidden phrases live in tools/package-contract.json)
+    5b. docs      counts quoted in the READMEs, the quality table and the HTML
+                  page still match the files on disk
     6. smoke      install the hooks into a temp copy, run stage 4, uninstall again
                   (skipped by -Fast; the pre-commit hook uses -Fast)
 
@@ -217,6 +219,119 @@ if ($contract) {
         }
     }
     if ($contractBad -eq 0) { Add-Result 'contract' 'PASS' "$contractN rule/script/doc contract(s) hold" }
+}
+
+# ---------------------------------------------------------------- 5b docs
+# Counts quoted in README.md, README.en.md, the quality table and the HTML
+# page are derived from files on disk. Updating them by hand is what let
+# "21 .ps1" and "26 contracts" survive several releases, so assert them.
+# Non-ASCII file names and phrases are built from code points: this script must
+# stay pure ASCII for PS 5.1.
+$docsBad = 0
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$ps1N = $scriptFiles.Count
+$contractTotal = if ($contract) { @($contract.contracts).Count } else { 0 }
+# Chinese phrases used by the assertions below, built from code points.
+$tiao = [string][char]0x6761
+$kuaWenJian = -join ([char]0x8DE8, [char]0x6587, [char]0x4EF6)
+$qiYue = -join ([char]0x5951, [char]0x7EA6)
+
+foreach ($doc in @('README.md', 'README.en.md')) {
+    $docPath = Join-Path $repoRoot $doc
+    if (-not (Test-Path -LiteralPath $docPath)) { continue }
+    $docText = Get-Content -LiteralPath $docPath -Raw -Encoding UTF8
+    if ($docText -notmatch ('(?<![\d]){0} \.ps1 file\(s\) parse' -f $ps1N)) {
+        Add-Result 'docs' 'FAIL' "$doc quotes a stale .ps1 count; expected '$ps1N .ps1 file(s) parse'"
+        $docsBad++
+    }
+    if ($contractTotal -gt 0) {
+        foreach ($m in [regex]::Matches($docText, '(\d+)\s+(?:rule/script/doc contract|cross-file contracts)')) {
+            if ([int]$m.Groups[1].Value -ne $contractTotal) {
+                Add-Result 'docs' 'FAIL' "$doc says '$($m.Value)' but the package has $contractTotal contracts"
+                $docsBad++
+            }
+        }
+        # Chinese wording for the count, built from the code points above.
+        $cnPattern = '(\d+)\s*' + $tiao + '(' + $kuaWenJian + ')?' + $qiYue
+        foreach ($m in [regex]::Matches($docText, $cnPattern)) {
+            if ([int]$m.Groups[1].Value -ne $contractTotal) {
+                Add-Result 'docs' 'FAIL' "$doc says '$($m.Value)' but the package has $contractTotal contracts"
+                $docsBad++
+            }
+        }
+    }
+}
+
+# Quality table: skill totals plus one entry per shipped gate script.
+$qgName = (-join ([char]0x8D28, [char]0x91CF, [char]0x5206, [char]0x7EA7)) + '.md'
+$qgPath = Join-Path (Join-Path $repoRoot 'references') $qgName
+if (Test-Path -LiteralPath $qgPath) {
+    $qgText = Get-Content -LiteralPath $qgPath -Raw -Encoding UTF8
+    $skillFiles = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'templates\.harness\skills') -Recurse -Filter 'SKILL.md' -File -Force)
+    $skillLines = 0
+    foreach ($sf in $skillFiles) { $skillLines += ([System.IO.File]::ReadAllLines($sf.FullName)).Count }
+    $ge = [string][char]0x4E2A
+    $gong = [string][char]0x5171
+    $hang = [string][char]0x884C
+    $mid = [string][char]0x00B7
+    $expect = "$($skillFiles.Count) $ge $mid $gong $skillLines $hang"
+    if ($qgText -notmatch [regex]::Escape($expect)) {
+        Add-Result 'docs' 'FAIL' "references\$qgName quotes stale skill totals; expected '$expect'"
+        $docsBad++
+    }
+    foreach ($sf in @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'templates\scripts') -File -Force)) {
+        if ($sf.Extension -notin @('.ps1', '.py')) { continue }
+        $base = [System.IO.Path]::GetFileNameWithoutExtension($sf.Name)
+        if ($qgText -notmatch [regex]::Escape('`scripts/' + $base)) {
+            Add-Result 'docs' 'FAIL' "references\$qgName has no row for scripts\$($sf.Name)"
+            $docsBad++
+        }
+    }
+}
+
+# HTML page: every version string must be the current VERSION.
+$htmlPath = Join-Path (Join-Path $repoRoot 'docs') 'usage-and-mechanism.html'
+if (Test-Path -LiteralPath $htmlPath) {
+    $verNow = ''
+    if (Test-Path -LiteralPath $verPath) {
+        $first = @([System.IO.File]::ReadAllLines($verPath, [System.Text.Encoding]::UTF8) | Select-Object -First 1)[0]
+        if ($first -match 'VERSION\s+(\d+\.\d+\.\d+)') { $verNow = $matches[1] }
+    }
+    if ($verNow) {
+        $html = Get-Content -LiteralPath $htmlPath -Raw -Encoding UTF8
+        $versionHits = @([regex]::Matches($html, 'v(\d+\.\d+\.\d+)'))
+        if ($versionHits.Count -eq 0) {
+            Add-Result 'docs' 'FAIL' 'docs\usage-and-mechanism.html has no version marker'
+            $docsBad++
+        }
+        foreach ($h in $versionHits) {
+            if ($h.Groups[1].Value -ne $verNow) {
+                Add-Result 'docs' 'FAIL' "docs\usage-and-mechanism.html says $($h.Value); expected v$verNow"
+                $docsBad++
+                break
+            }
+        }
+        if ($contractTotal -gt 0) {
+            # The hero chip "<b>52</b> ... " quotes the contract count; the version
+            # check alone let a stale "26" survive there.
+            $chipPattern = '<b>(\d+)</b>\s*' + $tiao + $kuaWenJian + $qiYue
+            $chips = @([regex]::Matches($html, $chipPattern))
+            if ($chips.Count -eq 0) {
+                Add-Result 'docs' 'FAIL' 'docs\usage-and-mechanism.html has no contract-count chip'
+                $docsBad++
+            }
+            foreach ($c in $chips) {
+                if ([int]$c.Groups[1].Value -ne $contractTotal) {
+                    Add-Result 'docs' 'FAIL' "docs\usage-and-mechanism.html chip says $($c.Groups[1].Value) contracts; expected $contractTotal"
+                    $docsBad++
+                }
+            }
+        }
+    }
+}
+
+if ($docsBad -eq 0) {
+    Add-Result 'docs' 'PASS' 'README counts, reference numbers and page version match the files'
 }
 
 # --------------------------------------------------------------- 6 smoke

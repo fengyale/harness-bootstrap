@@ -5,6 +5,8 @@
   "requiredFiles": [
     "SKILL.md",
     "README.md",
+    "README.en.md",
+    "docs/usage-and-mechanism.html",
     "LICENSE",
     "CONTRIBUTING.md",
     "tests/run-all.ps1",

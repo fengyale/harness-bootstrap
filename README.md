@@ -38,13 +38,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      21 .ps1 file(s) parse
+[PASS] parse      23 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] contract   52 rule/script/doc contract(s) hold
-[PASS] smoke      install -> stage 4 -> unfilled summary rejected -> uninstall, in a temp copy
+[PASS] docs       README counts, reference numbers and page version match the files
+[PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
@@ -57,7 +58,7 @@ package gate: OPEN
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-三套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史。
+四套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计。
 
 ## 装到项目
 

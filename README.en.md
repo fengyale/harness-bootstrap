@@ -38,13 +38,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      21 .ps1 file(s) parse
+[PASS] parse      23 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] contract   52 rule/script/doc contract(s) hold
-[PASS] smoke      install -> stage 4 -> unfilled summary rejected -> uninstall, in a temp copy
+[PASS] docs       README counts, reference numbers and page version match the files
+[PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
@@ -57,7 +58,7 @@ Run the behavioural tests:
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-Three suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking base fields only, three hooks installed and removed, A3+ spoof rejected, and upgrade replacing machinery while keeping history.
+Four suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking base fields only, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, and the commit-range summary-order audit.
 
 ## Install
 
@@ -169,7 +170,7 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
 - A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 26 cross-file contracts and behavioural tests.
+- A template pack does not check itself; this repository has its own pre-commit, 52 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 
