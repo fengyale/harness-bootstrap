@@ -1,5 +1,28 @@
 [
   {
+    "version": "1.26.0",
+    "title": "(归因门禁 / 升级安全 / 度量闭环)",
+    "body": [
+      "- 门禁：源码提交必须能归因到记录——feature/fix 分支或 HARNESS_TASK 下，",
+      "  HEAD 需已有该特性 summary，或同提交带 summary / _small.md 行；",
+      "  L0 与一次性导入用 HARNESS_ALLOW_NO_RECORD=1 显式放行",
+      "- 门禁：新增 summary 必须单独提交；replay（merge/squash/cherry-pick/rebase）",
+      "  豁免并校验确实带记录；amend 后置审计写入 gate.jsonl；",
+      "  verify-harness / stage-gate 对旧 hook 判 FAIL 并提示重装",
+      "- 升级：-UpdateSkills 只替换仍含 slot 的未编译技能，已编译技能保留；",
+      "  新增 -ForceSkills 显式重置（会留下骨架，需重新编译后验证）；",
+      "  技能索引视为项目资产，-ForceSkills 也不覆盖",
+      "- 升级：_template 作为包资产自动更新并备份；rules/wiki/modules 差异改为",
+      "  MANUAL；AGENTS.md 合并修复任务行 / SQL 行 / 归因行的顺序与幂等，",
+      "  保持原文件行尾；-SkipHooks 时 verify 不再因旧 hook 失败",
+      "- 规则：新增缓存与一致性、消息与异步、数据迁移与回滚三份横向规则；",
+      "  SQL 评审规范补强；核心技能同步（骨架 + 安装时编译口径）",
+      "- metrics：统计 summary_order 事件，文本 / JSON / 判定均可见",
+      "- 文档：契约数 26 → 50 并加自动断言；HTML 更新到 v1.25.0；案例去掉",
+      "  excerpt 技能清单括注"
+    ]
+  },
+  {
     "version": "1.25.0",
     "title": "(L0/L1 轻量路径 / lessons 索引 / 升级备份清理)",
     "body": [
