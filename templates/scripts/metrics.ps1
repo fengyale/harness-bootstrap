@@ -360,6 +360,7 @@ function Get-WindowStats {
     $blocked = 0
     $commits = 0
     $bypass = 0
+    $orderAudits = 0
     foreach ($e in $Window.Events) {
         if ($e.Event -eq 'scan') {
             $scans++
@@ -369,6 +370,10 @@ function Get-WindowStats {
             # scanned=0 means no passing scan preceded this commit (e.g. --no-verify);
             # missing field is unknown, not a bypass
             if ($e.Scanned -eq '0') { $bypass++ }
+        } elseif ($e.Event -eq 'summary_order') {
+            # post-commit found a commit that bundled a new summary with code
+            # (usually via --amend); it cannot un-commit, so it reports here.
+            $orderAudits++
         }
     }
     $bypassRate = if ($commits -gt 0) { [math]::Round($bypass * 100.0 / $commits, 1) } else { $null }
@@ -388,6 +393,7 @@ function Get-WindowStats {
         Blocked = $blocked
         Bypass = $bypass
         BypassRate = $bypassRate
+        OrderAudits = $orderAudits
     }
 }
 
@@ -675,6 +681,9 @@ if (-not (Test-Path -LiteralPath $logPath)) {
     } else {
         $verdict += "bypass rate = $($stats.BypassRate)% (ok)"
     }
+    if ($stats.OrderAudits -gt 0) {
+        $verdict += "$($stats.OrderAudits) summary-order audit event(s): a commit bundled a new summary with code (usually amended); split it before the next release"
+    }
 }
 
 if ($Json) {
@@ -690,6 +699,7 @@ if ($Json) {
         blockedCommits = $stats.Blocked
         bypassCommits = $stats.Bypass
         bypassRate = $stats.BypassRate
+        summaryOrderAudits = $stats.OrderAudits
         skillLoadRate = $skillRate
         skills = $skillCounts
         skillAges = @($installed | ForEach-Object {
@@ -734,8 +744,8 @@ if (-not $Quiet) {
     Write-Host ("tasks: {0}   with fields: {1}   total corrections: {2}   avg: {3}" -f `
         $tasks.Count, $withCorr.Count, $totalCorr, $avgCorr)
     Write-Host ("impl-level corrections: total {0}   avg {1} (target 0)" -f $totalImpl, $avgImpl)
-    Write-Host ("scans: {0}   commits: {1}   blocked: {2}   bypass: {3} ({4}%)" -f `
-        $stats.Scans, $stats.Commits, $stats.Blocked, $stats.Bypass, $(if ($null -eq $stats.BypassRate) { 'n/a' } else { $stats.BypassRate }))
+    Write-Host ("scans: {0}   commits: {1}   blocked: {2}   bypass: {3} ({4}%)   summary-order audits: {5}" -f `
+        $stats.Scans, $stats.Commits, $stats.Blocked, $stats.Bypass, $(if ($null -eq $stats.BypassRate) { 'n/a' } else { $stats.BypassRate }), $stats.OrderAudits)
     Write-Host ("skill load rate: {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
     if ($Compare -and $null -ne $prevStats) {
         $prevRate = if ($null -eq $prevStats.SkillRate) { 'n/a' } else { "$($prevStats.SkillRate)%" }

@@ -27,7 +27,7 @@
 
 ## 二、冷启动:只装 9 个技能,不是 25 个
 
-落地后的技能清单(`excerpt/` 里能看到):
+落地后的技能清单:
 
 ```
 main-dev/       request-analysis · coding-skill · expert-reviewer · soap-endpoint-verify

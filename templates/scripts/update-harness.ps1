@@ -761,7 +761,11 @@ if (-not $SkipVerify) {
         $verifyRan = $true
         Write-Host ''
         Write-Host 'verify-harness ...' -ForegroundColor Cyan
-        & $PS -NoProfile -ExecutionPolicy Bypass -File $verify -Root $rootPath
+        $verifyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $verify, '-Root', $rootPath)
+        # -SkipHooks means the old hook stays; do not fail on a check the user
+        # opted out of. verify-harness reports a WARN instead.
+        if ($SkipHooks) { $verifyArgs += '-IgnoreHooks' }
+        & $PS @verifyArgs
         if ($LASTEXITCODE -ne 0) {
             Write-Host 'verify-harness reported failures' -ForegroundColor Red
             $failed++

@@ -43,13 +43,13 @@ Output:
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   26 rule/script/doc contract(s) hold
+[PASS] contract   50 rule/script/doc contract(s) hold
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 26 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 50 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
 
 Run the behavioural tests:
 

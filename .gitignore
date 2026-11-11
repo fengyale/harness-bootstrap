@@ -9,3 +9,8 @@ baseline/
 
 # local working notes (not part of the package)
 TODO-*.md
+
+# local tool outputs (scratch; never part of the package)
+.drawio-tmp/
+.trae-html-share-packages/
+@{_note=*

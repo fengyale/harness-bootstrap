@@ -38,7 +38,8 @@
 param(
     [string]$Root = (Get-Location).Path,
     [int]$MaxAgentsLines = 150,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$IgnoreHooks
 )
 
 $ErrorActionPreference = 'Stop'
@@ -311,7 +312,11 @@ if (-not $hooksDir) { $hooksDir = Join-Path $rootPath '.git\hooks' }
 
 $hookPath  = Join-Path $hooksDir 'pre-commit'
 $mergePath = Join-Path $hooksDir 'pre-merge-commit'
-if (-not $gitDir) {
+if ($IgnoreHooks) {
+    # update-harness -SkipHooks deliberately leaves the old hook in place; the
+    # upgrade must not fail on a check the user explicitly opted out of.
+    Add-Result 'gate' 'WARN' 'hook check skipped (-IgnoreHooks; reinstall with install-git-hooks.ps1)'
+} elseif (-not $gitDir) {
     Add-Result 'gate' 'FAIL' 'no git repository: the gate cannot exist (run git init, then install-git-hooks)'
 } elseif (Test-Path -LiteralPath $hookPath) {
     $hookBody = Get-Content -LiteralPath $hookPath -Raw -Encoding UTF8

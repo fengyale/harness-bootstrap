@@ -146,7 +146,7 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skil
     -Value @('# installed skill', '', 'body', '<!-- upgraded-skill -->') -Encoding UTF8
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\compiled-skill" | Out-Null
 Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\compiled-skill\SKILL.md" `
-    -Value @('# compiled skill', '', 'body', '<!-- upgraded-compiled -->') -Encoding UTF8
+    -Value @('# compiled skill', '', '<!-- slot:data.access -->', 'body', '<!-- upgraded-compiled -->') -Encoding UTF8
 # The change template is package-owned: a newer one must reach the project.
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\changes\_template" | Out-Null
 Copy-Item -LiteralPath "$pkg\templates\.harness\changes\_template\summary.md" `
@@ -289,6 +289,9 @@ Write-Host '=== apply with -ForceSkills ===' -ForegroundColor Cyan
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -UpdateSkills -ForceSkills -SkipHooks -SkipVerify 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'FORCE SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
 Check 'compiled skill replaced with -ForceSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -match 'upgraded-compiled')
+# The reset must leave slot markers behind: that is why verify-grounding will
+# fail until the skills are recompiled (the WARN and docs say the same).
+Check '-ForceSkills leaves the skeleton uncompiled' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -match '<!--\s*slot:')
 $agentsIdem = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) |
     Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })
 Check 'AGENTS record line stays single after repeated upgrades' ($agentsIdem.Count -eq 1)
