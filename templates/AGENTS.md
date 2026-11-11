@@ -117,7 +117,7 @@
 | `.harness/lessons.md` | 教训索引（`metrics.ps1` 自动刷新、团队共享）；写 `lesson_id` 前先查表 |
 | `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；晋升后追加 id，`metrics` 不再重复提醒 |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
-| `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-UpdateSkills` 同时替换已装技能正文 |
+| `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-UpdateSkills` 只替换未编译技能，已编译技能保留（`-ForceSkills` 强制） |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
 | `scripts/check-summary.ps1` | `summary.md` 字段校验：pre-commit 只查基础字段，stage-gate 阶段 10 查收尾字段 |
 

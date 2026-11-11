@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <新包根目录> -Apply
 ```
 
-替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。`AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键（`-NoMergeKnown` 退回只打印差异）；红线汇总只替换 R5/R6 的脚本检查格。旧 L1 summary 目录移到升级备份并随验证删除（`-KeepL1` 保留），L2/L3 历史不动。已装技能正文默认只提示差异，确认要同步时加 `-UpdateSkills`。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。`AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键（`-NoMergeKnown` 退回只打印差异）；红线汇总只替换 R5/R6 的脚本检查格。旧 L1 summary 目录移到升级备份并随验证删除（`-KeepL1` 保留），L2/L3 历史不动。已装技能正文默认只提示差异；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本，已编译技能保持 MANUAL（`-ForceSkills` 才强制覆盖，但它会把技能重置为含 slot 的骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤建议配合 `-SkipVerify`），技能索引与 `_template` 的处理也各自按项目资产/包资产区分。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
 ## 装完之后
 

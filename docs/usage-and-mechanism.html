@@ -687,7 +687,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
           <div class="step-num">5</div>
           <div>
             <h3>升级已有项目（不是重装）</h3>
-            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。已装技能正文默认只提示差异，确认要同步时加 <code>-UpdateSkills</code>。完整规则见第 6 节。</p>
+            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。<code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译技能，已编译技能保持 MANUAL（<code>-ForceSkills</code> 才强制覆盖；它会把技能重置为骨架，需重新编译后再跑 <code>verify-harness.ps1</code>，重置步骤用 <code>-SkipVerify</code>）。完整规则见第 6 节。</p>
             <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt;
 # 确认差异后
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath &lt;新包根目录&gt; -Apply</code></pre>
@@ -1044,7 +1044,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
             <tr><td><code>AGENTS.md</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>永不覆盖，按新包 diff 手工加行/段落</td></tr>
             <tr><td><code>.trae\agents</code> / <code>.claude\agents</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>你改过的评审智能体不覆盖</td></tr>
             <tr><td><code>.gitignore</code></td><td>缺失 ADD；同时有 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code> 则 SAME；否则 MANUAL</td><td>不重写，手工补行</td></tr>
-            <tr><td><code>.harness\skills</code></td><td>README 缺失 ADD；已装技能不同 → MANUAL，加 <code>-UpdateSkills</code> 才 UPDATE</td><td>默认保留；未安装的模板技能不会新增</td></tr>
+            <tr><td><code>.harness\skills</code></td><td>README 是项目索引，不同 → MANUAL；已装技能不同 → MANUAL，<code>-UpdateSkills</code> 只替换含 <code>slot:</code> 的未编译副本，<code>-ForceSkills</code> 才强制覆盖</td><td>默认保留；未安装的模板技能不会新增；已编译事实不被覆盖</td></tr>
             <tr><td><code>.trae\skills\harness-bootstrap</code></td><td>不在计划</td><td>手动替换技能包副本</td></tr>
             <tr><td>git hooks</td><td>重装</td><td>旧 hook 自动备份为 <code>.bak-harness</code></td></tr>
             <tr><td><code>.harness\.installed-version</code></td><td>写入</td><td>下一次升级据此识别旧版本</td></tr>
@@ -1082,7 +1082,8 @@ powershell -NoProfile -ExecutionPolicy Bypass `
       <div class="callout">
         <strong>当前版本的行为：</strong>
         没有 <code>-DryRun</code> 参数，默认就是 Dry-Run；<code>-Apply</code> 执行。
-        已装技能正文默认只报 MANUAL，确认要同步时加 <code>-UpdateSkills</code>；
+        已装技能正文默认只报 MANUAL；<code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译副本，
+        已编译技能需 <code>-ForceSkills</code> 才覆盖；
         未安装的模板技能不会新增，安装时 3–5 个技能的策略保持不变。
         <code>.gitignore</code> 需要同时包含 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code>，缺哪个就手工补。
         <code>-SkipHooks</code> / <code>-SkipVerify</code> 仅排障时使用；脚本没有降级保护，不要指向旧包。

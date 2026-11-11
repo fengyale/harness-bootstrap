@@ -275,6 +275,18 @@
       "why": "流程规范必须写明 feature 分支 / HARNESS_TASK 的归因方式与逃生口，否则 agent 被拦后不知道怎么办。"
     },
     {
+      "id": "upgrade-skill-slot-guard",
+      "file": "templates/scripts/update-harness.ps1",
+      "patterns": ["ForceSkills", "no slot markers"],
+      "why": "编译后的技能没有 slot 标记；-UpdateSkills 整份覆盖会丢项目事实并使 verify-grounding 失败，必须按 slot 判定并降级 MANUAL。"
+    },
+    {
+      "id": "upgrade-template-update",
+      "file": "templates/scripts/update-harness.ps1",
+      "pattern": "change template replaced",
+      "why": "summary 模板是包资产、不含项目事实；只缺失才加会让老项目永远停在旧模板，与新门禁口径不一致。"
+    },
+    {
       "id": "core-skill-stop-conditions",
       "file": "templates/.harness/skills/main-dev/request-analysis/SKILL.md",
       "patterns": ["### 定档判据", "### 什么时候必须停下来问"],

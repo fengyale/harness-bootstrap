@@ -9,16 +9,22 @@
   WHAT IT DOES (prints a plan unless -Apply is given)
     scripts/*.ps1, *.py    ADD or UPDATE (the old file is backed up first)
     scripts/*.json         ADD if missing; otherwise MANUAL (project config)
-    .harness/rules         ADD missing only (project-owned); the red-line summary
-                           file also MERGEs known R5/R6 rows, other rows are kept
-    .harness/wiki          ADD missing only
-    .harness/modules       ADD missing only
-    .harness/skills        README missing -> ADD; installed skill files -> MANUAL,
-                           or UPDATE when -UpdateSkills is given. Uninstalled
+    .harness/rules         ADD missing only (project-owned); a differing file is
+                           MANUAL, except the red-line summary whose R5/R6 check
+                           cells MERGE while project rows are kept
+    .harness/wiki          ADD missing only; differing files are MANUAL
+    .harness/modules       ADD missing only; differing files are MANUAL
+    .harness/skills        README differing -> MANUAL (project-owned index);
+                           installed skill bodies -> MANUAL, or UPDATE with
+                           -UpdateSkills only when the installed copy still has
+                           slot markers (uncompiled). A compiled copy (no slots)
+                           stays MANUAL; -ForceSkills overrides. Uninstalled
                            template skills are never added (the install keeps 3-5).
-    .harness/changes       _template and _small.md are added when missing; L2/L3
-                           history is kept; old L1 summaries are COMPACTed to the
-                           upgrade backup (deleted with it after verification)
+    .harness/changes       _template is package-owned: ADD when missing, UPDATE
+                           (backup first) when it differs; _small.md is added
+                           when missing; L2/L3 history is kept; old L1 summaries
+                           are COMPACTed to the upgrade backup (deleted with it
+                           after verification)
     AGENTS.md              known framework lines MERGE; other lines are kept
     harness-required.json  known keys MERGE (required / requiredAnyOf / sqlGate)
     platform agents        ADD missing, MANUAL when different
@@ -41,6 +47,7 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
       -PackagePath D:\path\to\new\harness-bootstrap -Apply
     ... -Apply -UpdateSkills
+    ... -Apply -UpdateSkills -ForceSkills   (also replace compiled skills)
     ... -Apply -SkipHooks -SkipVerify
     ... -Apply -KeepBackup
     ... -Apply -PruneBackups
@@ -61,6 +68,7 @@ param(
     [string]$Root = (Get-Location).Path,
     [switch]$Apply,
     [switch]$UpdateSkills,
+    [switch]$ForceSkills,
     [switch]$SkipHooks,
     [switch]$SkipVerify,
     [switch]$KeepBackup,
@@ -217,10 +225,16 @@ function Merge-AgentsKnown {
     $srcR6 = @($srcLines | Where-Object { $_ -match '^\| R6 ' })[0]
     $srcSummary = @($srcLines | Where-Object { $_ -match 'check-summary\.ps1' -and $_ -match '_small\.md' -and $_ -match 'Stage initial' })[0]
     $srcSql = @($srcLines | Where-Object { $_ -match 'sql_review' -and $_ -match '\.harness/rules/SQL' })[0]
-    $srcTask = @($srcLines | Where-Object { $_ -match 'lesson_id' -and $_ -match 'pre-commit' })[0]
+    $srcTask = @($srcLines | Where-Object { $_ -match 'lesson_id' -and $_ -match 'pre-commit' -and $_ -match 'check-summary\.ps1' })[0]
+    # The record-association discipline line carries this ASCII anchor; matching
+    # it keeps the script ASCII while new installs get the new gate rule.
+    $srcRecord = @($srcLines | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })[0]
 
     $out = @()
     $changed = $false
+    # Pre-scan avoids a duplicate: an old file may already carry the record line
+    # below the task line, and the task branch would otherwise insert it again.
+    $recordSeen = (@($dstLines | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' }).Count -gt 0)
     foreach ($line in $dstLines) {
         if ($srcRed -and $line -match '^\|' -and $line -match 'red-line-scan\.ps1' -and $line -match '-Files') {
             if ($line -ne $srcRed) { $changed = $true }
@@ -240,18 +254,39 @@ function Merge-AgentsKnown {
             if ($line -ne $srcSummary) { $changed = $true }
             $out += $srcSummary; continue
         }
-        if ($srcSql -and $line -match 'sql_review' -and $line -match 'pre-commit') {
+        if ($srcRecord -and $line -match 'HARNESS_ALLOW_NO_RECORD') {
+            if ($line -ne $srcRecord) { $changed = $true }
+            $out += $srcRecord; $recordSeen = $true; continue
+        }
+        # Task row before SQL row: the summary-discipline line also mentions
+        # sql_review and pre-commit, so a broader SQL match would swallow it.
+        # All three anchors are needed: the file-index row for lessons.md also
+        # mentions lesson_id, and matching that would inject the rule into a table.
+        if ($srcTask -and $line -match 'lesson_id' -and $line -match 'pre-commit' -and $line -match 'check-summary\.ps1') {
+            if ($line -ne $srcTask) { $changed = $true }
+            $out += $srcTask
+            # Older AGENTS.md files end the discipline list at this line; append
+            # the new record-association rule right after it once.
+            if ($srcRecord -and -not $recordSeen) {
+                $out += $srcRecord; $recordSeen = $true; $changed = $true
+            }
+            continue
+        }
+        if ($srcSql -and $line -match 'sql_review:') {
             if ($line -ne $srcSql) { $changed = $true }
             $out += $srcSql; continue
         }
-        if ($srcTask -and $line -match 'lesson_id' -and $line -match 'pre-commit') {
-            if ($line -ne $srcTask) { $changed = $true }
-            $out += $srcTask; continue
-        }
         $out += $line
     }
+    if ($srcRecord -and -not $recordSeen) {
+        Write-Host '[WARN] AGENTS.md has no task-summary anchor (lesson_id + pre-commit + check-summary.ps1); add the record-association line by hand' -ForegroundColor Yellow
+    }
     if ($changed) {
-        [System.IO.File]::WriteAllText($Dst, (($out -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+        # Keep the project's line ending: rewriting an LF file as CRLF turns a
+        # one-line merge into a whole-file diff.
+        $raw = [System.IO.File]::ReadAllText($Dst, [System.Text.Encoding]::UTF8)
+        $nl = if ($raw -match "`r`n") { "`r`n" } else { "`n" }
+        [System.IO.File]::WriteAllText($Dst, (($out -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
     }
     return $changed
 }
@@ -367,7 +402,7 @@ foreach ($sub in @('rules', 'wiki', 'modules')) {
                   (Test-RedlineTable $dst)) {
             Add-Plan 'MERGE' $rel $src 'known red-line rows merged; other content kept'
         } else {
-            Add-Plan 'SKIP' $rel $src 'project-owned; kept as-is'
+            Add-Plan 'MANUAL' $rel $src 'project-owned file differs; compare and merge by hand'
         }
     }
 }
@@ -386,10 +421,10 @@ if (Test-Path -LiteralPath $srcSkills) {
             Add-Plan 'ADD' $readmeRel $readmeSrc 'skill index missing'
         } elseif ((Get-Hash $readmeSrc) -eq (Get-Hash $readmeDst)) {
             Add-Plan 'SAME' $readmeRel $readmeSrc ''
-        } elseif ($UpdateSkills) {
-            Add-Plan 'UPDATE' $readmeRel $readmeSrc 'skill index replaced (-UpdateSkills)'
         } else {
-            Add-Plan 'MANUAL' $readmeRel $readmeSrc 'installed skill index differs; re-run with -UpdateSkills to replace'
+            # The index lists what THIS project installed; replacing it with the
+            # full template list breaks AGENTS.md and verify-grounding.
+            Add-Plan 'MANUAL' $readmeRel $readmeSrc 'skill index is project-owned; merge by hand'
         }
     }
     # -Name avoids the short/long path mismatch noted above.
@@ -399,17 +434,38 @@ if (Test-Path -LiteralPath $srcSkills) {
         $rel = '.harness\skills\' + $relPath
         $dst = Join-Path $rootPath $rel
         if (-not (Test-Path -LiteralPath $dst)) { continue }
+        # Category indexes are project-owned like the top-level one: -ForceSkills
+        # must not replace a hand-maintained list with the template index.
+        if ((Split-Path -Leaf $relPath) -eq 'README.md') {
+            if ((Get-Hash $src) -eq (Get-Hash $dst)) {
+                Add-Plan 'SAME' $rel $src ''
+            } else {
+                Add-Plan 'MANUAL' $rel $src 'skill index is project-owned; merge by hand'
+            }
+            continue
+        }
         if ((Get-Hash $src) -eq (Get-Hash $dst)) {
             Add-Plan 'SAME' $rel $src ''
+        } elseif ($ForceSkills) {
+            Add-Plan 'UPDATE' $rel $src 'installed skill replaced (-ForceSkills)'
         } elseif ($UpdateSkills) {
-            Add-Plan 'UPDATE' $rel $src 'installed skill replaced (-UpdateSkills)'
+            # Slot markers exist only BEFORE compilation. A compiled skill has
+            # its slots replaced by project facts, so replacing it with the
+            # skeleton would destroy those facts and fail verify-grounding.
+            $dstText = [System.IO.File]::ReadAllText($dst, [System.Text.Encoding]::UTF8)
+            if ($dstText -match '<!--\s*slot:') {
+                Add-Plan 'UPDATE' $rel $src 'uncompiled skill replaced (-UpdateSkills)'
+            } else {
+                Add-Plan 'MANUAL' $rel $src 'installed skill has no slot markers (compiled or empty); review, or pass -ForceSkills'
+            }
         } else {
             Add-Plan 'MANUAL' $rel $src 'installed skill differs; review or re-run with -UpdateSkills'
         }
     }
 }
 
-# Only the change template is added; real change records are history.
+# The change template is package-owned: it carries no project facts, so a newer
+# template replaces the old one. Real change records are never touched.
 $srcTpl = Join-Path $templates '.harness\changes\_template'
 if (Test-Path -LiteralPath $srcTpl) {
     foreach ($relPath in Get-ChildItem -LiteralPath $srcTpl -Recurse -File -Force -Name) {
@@ -418,8 +474,10 @@ if (Test-Path -LiteralPath $srcTpl) {
         $dst = Join-Path $rootPath $rel
         if (-not (Test-Path -LiteralPath $dst)) {
             Add-Plan 'ADD' $rel $src 'missing change template'
+        } elseif ((Get-Hash $src) -eq (Get-Hash $dst)) {
+            Add-Plan 'SAME' $rel $src ''
         } else {
-            Add-Plan 'SKIP' $rel $src 'template exists; kept'
+            Add-Plan 'UPDATE' $rel $src 'change template replaced (old copy in backup); check stage-gate-rules.json summarySections'
         }
     }
 }
@@ -540,6 +598,11 @@ Write-Host "update harness: $rootPath" -ForegroundColor Cyan
 Write-Host "package:        $pkgPath"
 Write-Host "version:        $installedVersion -> $newVersion"
 Write-Host ("mode:           " + $(if ($Apply) { 'APPLY' } else { 'DRY-RUN (add -Apply to execute)' }))
+if ($ForceSkills) {
+    Write-Host '[WARN] -ForceSkills resets installed skills to skeletons (slots are empty again).' -ForegroundColor Yellow
+    Write-Host '       Recompile them after the reset, then run verify-harness.ps1 by hand; a verified run will fail until then.' -ForegroundColor Yellow
+    Write-Host '       For the reset step itself use -SkipVerify, otherwise the backup is kept and the version is not advanced.' -ForegroundColor Yellow
+}
 Write-Host ('-' * 64)
 
 $counts = @{ ADD = 0; UPDATE = 0; SAME = 0; SKIP = 0; MANUAL = 0; KEEP = 0; MERGE = 0; MOVE = 0; COMPACT = 0 }

@@ -63,6 +63,13 @@ $redlineLines = @([System.IO.File]::ReadAllLines($redline, [System.Text.Encoding
 $redlineLines += '| R9 | project-only | custom-check |'
 [System.IO.File]::WriteAllLines($redline, $redlineLines, (New-Object System.Text.UTF8Encoding($false)))
 
+# A second project-owned rule that differs from the package: the upgrade must
+# report it as MANUAL instead of silently keeping it.
+$otherRule = @(Get-ChildItem -LiteralPath "$proj\.harness\rules" -File |
+    Where-Object { $_.FullName -ne $redline })[0]
+Add-Content -LiteralPath $otherRule.FullName -Value 'project-only-rule-line' -Encoding UTF8
+$otherRuleRel = '.harness\rules\' + (Split-Path -Leaf $otherRule)
+
 # Same idea for AGENTS.md: a project keeps its own red-line names, while the
 # framework-owned check cell must be refreshed from the package.
 $agentsLines = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) | ForEach-Object {
@@ -71,6 +78,11 @@ $agentsLines = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.
     else { $_ }
 })
 [System.IO.File]::WriteAllLines("$proj\AGENTS.md", $agentsLines, (New-Object System.Text.UTF8Encoding($false)))
+# Simulate an older AGENTS.md: drop the record-association line so the merge
+# has to insert it exactly once.
+$agentsNoRecord = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'HARNESS_ALLOW_NO_RECORD' })
+[System.IO.File]::WriteAllLines("$proj\AGENTS.md", $agentsNoRecord, (New-Object System.Text.UTF8Encoding($false)))
 
 # One installed skill (the install keeps 3-5, not all 25 templates).
 # Create the fixture contents explicitly instead of copying a template file:
@@ -78,8 +90,14 @@ $agentsLines = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.
 # whether the template skill happens to exist in the CI workspace.
 New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\coding-skill" | Out-Null
 Set-Content -LiteralPath "$proj\.harness\skills\README.md" -Value '# skill index' -Encoding UTF8
+# Uncompiled copy: still carries a slot marker, so -UpdateSkills may replace it.
 Set-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" `
-    -Value @('# installed skill', '', 'body') -Encoding UTF8
+    -Value @('# installed skill', '', '<!-- slot:data.access -->', 'body') -Encoding UTF8
+# Compiled copy: slots were replaced by project facts. -UpdateSkills must not
+# overwrite it with the skeleton (that would lose the facts and fail grounding).
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\compiled-skill" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" `
+    -Value @('# compiled skill', '', 'Cache: RedisUtils') -Encoding UTF8
 
 # Remove the new ignore line so the MANUAL branch for .gitignore is exercised.
 # Use .NET UTF-8 explicitly: PS 5.1 Get-Content/Set-Content on a UTF-8 file
@@ -120,9 +138,21 @@ Copy-Item -LiteralPath "$pkg\templates\scripts\harness-required.json" -Destinati
 Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-scan.py" -Destination "$newPkg\templates\scripts\red-line-scan.py"
 Add-Content -LiteralPath "$newPkg\templates\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
 # An installed skill that differs must be MANUAL unless -UpdateSkills is given.
+# The uncompiled fixture keeps a slot marker; the compiled one has none.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills" | Out-Null
+Copy-Item -LiteralPath "$pkg\templates\.harness\skills\README.md" -Destination "$newPkg\templates\.harness\skills\README.md"
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\coding-skill" | Out-Null
 Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
     -Value @('# installed skill', '', 'body', '<!-- upgraded-skill -->') -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\compiled-skill" | Out-Null
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\compiled-skill\SKILL.md" `
+    -Value @('# compiled skill', '', 'body', '<!-- upgraded-compiled -->') -Encoding UTF8
+# The change template is package-owned: a newer one must reach the project.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\changes\_template" | Out-Null
+Copy-Item -LiteralPath "$pkg\templates\.harness\changes\_template\summary.md" `
+    -Destination "$newPkg\templates\.harness\changes\_template\summary.md"
+Add-Content -LiteralPath "$newPkg\templates\.harness\changes\_template\summary.md" `
+    -Value '<!-- template-upgrade-marker -->' -Encoding UTF8
 Copy-Item -LiteralPath "$pkg\templates\AGENTS.md" -Destination "$newPkg\templates\AGENTS.md"
 Add-Content -LiteralPath "$newPkg\templates\AGENTS.md" -Value '<!-- new template line -->' -Encoding UTF8
 # The package ships the red-line summary; its R5/R6 check cells are the source
@@ -163,6 +193,17 @@ Check 'dry-run marks .gitignore MANUAL'    (($dry -match '\[MANUAL\]\s+\.gitigno
 Check 'dry-run does not add uninstalled skills' ($dry -notmatch '\[ADD\s*\]\s+\.harness\\skills\\.*request-analysis')
 Check 'dry-run keeps changes history'      ($dry -match '\[KEEP\s*\]\s+\.harness\\changes')
 Check 'dry-run writes no version marker'   ((Get-Content -LiteralPath "$proj\.harness\.installed-version" -TotalCount 1) -eq '1.0.0')
+Check 'dry-run plans template UPDATE'      ($dry -match ('\[UPDATE\]\s+' + [regex]::Escape('.harness\changes\_template\summary.md')))
+Check 'dry-run marks project rule MANUAL'  ($dry -match ('\[MANUAL\]\s+' + [regex]::Escape($otherRuleRel)))
+
+Write-Host ''
+Write-Host '=== dry run with -UpdateSkills ===' -ForegroundColor Cyan
+$drySkills = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -UpdateSkills 2>&1 | Out-String
+Check 'dry-run: uncompiled skill UPDATE' ($drySkills -match '\[UPDATE\].*main-dev\\coding-skill\\SKILL\.md')
+Check 'dry-run: compiled skill MANUAL' ((($drySkills -match '\[MANUAL\].*main-dev\\compiled-skill\\SKILL\.md') -and ($drySkills -match 'no slot markers')))
+Check 'dry-run: skill index MANUAL' ($drySkills -match '\[MANUAL\].*\.harness\\skills\\README\.md')
+$dryForce = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -UpdateSkills -ForceSkills 2>&1 | Out-String
+Check 'dry-run warns that -ForceSkills resets skills' ($dryForce -match 'ForceSkills resets installed skills')
 
 # -------------------------------------------------------------------- apply
 Write-Host ''
@@ -180,6 +221,8 @@ Check 'project JSON untouched' ((Get-Content -LiteralPath "$proj\scripts\red-lin
 Check 'AGENTS.md untouched' ((Get-Content -LiteralPath "$proj\AGENTS.md" -Raw) -notmatch 'new template line')
 Check '.py scanner replaced' ((Select-String -LiteralPath "$proj\scripts\red-line-scan.py" -Pattern 'upgrade-test-marker' -Quiet))
 Check 'installed skill untouched by default' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -notmatch 'upgraded-skill')
+Check 'change template replaced' ((Get-Content -LiteralPath "$proj\.harness\changes\_template\summary.md" -Raw -Encoding UTF8) -match 'template-upgrade-marker')
+Check 'project rule untouched' ((Get-Content -LiteralPath $otherRule.FullName -Raw -Encoding UTF8) -match 'project-only-rule-line')
 
 # Known-row merge: only the R5/R6 check cell is framework-owned.
 $srcR5 = @([System.IO.File]::ReadAllLines((Join-Path $newPkg ('templates\' + $redlineRel)), [System.Text.Encoding]::UTF8) |
@@ -203,6 +246,17 @@ Check 'AGENTS R5 rule name kept' ($agentsR5 -match '^\| R5 \| project-agents-rul
 Check 'AGENTS R5 check merged'   ($agentsR5 -notmatch 'old-agents-check')
 Check 'AGENTS R6 rule name kept' ($agentsR6 -match '^\| R6 \| project-agents-log \|')
 Check 'AGENTS R6 check merged'   ($agentsR6 -notmatch 'old-agents-log-check')
+$agentsFinal = [System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8)
+$recordLines = @($agentsFinal | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })
+# The file-index row for lessons.md also mentions lesson_id; require the
+# discipline-line anchors so the table row is not counted as the task line.
+$taskLines = @($agentsFinal | Where-Object { $_ -match 'lesson_id' -and $_ -match 'pre-commit' -and $_ -match 'check-summary\.ps1' })
+$sqlLines = @($agentsFinal | Where-Object { $_ -match 'sql_review:' })
+Check 'AGENTS record line inserted once' ($recordLines.Count -eq 1)
+Check 'AGENTS task line kept once' ($taskLines.Count -eq 1)
+Check 'AGENTS SQL line kept once' ($sqlLines.Count -eq 1)
+$taskIdx = if ($taskLines.Count -gt 0) { [array]::IndexOf($agentsFinal, $taskLines[0]) } else { -1 }
+Check 'record line follows the task line' (($taskIdx -ge 0) -and ($taskIdx + 1 -lt $agentsFinal.Count) -and ($agentsFinal[$taskIdx + 1] -match 'HARNESS_ALLOW_NO_RECORD'))
 $ignoreAfter = [System.IO.File]::ReadAllText("$proj\.gitignore", [System.Text.Encoding]::UTF8)
 Check '.gitignore original lines preserved' ($ignoreAfter.StartsWith($ignoreBefore))
 Check '.gitignore upgrade line added'       ($ignoreAfter -match '(?m)^\.harness/upgrade/\s*$')
@@ -212,6 +266,7 @@ Check 'backup directory created' ($null -ne $backup)
 Check 'old stage-gate backed up' (Test-Path -LiteralPath (Join-Path $backup.FullName 'scripts\stage-gate.ps1'))
 Check 'old red-line file backed up' (@(Get-ChildItem -LiteralPath (Join-Path $backup.FullName '.harness\rules') -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -eq (Split-Path -Leaf $redline) }).Count -eq 1)
+Check 'old template backed up' (Test-Path -LiteralPath (Join-Path $backup.FullName '.harness\changes\_template\summary.md'))
 Check 'L1 summary compacted' ((Test-Path -LiteralPath (Join-Path $backup.FullName 'compact\l1-demo')) -and -not (Test-Path -LiteralPath "$proj\.harness\changes\l1-demo"))
 Check 'manifest written' (Test-Path -LiteralPath (Join-Path $backup.FullName 'manifest.txt'))
 
@@ -222,10 +277,21 @@ Write-Host '=== apply with -UpdateSkills ===' -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { Write-Host 'SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
 
 Check 'installed skill replaced with -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -match 'upgraded-skill')
+Check 'compiled skill untouched by -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -notmatch 'upgraded-compiled')
+Check 'skill index untouched by -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\README.md" -Raw) -match 'skill index')
 $skillBackup = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Recurse -File -Filter 'SKILL.md' |
     Where-Object { $_.FullName -match 'main-dev\\coding-skill' })
 Check 'old skill backed up' ($skillBackup.Count -gt 0)
 Check 'skip-verify prune kept old backups' (Test-Path -LiteralPath $backup.FullName)
+
+Write-Host ''
+Write-Host '=== apply with -ForceSkills ===' -ForegroundColor Cyan
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -UpdateSkills -ForceSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { Write-Host 'FORCE SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
+Check 'compiled skill replaced with -ForceSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -match 'upgraded-compiled')
+$agentsIdem = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })
+Check 'AGENTS record line stays single after repeated upgrades' ($agentsIdem.Count -eq 1)
 
 Write-Host ''
 Write-Host '=== apply with verification deletes the backup ===' -ForegroundColor Cyan

@@ -392,10 +392,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
 - `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate`），其余键保留，`-NoMergeKnown` 退回只打印差异
-- `.harness\rules|wiki|modules`：只补缺失文件；红线汇总（含 R5/R6 行）只替换这两行的脚本检查格，规则名和其余内容保留
-- `.harness\skills`：README 缺失才补；**已装技能正文**默认标 MANUAL，确认要同步时加 `-UpdateSkills` 才替换；未安装的模板技能不会补装
-- `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id），其余行保留；平台 agents 只报告差异
-- `.harness\changes|metrics`：L2/L3 历史**永不触碰**；旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除，`-KeepL1` 保留）；`_small.md` 缺失时才补模板；`lessons.md` / `lessons-promoted.txt` 从旧 `metrics\` 迁移一次
+- `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
+- `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本，已编译技能保持 MANUAL（`-ForceSkills` 才强制覆盖，但它会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
+- `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异
+- `.harness\changes|metrics`：L2/L3 历史**永不触碰**；旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除，`-KeepL1` 保留）；`_small.md` 缺失时才补模板；`_template` 视为包资产，有新版会替换并备份；`lessons.md` / `lessons-promoted.txt` 从旧 `metrics\` 迁移一次
 - `.gitignore` 只追加缺的 `.harness/metrics/` 与 `.harness/upgrade/` 两行，不重写用户文件
 - 验证通过后**默认删除** `.harness\upgrade\<时间戳>` 备份，审计写进 `.harness\.installed-version`；需要回滚点加 `-KeepBackup`，清理旧备份加 `-PruneBackups`
 - 首次安装会写 `.harness\.installed-version`；老项目没有也能升级，脚本会从技能目录的 `VERSION` 推断旧版本
