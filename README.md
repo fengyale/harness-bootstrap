@@ -43,13 +43,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   50 rule/script/doc contract(s) hold
+[PASS] contract   52 rule/script/doc contract(s) hold
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-50 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+52 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -169,7 +169,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
 - 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、50 条跨文件契约和行为测试。
+- 模板包不检查自己；这个仓库有自己的 pre-commit、52 条跨文件契约和行为测试。
 
 ## 平台与限制
 

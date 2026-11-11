@@ -20,3 +20,10 @@ jobs:
       - name: Behaviour tests
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+
+      - name: Audit summary order
+        # The package itself has no .harness/changes, so this step skips here;
+        # it documents the CI wiring installed projects should copy.
+        if: github.event_name == 'pull_request'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File templates\scripts\audit-order.ps1 -Root . -Base "${{ github.event.pull_request.base.sha }}"

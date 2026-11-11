@@ -12,6 +12,7 @@
     gate-auto.ps1   stage-gate AUTO behaviour and pre-commit field scope
     regression.ps1  install -> fill summary -> stage-gate -All -> metrics -> uninstall
     test-update.ps1 upgrade plan: replace .ps1, keep JSON/history, backup, version marker
+    test-audit-order.ps1  CI-side summary-order audit over a commit range
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
@@ -28,7 +29,7 @@ $ErrorActionPreference = 'Stop'
 $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
 $failed = 0
 
-foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1')) {
+foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1')) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
     & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $name)

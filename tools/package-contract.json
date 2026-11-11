@@ -287,6 +287,18 @@
       "why": "summary 模板是包资产、不含项目事实；只缺失才加会让老项目永远停在旧模板，与新门禁口径不一致。"
     },
     {
+      "id": "audit-order-script",
+      "file": "templates/scripts/audit-order.ps1",
+      "patterns": ["source commit", "no summary for feature"],
+      "why": "反序提交本地不可判定；CI 端脚本缺失或规则被弱化后，这条绕过面会重新变成不可观测。"
+    },
+    {
+      "id": "audit-order-in-flow",
+      "file": "templates/.harness/rules/开发流程规范.md",
+      "pattern": "CI 提交区间审计",
+      "why": "流程规范必须写明 CI 审计入口与 [L0] 豁免，否则项目不知道如何补上本地看不到的反序场景。"
+    },
+    {
       "id": "core-skill-stop-conditions",
       "file": "templates/.harness/skills/main-dev/request-analysis/SKILL.md",
       "patterns": ["### 定档判据", "### 什么时候必须停下来问"],

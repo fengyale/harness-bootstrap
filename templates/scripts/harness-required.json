@@ -42,6 +42,7 @@
     "scripts/verify-grounding.ps1",
     "scripts/agents-delta.ps1",
     "scripts/metrics.ps1",
+    "scripts/audit-order.ps1",
     "scripts/update-harness.ps1",
     "scripts/promote-pattern.ps1"
   ]

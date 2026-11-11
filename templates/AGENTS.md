@@ -120,6 +120,7 @@
 | `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-UpdateSkills` 只替换未编译技能，已编译技能保留（`-ForceSkills` 强制） |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
 | `scripts/check-summary.ps1` | `summary.md` 字段校验：pre-commit 只查基础字段，stage-gate 阶段 10 查收尾字段 |
+| `scripts/audit-order.ps1` | CI 提交区间审计：源码提交前是否已有 summary；`[L0]` 豁免，合并提交跳过 |
 
 > 非 TRAE 平台把 `.trae/agents/` 换成探测到的目录（Claude 为 `.claude/agents/`）；两者都没有时按清单模式手工评审，不要假装子智能体存在。
 > 平台侧的 `.trae/hooks.json` 是可选的快速反馈（默认空壳），只有你手工配置后才存在，**不在本索引里**。

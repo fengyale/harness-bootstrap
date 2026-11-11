@@ -898,7 +898,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
           <li><strong>json</strong>：所有 JSON 可解析</li>
           <li><strong>version</strong>：<code>VERSION</code> 与 <code>releases.json</code> 顶部版本一致</li>
           <li><strong>structure</strong>：必需文件存在，仅本包文件不存在于项目分发包</li>
-          <li><strong>contract</strong>：50 条「同一规则必须同一写法」的跨文件断言</li>
+          <li><strong>contract</strong>：52 条「同一规则必须同一写法」的跨文件断言</li>
           <li><strong>smoke</strong>：临时副本安装 → 阶段 4 → 未填 summary 被拒 → 卸载</li>
         </ul>
         <p style="margin-top:8px">提交时 pre-commit 自动跑 <code>-Fast</code>（跳过 smoke）；发布前跑全量。</p>
