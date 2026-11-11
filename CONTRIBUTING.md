@@ -67,21 +67,56 @@ Example:
 History before 1.22.1 uses English subjects. Keep that history as-is; use this
 format for new commits.
 
-## Releasing
+## Branches and merges
 
-1. Add the entry to `VERSION` (top of the changelog).
-2. Regenerate the release metadata: `py tools\parse-changelog.py`
-3. Run `tools\verify-package.ps1` and `tests\run-all.ps1`.
-4. Commit and push.
-5. Publish the GitHub Release: `py tools\publish-releases.py` (needs `GITHUB_TOKEN`).
+`main` is the stable line. On GitHub it is protected:
+
+- direct pushes are disabled; every change lands through a pull request;
+- the `verify` check (`.github/workflows/verify.yml`) must pass before merge;
+- force pushes and branch deletion are disabled.
+
+Use short-lived branches and delete them after merge:
+
+| Branch | Purpose |
+| --- | --- |
+| `feat/<name>` | new behaviour or a new gate |
+| `fix/<name>` | bug fix |
+| `docs/<name>` | documentation-only change |
+| `chore/<name>` | release prep, tooling, CI |
+| `release/<x.y>` | maintenance of an already released minor version (backports only) |
+
+Rebase on `main` before opening a PR. Keep one concern per PR.
+
+There is no long-lived `dev` branch: this project releases from `main` (see
+Releasing), so an integration branch would add a merge hop without a release
+step to justify it. Add `release/<x.y>` only when an older minor version needs
+a backport.
+
+> The GitHub setting is the mechanism; this section only describes it. If `main`
+> still accepts direct pushes, fix Settings -> Branches instead of relaxing this
+> document.
 
 ## Pull requests
 
 - One concern per PR; say what the user-visible behaviour changes.
 - Include the output of `tools\verify-package.ps1` and `tests\run-all.ps1`.
 - If you change a contract, explain which drift it prevents.
+- External contributors open a pull request from a fork; they do not need write
+  access. Only the maintainer can merge into `main`, so every external change is
+  reviewed and merged by the maintainer.
 - No CLA is required. By submitting a PR you agree your contribution is
   licensed under the MIT License (inbound = outbound), the same as this project.
+
+## Releasing
+
+1. Branch from `main`: `chore/release-<x.y.z>`.
+2. Add the entry to `VERSION` (top of the changelog).
+3. Regenerate the release metadata: `py tools\parse-changelog.py`
+4. Run `tools\verify-package.ps1` and `tests\run-all.ps1`.
+5. Commit, push the branch, open a PR; merge only after `verify` is green.
+6. From the updated `main`, publish the GitHub Release:
+   `GITHUB_TOKEN=... py tools\publish-releases.py`
+   (it creates the `v<x.y.z>` tag and the release; existing tags are skipped).
 
 ## Reporting bugs
 
