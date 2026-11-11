@@ -325,6 +325,18 @@
       "why": "SQL 规范必须给出执行计划与索引判据，否则「看执行计划」只是一句口号。"
     },
     {
+      "id": "sql-review-correctness-skill",
+      "file": "templates/.harness/skills/biz-dev/14-sql-review/SKILL.md",
+      "patterns": ["正确性校验", "语法 / 方言"],
+      "why": "SQL 评审不能只评性能；语法、结构、绑定、结果四层是正确性下限，技能必须固定判据与停止条件。"
+    },
+    {
+      "id": "sql-review-correctness-rule",
+      "file": "templates/.harness/rules/SQL评审规范.md",
+      "patterns": ["正确性校验", "语法 / 方言"],
+      "why": "规范与技能必须同口径；只改技能会让按规范办事的人漏掉正确性四层。"
+    },
+    {
       "id": "rules-cache-order",
       "file": "templates/.harness/rules/缓存与一致性.md",
       "patterns": ["先更新库，再删除缓存", "缓存异常必须降级"],

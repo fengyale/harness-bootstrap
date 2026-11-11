@@ -28,7 +28,7 @@
 ## 第二阶段：收尾（阶段 5–10 再填）
 
 - 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace> -- <一句话摘要>`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
-- SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 预估行数 / 访问路径；无 SQL 写"无 SQL 变更")`
+- SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 语法 / 结构 / 绑定 / 结果 / 计划 / 结论；无 SQL 写"无 SQL 变更")`
 
 > 两个阶段的字段由 `scripts/check-summary.ps1` 分档校验：**阶段 1 与 pre-commit 只查第一阶段**
 > （加载技能 / 档位 / 纠正次数 / 实现层纠正 / 触及模块）；`lesson_id` 与 `sql_review` 由**阶段 10** 查。

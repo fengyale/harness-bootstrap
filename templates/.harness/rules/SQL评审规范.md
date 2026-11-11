@@ -5,17 +5,33 @@
 > 触发：新增 / 修改 SQL、加字段、加索引、改分页或批量写入。
 > 线上已经变慢的排查走 `trouble-shooting/01-slow-sql`，不要用本文代替。
 
-## 1. 三条必做
+## 1. 四条必做
 
 | # | 动作 | 判据 |
 | --- | --- | --- |
-| 1 | 估数据量 | 查询 count 或表统计；大表（> 10 万行）必须有可用索引 |
-| 2 | 看执行计划 | `<!-- slot:db.explain -->`；结论写进 `summary.md` 的 `sql_review:` |
-| 3 | 写结论 | 含表名、预估行数、访问路径、结论 |
+| 1 | 验正确性 | 语法能解析、表列存在、参数绑定安全、只读结果符合预期；写操作事务回滚或 dry-run |
+| 2 | 估数据量 | 查询 count 或表统计；大表（> 10 万行）必须有可用索引 |
+| 3 | 看执行计划 | `<!-- slot:db.explain -->`；结论写进 `summary.md` 的 `sql_review:` |
+| 4 | 写结论 | 含正确性四层、表名、预估行数、访问路径、结论 |
 
-缺第 3 条 → pre-commit 拒绝提交（`scripts/sql-review-gate.ps1`）。
+缺第 4 条 → pre-commit 拒绝提交（`scripts/sql-review-gate.ps1`）。
 `scripts/harness-required.json` 的 `sqlGate=true` 表示本门禁已启用：规则文件与 gate 脚本必须同时存在且可运行。要关闭门禁，必须在**同一次提交**里把 `sqlGate` 改为 `false` 并删除规则与 gate；分两次提交会被 hook 拦下（off+残留或 on+无规则）。只删规则不改配置会被 `verify-harness` 判 FAIL。
 `sqlGate` 只从 **index / HEAD** 读取；配置还没入库时按 legacy（规则存在即启用）处理，避免工作区里未暂存的 `false` 把门禁关掉。
+
+## 1.1 正确性校验（先证明对，再评估快）
+
+> `sql_review:` 只要求“有结论”，不校验结论真假；正确性由本节四层判据与 `14-sql-review` 技能步骤保证。
+
+| 层 | 判据 | 做法 |
+| --- | --- | --- |
+| 语法 / 方言 | 目标库能解析 | 只读账号跑 `EXPLAIN` / `PREPARE`，或按方言 parse |
+| 结构 | 表、列、类型、约束存在 | 对照 `.harness/wiki/数据模型.md` 与迁移脚本，必要时查 catalog |
+| 绑定 | 参数安全且匹配 | 只用 `#{}`，无 `${}`；检查个数、类型、NULL、IN、`ORDER BY` 白名单 |
+| 结果 | 语义符合预期 | 只读沙箱用代表性参数 / fixture 跑一次，断言列、行数与关键值；写操作事务回滚或 dry-run |
+
+- 无法验证的层必须写“未验证 + 原因”，**不能写“通过”**
+- DDL、大表、批量写等高风险 SQL：没有结果或计划证据时，必须人工确认后才能合并
+- 证据落盘到 `.harness/changes/<特性>/sql-review/`，在 `sql_review:` 里引用路径
 
 ## 2. 高危写法
 
@@ -76,11 +92,11 @@
 
 ## 7. 结论模板（写进 `summary.md` 的 `sql_review:`）
 
-```
-<表名> · 预估 <行数> · 访问路径 <索引名 / 全表> · 结论 <通过 / 已改写 / 待 DBA 评审>
+```text
+sql_review: <表名> · 语法 <OK/失败> · 结构 <OK/缺 X> · 绑定 <#{} / 无 ${}> · 结果 <已验(fixture/参数) / 未验证(原因)> · 计划 <type=ref key=idx_x rows≈N / 未跑> · 结论 <通过 / 已改写 / 待 DBA>
 ```
 
-示例：`t_order · 预估 12 万行 · idx_user_status(user_id,status) · 通过`
+示例：`sql_review: t_order · 语法 OK · 结构 OK · 绑定 #{} 无 ${} · 结果 已验(fixture 20 条) · 计划 type=ref key=idx_user_status rows≈120 · 通过`
 
 ## 8. 与 slow-sql 的分工
 

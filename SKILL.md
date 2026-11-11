@@ -330,7 +330,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-git-hooks.ps
 **SQL 评审门禁随 hook 一起安装**（`scripts/sql-review-gate.ps1` / `.py`）：diff 新增行含 SQL 时，要求
 `.harness/changes` 下有 `sql_review:` 结论（≥4 字符）。查找顺序：**本次提交携带的 summary → `HARNESS_TASK` →
 磁盘上最新的 summary**（第三条会打印实际用的路径）。**summary 不必随提交携带**；缺字段时自动追加一行
-`- sql_review: TODO(...)` 占位，但仍拒绝提交直到 TODO 被替换为真实结论（表 / 预估行数 / 访问路径）。
+`- sql_review: TODO(...)` 占位，但仍拒绝提交直到 TODO 被替换为真实结论（表 / 语法 / 结构 / 绑定 / 结果 / 计划 / 结论）。
+门禁只查结论是否存在，不校验结论真假；正确性四层由 `14-sql-review` 技能执行，**无法验证的层必须写“未验证 + 原因”，不能写“通过”**。
 只检 `.java/.sql/.xml/.kt/.py/.js/.ts/.vue/.cs`，排除门禁脚本自身与 `.md`；`select *` / `not in` / 前导 `%` 只提示。
 **没有数据库的项目**：在**同一次提交**里把 `scripts/harness-required.json` 的 `sqlGate` 设为 `false`，并删除 `.harness/rules/SQL评审规范.md`、`sql-review` 技能与 `sql-review-gate.*`；分两次提交会被 hook 拦下（先设 false 但残留，或先删但配置仍为 true）。只删文件不改 `sqlGate` 会被 `verify-harness` 判 FAIL（配置与产物不一致）。
 **`sqlGate=true`（新装默认）**：规则与 gate 必须同时存在且可运行；只删一侧会被 hook 或 `verify-harness` 第 13 项拦下，第 13 项还会用 empty-diff + positive probe 验证 gate 真的能跑、且会在“有 SQL 无 summary”时拒绝。
