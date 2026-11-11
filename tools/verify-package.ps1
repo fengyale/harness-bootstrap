@@ -203,7 +203,20 @@ if ($contract) {
             $contractBad++
         }
     }
-    if ($contractBad -eq 0) { Add-Result 'contract' 'PASS' "$(@($contract.contracts).Count) rule/script/doc contract(s) hold" }
+    # The READMEs quote the count in the sample output; adding a contract without
+    # updating them is exactly the drift this package exists to prevent.
+    $contractN = @($contract.contracts).Count
+    $repoRoot = Split-Path $PSScriptRoot -Parent
+    foreach ($doc in @('README.md', 'README.en.md')) {
+        $docPath = Join-Path $repoRoot $doc
+        if (-not (Test-Path -LiteralPath $docPath)) { continue }
+        $docText = Get-Content -LiteralPath $docPath -Raw -Encoding UTF8
+        if ($docText -notmatch ("{0} rule/script/doc contract" -f $contractN)) {
+            Add-Result 'contract' 'FAIL' "$doc quotes a stale contract count; expected '$contractN rule/script/doc contract(s)'"
+            $contractBad++
+        }
+    }
+    if ($contractBad -eq 0) { Add-Result 'contract' 'PASS' "$contractN rule/script/doc contract(s) hold" }
 }
 
 # --------------------------------------------------------------- 6 smoke
