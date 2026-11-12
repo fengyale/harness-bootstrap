@@ -283,6 +283,18 @@
       "why": "编译后的技能没有 slot 标记；-UpdateSkills 整份覆盖会丢项目事实并使 verify-grounding 失败，必须按 slot 判定并降级 MANUAL。"
     },
     {
+      "id": "upgrade-skill-merge",
+      "file": "templates/scripts/update-harness.ps1",
+      "patterns": ["Merge-SkillBlocks", "harness:project:", "hard limit 120"],
+      "why": "已编译技能升级只能替换 package 区块、保留 project 区块；定位不到或超行数时不写盘，否则会把项目绑定覆盖掉。"
+    },
+    {
+      "id": "skill-block-markers",
+      "file": "references/技能编译协议.md",
+      "patterns": ["harness:package:begin", "harness:project:begin", "package 块里出现 slot"],
+      "why": "标记是安装与升级共用的边界；协议不写清 package/project 的归属，升级就可能把项目事实覆盖掉。"
+    },
+    {
       "id": "upgrade-template-update",
       "file": "templates/scripts/update-harness.ps1",
       "pattern": "change template replaced",

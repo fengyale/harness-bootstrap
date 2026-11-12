@@ -170,6 +170,86 @@ if ($contract) {
     if ($miss -eq 0) { Add-Result 'structure' 'PASS' 'required files present, package-only files absent' }
 }
 
+# ------------------------------------------------------- 4b template markers
+# Skills are compiled per project, so a template must keep package blocks and
+# project blocks separable: package blocks are replaced on upgrade, project
+# blocks survive it. A slot inside a package block is the one mistake that
+# silently leaks one project's bindings into the next install.
+$markerBad = 0
+$markerCount = 0
+$tplSkills = Join-Path $packageRoot 'templates\.harness\skills'
+if (Test-Path -LiteralPath $tplSkills) {
+    foreach ($sf in @(Get-ChildItem -LiteralPath $tplSkills -Recurse -Filter 'SKILL.md' -File -Force)) {
+        $text = [System.IO.File]::ReadAllText($sf.FullName, [System.Text.Encoding]::UTF8)
+        if ($text -notmatch '<!--\s*harness:(package|project):begin') { continue }
+        $markerCount++
+        $rel = $sf.FullName.Substring($packageRoot.Length).TrimStart('\', '/') -replace '\\', '/'
+        $lines = [System.IO.File]::ReadAllLines($sf.FullName, [System.Text.Encoding]::UTF8)
+        $stack = New-Object System.Collections.Generic.List[string]
+        $ids = @{}
+        $inFence = $false
+        $slotInPkg = 0
+        $anchorInPkg = 0
+        $bad = 0
+        foreach ($line in $lines) {
+            if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
+            if ($inFence) { continue }
+            if ($line -match '<!--\s*harness:(package|project):begin\s+([A-Za-z0-9][A-Za-z0-9-]*)\s*-->') {
+                $kind = $matches[1]
+                $id = $matches[2]
+                if ($stack.Count -gt 0) {
+                    Add-Result 'markers' 'FAIL' "${rel}: nested marker $kind/$id"
+                    $bad++
+                }
+                $key = $kind + '/' + $id
+                if ($ids.ContainsKey($key)) {
+                    Add-Result 'markers' 'FAIL' "${rel}: duplicate marker id $key"
+                    $bad++
+                } else {
+                    $ids[$key] = $true
+                }
+                $stack.Add($key)
+                continue
+            }
+            if ($line -match '<!--\s*harness:(package|project):end\s*-->') {
+                $kind = $matches[1]
+                if ($stack.Count -eq 0) {
+                    Add-Result 'markers' 'FAIL' "${rel}: $kind end without begin"
+                    $bad++
+                } else {
+                    $top = $stack[$stack.Count - 1]
+                    if (-not $top.StartsWith($kind + '/')) {
+                        Add-Result 'markers' 'FAIL' "${rel}: $kind end closes $top"
+                        $bad++
+                    }
+                    $stack.RemoveAt($stack.Count - 1)
+                }
+                continue
+            }
+            if ($stack.Count -gt 0 -and $stack[$stack.Count - 1].StartsWith('package/')) {
+                if ($line -match '<!--\s*slot:') { $slotInPkg++ }
+                if ($line -match '^\s*-\s*\[(E0|E1|E2)\]') { $anchorInPkg++ }
+            }
+        }
+        if ($stack.Count -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $($stack.Count) block marker(s) not closed"
+            $bad++
+        }
+        if ($slotInPkg -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $slotInPkg slot line(s) inside a package block; slots belong in a project block"
+            $bad++
+        }
+        if ($anchorInPkg -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $anchorInPkg evidence anchor(s) inside a package block"
+            $bad++
+        }
+        $markerBad += $bad
+    }
+}
+if ($markerBad -eq 0) {
+    Add-Result 'markers' 'PASS' "$markerCount template skill(s) carry balanced package/project blocks"
+}
+
 # ------------------------------------------------------------ 5 contracts
 # Each contract pins one sentence of the same rule to the files that carry it.
 # Without this, a fix in the script leaves the doc describing the old behaviour,

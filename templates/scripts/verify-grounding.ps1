@@ -204,6 +204,74 @@ foreach ($s in $skillFiles) {
         Add-Result 'compile' 'FAIL' "$($s.Category)/$($s.Name): unfilled slot marker"
         $compileFail++
     }
+
+    # --- block markers: package blocks are replaced on upgrade, project blocks
+    #     keep project facts. Slots and evidence belong to the project side only;
+    #     a slot left in a package block would be copied into every other project.
+    $markerStack = New-Object System.Collections.Generic.List[string]
+    $markerIds   = @{}
+    $markerSeen  = 0
+    $markerFail  = 0
+    $slotInPkg   = 0
+    $anchorInPkg = 0
+    $inFence     = $false
+    foreach ($line in $lines) {
+        if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
+        if ($inFence) { continue }
+        if ($line -match '<!--\s*harness:(package|project):begin\s+([A-Za-z0-9][A-Za-z0-9-]*)\s*-->') {
+            $markerSeen++
+            $kind = $matches[1]
+            $id   = $matches[2]
+            if ($markerStack.Count -gt 0) {
+                Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): nested marker $kind/$id"
+                $markerFail++
+            }
+            $key = $kind + '/' + $id
+            if ($markerIds.ContainsKey($key)) {
+                Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): duplicate marker id $key"
+                $markerFail++
+            } else {
+                $markerIds[$key] = $true
+            }
+            $markerStack.Add($key)
+            continue
+        }
+        if ($line -match '<!--\s*harness:(package|project):end\s*-->') {
+            $markerSeen++
+            $kind = $matches[1]
+            if ($markerStack.Count -eq 0) {
+                Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $kind end without begin"
+                $markerFail++
+            } else {
+                $top = $markerStack[$markerStack.Count - 1]
+                if (-not $top.StartsWith($kind + '/')) {
+                    Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $kind end closes $top"
+                    $markerFail++
+                }
+                $markerStack.RemoveAt($markerStack.Count - 1)
+            }
+            continue
+        }
+        if ($markerStack.Count -gt 0 -and $markerStack[$markerStack.Count - 1].StartsWith('package/')) {
+            if ($line -match '<!--\s*slot:') { $slotInPkg++ }
+            if ($line -match '^\s*-\s*\[(E0|E1|E2)\]') { $anchorInPkg++ }
+        }
+    }
+    if ($markerStack.Count -gt 0) {
+        Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $($markerStack.Count) block marker(s) not closed"
+        $markerFail++
+    }
+    if ($slotInPkg -gt 0) {
+        Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $slotInPkg slot line(s) inside a package block; slots belong in a project block"
+        $markerFail++
+    }
+    if ($anchorInPkg -gt 0) {
+        Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $anchorInPkg evidence anchor(s) inside a package block; move them to a project block"
+        $markerFail++
+    }
+    if ($markerSeen -gt 0 -and $markerFail -eq 0) {
+        Add-Result 'markers' 'PASS' "$($s.Category)/$($s.Name): block markers balanced ($($markerIds.Count) id(s))"
+    }
     if ($stack -and $cfg.stackTermRules) {
         $negWords = @($cfg.negationWords)
         foreach ($tr in @($cfg.stackTermRules)) {

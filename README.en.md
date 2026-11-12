@@ -43,14 +43,14 @@ Output:
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   54 rule/script/doc contract(s) hold
+[PASS] contract   56 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 54 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 56 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
 
 Run the behavioural tests:
 
@@ -114,7 +114,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -PackagePath <new package root> -Apply
 ```
 
-`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. `AGENTS.md` and `harness-required.json` only merge known framework lines/keys (`-NoMergeKnown` prints the difference instead); the red-line summary only replaces the R5/R6 checked cell. Old L1 summary directories move to the upgrade backup and are deleted after verification (`-KeepL1` keeps them); L2/L3 history is never touched. Installed skill bodies only report a difference by default; `-UpdateSkills` replaces only uncompiled copies that still contain `slot:` markers, while compiled skills stay MANUAL (`-ForceSkills` overrides, but it resets skills to slot-bearing skeletons: recompile them and run `verify-harness.ps1` again, and use `-SkipVerify` for the reset step). The skill index and `_template` are treated as project-owned and package-owned respectively. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. `AGENTS.md` and `harness-required.json` only merge known framework lines/keys (`-NoMergeKnown` prints the difference instead); the red-line summary only replaces the R5/R6 checked cell. Old L1 summary directories move to the upgrade backup and are deleted after verification (`-KeepL1` keeps them); L2/L3 history is never touched. Installed skill bodies only report a difference by default; `-MergeSkills` uses the new template as the skeleton and swaps back only the `harness:project` blocks compiled on disk (frontmatter kept, project-only blocks appended; an unmatched block or a remaining slot is PENDING, more than 120 lines is MANUAL, and neither writes the file); `-UpdateSkills` replaces only uncompiled copies that still contain `slot:` markers; `-ForceSkills` overrides, but it resets skills to slot-bearing skeletons: recompile them and run `verify-harness.ps1` again, and use `-SkipVerify` for the reset step. The skill index and `_template` are treated as project-owned and package-owned respectively. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
 
 ## What you get
 
@@ -170,7 +170,7 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
 - A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 54 cross-file contracts and behavioural tests.
+- A template pack does not check itself; this repository has its own pre-commit, 56 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

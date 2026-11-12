@@ -78,7 +78,9 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    /* 只作用于页面内容；不能命中 body 直属元素，
+       否则会干扰 mermaid 挂在 body 上的临时标签测量容器，导致布局被撑大 */
+    .wrap *, .wrap *::before, .wrap *::after {
       animation-duration: 0.01ms !important;
       animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
@@ -453,6 +455,11 @@
 
   .zoom-controls button:hover { background: var(--border); color: var(--text); }
 
+  /* 按住左右拖动可连续缩放 */
+  .zoom-controls button[data-action="zoom-in"],
+  .zoom-controls button[data-action="zoom-out"] { cursor: ew-resize; touch-action: none; }
+  .zoom-controls button.is-zooming { background: var(--accent-dim); color: var(--accent); }
+
   .zoom-label {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -553,7 +560,7 @@
         装完之后，项目的约定由机器执行，人只确认关键决策。
       </p>
       <div class="chips">
-        <span class="chip"><b>54</b> 条跨文件契约</span>
+        <span class="chip"><b>56</b> 条跨文件契约</span>
         <span class="chip"><b>10</b> 个阶段门</span>
         <span class="chip"><b>3</b> 个 git hook</span>
         <span class="chip"><b>2</b> 条落地路径</span>
@@ -620,7 +627,7 @@
       </div>
 
       <section class="diagram-shell">
-        <p class="diagram-shell__hint">Ctrl / Cmd + 滚轮缩放，拖动平移，双击适配。</p>
+        <p class="diagram-shell__hint">按住 + / &minus; 左右拖动连续缩放，Ctrl / Cmd + 滚轮缩放，拖动平移，双击适配。</p>
         <div class="mermaid-wrap">
           <div class="zoom-controls">
             <button type="button" data-action="zoom-in" title="放大">+</button>
@@ -898,7 +905,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
           <li><strong>json</strong>：所有 JSON 可解析</li>
           <li><strong>version</strong>：<code>VERSION</code> 与 <code>releases.json</code> 顶部版本一致</li>
           <li><strong>structure</strong>：必需文件存在，仅本包文件不存在于项目分发包</li>
-          <li><strong>contract</strong>：54 条「同一规则必须同一写法」的跨文件断言</li>
+          <li><strong>contract</strong>：56 条「同一规则必须同一写法」的跨文件断言</li>
           <li><strong>smoke</strong>：临时副本安装 → 阶段 4 → 未填 summary 被拒 → 卸载</li>
         </ul>
         <p style="margin-top:8px">提交时 pre-commit 自动跑 <code>-Fast</code>（跳过 smoke）；发布前跑全量。</p>
@@ -1044,7 +1051,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
             <tr><td><code>AGENTS.md</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>永不覆盖，按新包 diff 手工加行/段落</td></tr>
             <tr><td><code>.trae\agents</code> / <code>.claude\agents</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>你改过的评审智能体不覆盖</td></tr>
             <tr><td><code>.gitignore</code></td><td>缺失 ADD；同时有 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code> 则 SAME；否则 MANUAL</td><td>不重写，手工补行</td></tr>
-            <tr><td><code>.harness\skills</code></td><td>README 是项目索引，不同 → MANUAL；已装技能不同 → MANUAL，<code>-UpdateSkills</code> 只替换含 <code>slot:</code> 的未编译副本，<code>-ForceSkills</code> 才强制覆盖</td><td>默认保留；未安装的模板技能不会新增；已编译事实不被覆盖</td></tr>
+            <tr><td><code>.harness\skills</code></td><td>README 是项目索引，不同 → MANUAL；已装技能不同 → MANUAL；<code>-MergeSkills</code> 用新模板骨架替换通用段、只保留 <code>harness:project</code> 区块（frontmatter 保留，项目独有区块追加），定位不到或仍有 slot → PENDING，超 120 行 → MANUAL，均不写盘；<code>-UpdateSkills</code> 只替换含 <code>slot:</code> 的未编译副本；<code>-ForceSkills</code> 才强制覆盖</td><td>默认保留；未安装的模板技能不会新增；已编译事实不被覆盖</td></tr>
             <tr><td><code>.trae\skills\harness-bootstrap</code></td><td>不在计划</td><td>手动替换技能包副本</td></tr>
             <tr><td>git hooks</td><td>重装</td><td>旧 hook 自动备份为 <code>.bak-harness</code></td></tr>
             <tr><td><code>.harness\.installed-version</code></td><td>写入</td><td>下一次升级据此识别旧版本</td></tr>
@@ -1082,8 +1089,9 @@ powershell -NoProfile -ExecutionPolicy Bypass `
       <div class="callout">
         <strong>当前版本的行为：</strong>
         没有 <code>-DryRun</code> 参数，默认就是 Dry-Run；<code>-Apply</code> 执行。
-        已装技能正文默认只报 MANUAL；<code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译副本，
-        已编译技能需 <code>-ForceSkills</code> 才覆盖；
+        已装技能正文默认只报 MANUAL；<code>-MergeSkills</code> 以新模板为骨架，只把 <code>harness:project</code> 区块换回项目自己的（frontmatter 保留，项目独有区块追加；无法定位或仍有 slot 标 PENDING，超过 120 行标 MANUAL，均不写盘）；
+        <code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译副本，
+        已编译技能需 <code>-ForceSkills</code> 才整体覆盖；
         未安装的模板技能不会新增，安装时 3–5 个技能的策略保持不变。
         <code>.gitignore</code> 需要同时包含 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code>，缺哪个就手工补。
         <code>-SkipHooks</code> / <code>-SkipVerify</code> 仅排障时使用；脚本没有降级保护，不要指向旧包。
@@ -1141,17 +1149,15 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；
         案例见 <a href="case-study/README.md">docs/case-study</a>。
-        <br>页面由 visual-explainer 生成，单文件自包含，可直接分享或离线打开。
+        <br>页面由 visual-explainer 生成，图表依赖同目录 <code>vendor/mermaid.min.js</code>，连同该文件一起分发即可离线打开。
       </div>
     </section>
 
   </div>
 </div>
 
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs';
-
+<script src="vendor/mermaid.min.js"></script>
+<script>
   const config = {
     fitPadding: 28,
     minHeight: 320,
@@ -1161,6 +1167,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
     minZoom: 0.08,
     maxZoom: 6,
     zoomStep: 0.14,
+    zoomDragRate: 0.006,
     readabilityFloor: 0.58
   };
 
@@ -1172,12 +1179,17 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
 
-  mermaid.registerLayoutLoaders(elkLayouts);
+  if (!globalThis.mermaid) {
+    document.querySelectorAll('.zoom-label').forEach((el) => {
+      el.textContent = 'Error: vendor/mermaid.min.js 未加载';
+    });
+    console.error('Mermaid bundle missing: docs/vendor/mermaid.min.js');
+  } else {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'base',
     look: 'classic',
-    layout: 'elk',
+    layout: 'dagre',
     themeVariables: {
       fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
       fontSize: '15px',
@@ -1328,8 +1340,6 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
     }
 
     const actions = {
-      'zoom-in': () => zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
-      'zoom-out': () => zoomAround(1 / (1 + config.zoomStep), viewport.clientWidth / 2, viewport.clientHeight / 2),
       'zoom-fit': fitDiagram,
       'zoom-one': setOneToOne,
       'zoom-expand': openInNewTab
@@ -1337,6 +1347,51 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
     Object.entries(actions).forEach(([action, handler]) => {
       wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler);
+    });
+
+    // 缩放：按住 + / - 左右拖动连续缩放；原地单击仍走一档
+    const zoomCenter = () => [viewport.clientWidth / 2, viewport.clientHeight / 2];
+    const stepZoom = (dir) => {
+      const [cx, cy] = zoomCenter();
+      zoomAround(dir > 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep), cx, cy);
+    };
+
+    [['zoom-in', 1], ['zoom-out', -1]].forEach(([action, dir]) => {
+      const btn = wrap.querySelector(`[data-action="${action}"]`);
+      if (!btn) return;
+
+      let startX = 0, startZoom = 1, dragging = false;
+
+      btn.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startZoom = zoom;
+        dragging = false;
+        btn.setPointerCapture(e.pointerId);
+        btn.classList.add('is-zooming');
+      });
+
+      btn.addEventListener('pointermove', (e) => {
+        if (!btn.hasPointerCapture(e.pointerId)) return;
+        const dx = e.clientX - startX;
+        if (!dragging && Math.abs(dx) < 3) return;
+        dragging = true;
+        const target = clamp(startZoom * Math.exp(dx * config.zoomDragRate), config.minZoom, config.maxZoom);
+        if (Math.abs(target / zoom - 1) < 1e-4) return;
+        const [cx, cy] = zoomCenter();
+        zoomAround(target / zoom, cx, cy);
+      });
+
+      const endDrag = (e) => {
+        if (!btn.hasPointerCapture(e.pointerId)) return;
+        btn.releasePointerCapture(e.pointerId);
+        btn.classList.remove('is-zooming');
+        if (!dragging) stepZoom(dir);
+      };
+
+      btn.addEventListener('pointerup', endDrag);
+      btn.addEventListener('pointercancel', endDrag);
     });
 
     viewport.addEventListener('dblclick', fitDiagram);
@@ -1408,6 +1463,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
   }
 
   document.querySelectorAll('.diagram-shell').forEach(initDiagram);
+  }
 </script>
 
 <script>

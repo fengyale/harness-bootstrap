@@ -5,7 +5,8 @@ description: SQL 性能评审：新增或修改 SQL、加索引、改分页、�
 
 # SQL 评审（事前）
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
+> `harness:package` 区块是包内通用内容（升级整体替换），`harness:project` 区块是项目内容（升级永不触碰）。
 
 ## 何时用
 
@@ -16,6 +17,7 @@ description: SQL 性能评审：新增或修改 SQL、加索引、改分页、�
 
 > 改代码时用本技能；线上已经变慢的排查用 `trouble-shooting/01-slow-sql`。
 
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 数据源与方言（Oracle / MySQL / MSSQL / PG）：<!-- slot:db.datasources -->
@@ -24,7 +26,9 @@ description: SQL 性能评审：新增或修改 SQL、加索引、改分页、�
 - 只读执行 / EXPLAIN 的 MCP 或客户端：<!-- slot:db.mcp -->
 - 只读沙箱或测试库（可跑 fixture）：<!-- slot:db.sandbox -->
 - 事务与批量写入的约定：<!-- slot:db.batch -->
+<!-- harness:project:end -->
 
+<!-- harness:package:begin mode -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -38,14 +42,14 @@ description: SQL 性能评审：新增或修改 SQL、加索引、改分页、�
 
 ### 正确性校验（先证明对，再评估快）
 
-> 性能评审之前先回答：这条 SQL 会不会错。**没有正确性结论，不允许写“通过”。**
+> 性能评审之前先回答：这条 SQL 会不会错。**没有正确性结论，不允许写"通过"。**
 
-| 层 | 问题 | 判据 | 手段 |
+| 层 | 问题 | 判据 | 手段（见「项目绑定」） |
 | --- | --- | --- | --- |
-| 1 语法 / 方言 | 目标数据库能不能解析 | parse 或 `EXPLAIN` / `PREPARE` 不报语法错；方言一致 | <!-- slot:db.mcp --> |
-| 2 结构 | 表、列、类型、约束是否存在 | 对照 `.harness/wiki/数据模型.md` 或查询 catalog | <!-- slot:db.catalog --> |
+| 1 语法 / 方言 | 目标数据库能不能解析 | parse 或 `EXPLAIN` / `PREPARE` 不报语法错；方言一致 | `db.mcp` 的只读执行方式 |
+| 2 结构 | 表、列、类型、约束是否存在 | 对照 `.harness/wiki/数据模型.md` 或查询 catalog | `db.catalog` 的查询方式 |
 | 3 绑定 | 参数是否安全、数量与类型是否匹配 | 只用 `#{}`，无 `${}`；动态列走白名单；NULL / IN / 排序已处理 | 代码检索 |
-| 4 结果 | 语义是否符合预期 | 只读沙箱用代表性参数或 fixture 跑一次，断言列、行数与关键值；写操作事务回滚或 dry-run | <!-- slot:db.sandbox --> |
+| 4 结果 | 语义是否符合预期 | 只读沙箱用代表性参数或 fixture 跑一次，断言列、行数与关键值；写操作事务回滚或 dry-run | `db.sandbox` 的只读沙箱 |
 
 **步骤：**
 
@@ -95,7 +99,10 @@ sql_review: <表名> · 语法 <OK/失败> · 结构 <OK/缺 X> · 绑定 <#{} /
 - 一种数据库的写法直接搬到另一种
 - 加索引不看写入成本与选择性
 - 在索引列上套函数导致失效
+<!-- harness:package:end -->
 
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

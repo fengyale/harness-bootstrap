@@ -99,6 +99,77 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\compil
 Set-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" `
     -Value @('# compiled skill', '', 'Cache: RedisUtils') -Encoding UTF8
 
+# Marker-based compiled skill: package text is package-owned, project blocks
+# are project-owned. The description and the extra block simulate a compiled
+# install; -MergeSkills must refresh the package text and keep both.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-skill" | Out-Null
+$mergeInstalled = @(
+    '---',
+    'name: merge-skill',
+    'description: project-tuned description',
+    '---',
+    '',
+    '# merge skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    '## old package section',
+    'old-package-line',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings',
+    '- cache: ProjectCache',
+    '<!-- harness:project:end -->',
+    '',
+    '<!-- harness:project:begin extra -->',
+    '## Project only',
+    '- keep-me',
+    '<!-- harness:project:end -->'
+)
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", $mergeInstalled, (New-Object System.Text.UTF8Encoding($false)))
+
+# Legacy skill (no markers): adopted by heading, and a team-only section must
+# be wrapped instead of dropped.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-legacy" | Out-Null
+$legacyInstalled = @(
+    '---',
+    'name: merge-legacy',
+    'description: legacy tuned description',
+    '---',
+    '',
+    '# legacy skill',
+    '',
+    '## Project bindings',
+    '- cache: LegacyCache',
+    '',
+    '## Team notes',
+    '- keep this'
+)
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", $legacyInstalled, (New-Object System.Text.UTF8Encoding($false)))
+
+# Pending skill: the new template adds a project block with no heading on disk.
+$pendingInstalled = @(
+    '---',
+    'name: merge-pending',
+    'description: pending tuned description',
+    '---',
+    '',
+    '<!-- harness:package:begin mode -->',
+    'old-pending-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings',
+    '- cache: PendingCache',
+    '<!-- harness:project:end -->'
+)
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-pending" | Out-Null
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-pending\SKILL.md", $pendingInstalled, (New-Object System.Text.UTF8Encoding($false)))
+
+# Over-budget skill: the merged result would exceed the 120-line hard limit.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-big" | Out-Null
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-big\SKILL.md", @('# big skill', 'old-big-line'), (New-Object System.Text.UTF8Encoding($false)))
+
 # Remove the new ignore line so the MANUAL branch for .gitignore is exercised.
 # Use .NET UTF-8 explicitly: PS 5.1 Get-Content/Set-Content on a UTF-8 file
 # without BOM decodes the Chinese comments as ANSI and corrupts the file.
@@ -147,6 +218,75 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skil
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\compiled-skill" | Out-Null
 Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\compiled-skill\SKILL.md" `
     -Value @('# compiled skill', '', '<!-- slot:data.access -->', 'body', '<!-- upgraded-compiled -->') -Encoding UTF8
+# Marker-based template: the package block changed, the project block still has
+# a slot in the template (the installed copy supplies the compiled body).
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-skill" | Out-Null
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-skill\SKILL.md" -Value @(
+    '---',
+    'name: merge-skill',
+    'description: template description',
+    '---',
+    '',
+    '# merge skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    '## new package section',
+    'new-package-line',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings (fill at install)',
+    '- cache: <!-- slot:cache.api -->',
+    '<!-- harness:project:end -->'
+) -Encoding UTF8
+# Legacy template: the installed copy has no markers, so adoption is by heading.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-legacy" | Out-Null
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-legacy\SKILL.md" -Value @(
+    '---',
+    'name: merge-legacy',
+    'description: template description',
+    '---',
+    '',
+    '# legacy skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    '## Mode',
+    'new-legacy-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings (fill at install)',
+    '- cache: <!-- slot:cache.api -->',
+    '<!-- harness:project:end -->'
+) -Encoding UTF8
+# Pending template: the sandbox block has no counterpart on disk.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-pending" | Out-Null
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-pending\SKILL.md" -Value @(
+    '---',
+    'name: merge-pending',
+    'description: template description',
+    '---',
+    '',
+    '<!-- harness:package:begin mode -->',
+    'new-pending-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings',
+    '- cache: <!-- slot:cache.api -->',
+    '<!-- harness:project:end -->',
+    '',
+    '<!-- harness:project:begin sandbox -->',
+    '## Sandbox',
+    '- path: <!-- slot:sandbox.path -->',
+    '<!-- harness:project:end -->'
+) -Encoding UTF8
+# Over-budget template: 130 filler lines plus a package block.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-big" | Out-Null
+$bigLines = @('---', 'name: merge-big', 'description: template description', '---', '', '# big skill', '<!-- harness:package:begin mode -->')
+for ($i = 1; $i -le 130; $i++) { $bigLines += "filler-$i" }
+$bigLines += '<!-- harness:package:end -->'
+[System.IO.File]::WriteAllLines("$newPkg\templates\.harness\skills\main-dev\merge-big\SKILL.md", $bigLines, (New-Object System.Text.UTF8Encoding($false)))
 # The change template is package-owned: a newer one must reach the project.
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\changes\_template" | Out-Null
 Copy-Item -LiteralPath "$pkg\templates\.harness\changes\_template\summary.md" `
@@ -204,6 +344,15 @@ Check 'dry-run: compiled skill MANUAL' ((($drySkills -match '\[MANUAL\].*main-de
 Check 'dry-run: skill index MANUAL' ($drySkills -match '\[MANUAL\].*\.harness\\skills\\README\.md')
 $dryForce = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -UpdateSkills -ForceSkills 2>&1 | Out-String
 Check 'dry-run warns that -ForceSkills resets skills' ($dryForce -match 'ForceSkills resets installed skills')
+
+Write-Host ''
+Write-Host '=== dry run with -MergeSkills ===' -ForegroundColor Cyan
+$dryMerge = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -MergeSkills 2>&1 | Out-String
+Check 'dry-run: marker skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-skill\\SKILL\.md')
+Check 'dry-run: legacy skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-legacy\\SKILL\.md')
+Check 'dry-run: missing project block PENDING' ($dryMerge -match '\[PENDING\s*\].*main-dev\\merge-pending\\SKILL\.md')
+Check 'dry-run: over-budget skill MANUAL' ($dryMerge -match '\[MANUAL\s*\].*main-dev\\merge-big\\SKILL\.md')
+Check 'dry-run: over-budget reason names the limit' ($dryMerge -match 'hard limit 120')
 
 # -------------------------------------------------------------------- apply
 Write-Host ''
@@ -285,6 +434,42 @@ Check 'old skill backed up' ($skillBackup.Count -gt 0)
 Check 'skip-verify prune kept old backups' (Test-Path -LiteralPath $backup.FullName)
 
 Write-Host ''
+Write-Host '=== apply with -MergeSkills ===' -ForegroundColor Cyan
+$pendingFile = "$proj\.harness\skills\main-dev\merge-pending\SKILL.md"
+$bigFile = "$proj\.harness\skills\main-dev\merge-big\SKILL.md"
+$pendingBefore = [System.IO.File]::ReadAllText($pendingFile, [System.Text.Encoding]::UTF8)
+$bigBefore = [System.IO.File]::ReadAllText($bigFile, [System.Text.Encoding]::UTF8)
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -MergeSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { Write-Host 'MERGE APPLY FAILED' -ForegroundColor Red; $fail++ }
+
+$mergeAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8)
+Check 'merge: package text refreshed' ($mergeAfter -match 'new-package-line')
+Check 'merge: old package text gone' ($mergeAfter -notmatch 'old-package-line')
+Check 'merge: project block kept' ($mergeAfter -match 'ProjectCache')
+Check 'merge: project-only block kept' ($mergeAfter -match 'keep-me')
+Check 'merge: project description kept' ($mergeAfter -match 'description: project-tuned description')
+Check 'merge: markers kept' (($mergeAfter -match 'harness:package:begin mode') -and ($mergeAfter -match 'harness:project:begin bindings'))
+Check 'merge: template slot did not leak' ($mergeAfter -notmatch '<!--\s*slot:')
+
+$legacyAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8)
+Check 'legacy: package text added' ($legacyAfter -match 'new-legacy-package')
+Check 'legacy: adopted by heading' ($legacyAfter -match 'LegacyCache')
+Check 'legacy: team section wrapped' ($legacyAfter -match 'harness:project:begin legacy-1')
+Check 'legacy: team section kept' ($legacyAfter -match 'keep this')
+Check 'legacy: project description kept' ($legacyAfter -match 'description: legacy tuned description')
+Check 'legacy: markers present after adoption' ($legacyAfter -match 'harness:project:begin bindings')
+
+Check 'pending: file not written' ([System.IO.File]::ReadAllText($pendingFile, [System.Text.Encoding]::UTF8) -eq $pendingBefore)
+Check 'big: file not written' ([System.IO.File]::ReadAllText($bigFile, [System.Text.Encoding]::UTF8) -eq $bigBefore)
+
+$mergeStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8)
+$legacyStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8)
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -MergeSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { Write-Host 'MERGE REPEAT FAILED' -ForegroundColor Red; $fail++ }
+Check 'merge second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8) -eq $mergeStable)
+Check 'legacy second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8) -eq $legacyStable)
+
+Write-Host ''
 Write-Host '=== apply with -ForceSkills ===' -ForegroundColor Cyan
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -UpdateSkills -ForceSkills -SkipHooks -SkipVerify 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'FORCE SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
@@ -307,6 +492,26 @@ $upgradeDirs = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Directory 
 Check 'verified upgrade prunes backups' ($upgradeDirs.Count -eq 0)
 $marker = Get-Content -LiteralPath "$proj\.harness\.installed-version" -Raw -Encoding UTF8
 Check 'audit records backup deletion' ($marker -match 'backup: deleted after verification')
+
+Write-Host ''
+Write-Host '=== install layout: real sql-review template ===' -ForegroundColor Cyan
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$realSkillPath = Join-Path $repoRoot 'templates\.harness\skills\biz-dev\14-sql-review\SKILL.md'
+$realSkill = [System.IO.File]::ReadAllText($realSkillPath, [System.Text.Encoding]::UTF8)
+Check 'install: template carries package and project markers' (($realSkill -match 'harness:package:begin') -and ($realSkill -match 'harness:project:begin'))
+# A slot-only compile: every slot is replaced, nothing else changes.
+$compiled = [regex]::Replace($realSkill, '<!--\s*slot:[^>]*-->', 'PROJECT-FACT')
+Check 'install: compile leaves no slot marker' ($compiled -notmatch '<!--\s*slot:')
+Check 'install: project fact landed' ($compiled -match 'PROJECT-FACT')
+Check 'install: markers survive compile' (([regex]::Matches($compiled, 'harness:(package|project):begin').Count -eq [regex]::Matches($realSkill, 'harness:(package|project):begin').Count) -and ([regex]::Matches($compiled, 'harness:(package|project):end').Count -eq [regex]::Matches($realSkill, 'harness:(package|project):end').Count))
+$pkgPat = '(?s)<!--\s*harness:package:begin\s+[A-Za-z0-9-]+\s*-->.*?<!--\s*harness:package:end\s*-->'
+$pkgBefore = (@([regex]::Matches($realSkill, $pkgPat)) | ForEach-Object { $_.Value }) -join "`n"
+$pkgAfter = (@([regex]::Matches($compiled, $pkgPat)) | ForEach-Object { $_.Value }) -join "`n"
+Check 'install: compile does not touch package text' ($pkgBefore -eq $pkgAfter)
+$prjPat = '(?s)<!--\s*harness:project:begin\s+[A-Za-z0-9-]+\s*-->.*?<!--\s*harness:project:end\s*-->'
+Check 'install: every slot sits in a project block' ((@([regex]::Matches($realSkill, $prjPat)) | ForEach-Object { $_.Value }) -join "`n" -match 'slot:')
+$outsidePrj = [regex]::Replace($realSkill, $prjPat, '')
+Check 'install: no slot outside a project block' ($outsidePrj -notmatch '<!--\s*slot:')
 
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'UPDATE TEST OK' -ForegroundColor Green; exit 0 }

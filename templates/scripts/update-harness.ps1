@@ -15,11 +15,16 @@
     .harness/wiki          ADD missing only; differing files are MANUAL
     .harness/modules       ADD missing only; differing files are MANUAL
     .harness/skills        README differing -> MANUAL (project-owned index);
-                           installed skill bodies -> MANUAL, or UPDATE with
-                           -UpdateSkills only when the installed copy still has
-                           slot markers (uncompiled). A compiled copy (no slots)
-                           stays MANUAL; -ForceSkills overrides. Uninstalled
-                           template skills are never added (the install keeps 3-5).
+                           installed skill bodies -> MANUAL, or MERGE with
+                           -MergeSkills: the new template skeleton plus the
+                           harness:project blocks already compiled on disk
+                           (frontmatter kept, project-only blocks appended).
+                           Refuses with PENDING when a project block cannot be
+                           placed or an unfilled slot remains, and with MANUAL
+                           above the 120-line budget. -UpdateSkills replaces
+                           only uncompiled skills (still has slot markers);
+                           -ForceSkills replaces any skill. Uninstalled template
+                           skills are never added (the install keeps 3-5).
     .harness/changes       _template is package-owned: ADD when missing, UPDATE
                            (backup first) when it differs; _small.md is added
                            when missing; L2/L3 history is kept; old L1 summaries
@@ -47,6 +52,7 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
       -PackagePath D:\path\to\new\harness-bootstrap -Apply
     ... -Apply -UpdateSkills
+    ... -Apply -MergeSkills                 (keep project bindings, take new package text)
     ... -Apply -UpdateSkills -ForceSkills   (also replace compiled skills)
     ... -Apply -SkipHooks -SkipVerify
     ... -Apply -KeepBackup
@@ -68,6 +74,7 @@ param(
     [string]$Root = (Get-Location).Path,
     [switch]$Apply,
     [switch]$UpdateSkills,
+    [switch]$MergeSkills,
     [switch]$ForceSkills,
     [switch]$SkipHooks,
     [switch]$SkipVerify,
@@ -407,6 +414,204 @@ foreach ($sub in @('rules', 'wiki', 'modules')) {
     }
 }
 
+# --------------------------------------------------- skill block merge
+# A compiled skill mixes package text (cross-project, replaced on upgrade) with
+# project text (bindings and evidence, never replaced). The template marks the
+# two sides with harness:package / harness:project blocks. Merge = new template
+# skeleton + the project blocks already on disk. Legacy skills without markers
+# are adopted by matching the heading of each project block; anything that
+# cannot be placed is reported as PENDING instead of guessed.
+function Get-MarkerBlocks {
+    param([string[]]$Lines, [string]$Kind)
+    $blocks = @()
+    $open = -1
+    $openId = ''
+    $beginPat = '<!--\s*harness:' + $Kind + ':begin\s+([A-Za-z0-9][A-Za-z0-9-]*)\s*-->'
+    $endPat = '<!--\s*harness:' + $Kind + ':end\s*-->'
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($open -lt 0) {
+            if ($Lines[$i] -match $beginPat) {
+                $open = $i
+                $openId = $matches[1]
+            }
+        } elseif ($Lines[$i] -match $endPat) {
+            $blocks += [pscustomobject]@{ Id = $openId; Begin = $open; End = $i }
+            $open = -1
+        }
+    }
+    return $blocks
+}
+
+function Get-HeadingKey {
+    param([string]$Line)
+    $t = $Line -replace '^#+\s*', ''
+    # Drop a trailing qualifier in full-width or ASCII parentheses so that
+    # "## bindings (compiled at install)" and "## bindings" match.
+    $lp = [string][char]0xFF08
+    $rp = [string][char]0xFF09
+    $t = $t -replace ($lp + '[^' + $rp + ']*' + $rp), ''
+    $t = $t -replace '\([^)]*\)', ''
+    return $t.Trim()
+}
+
+function Get-SectionByHeading {
+    param([string[]]$Lines, [string]$Heading)
+    $want = Get-HeadingKey $Heading
+    if (-not $want) { return $null }
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -notmatch '^##\s+') { continue }
+        if ((Get-HeadingKey $Lines[$i]) -ne $want) { continue }
+        $end = $Lines.Count
+        for ($j = $i + 1; $j -lt $Lines.Count; $j++) {
+            if ($Lines[$j] -match '^#{1,2}\s+') { $end = $j; break }
+        }
+        return [pscustomobject]@{ Begin = $i; End = $end }
+    }
+    return $null
+}
+
+function Merge-SkillBlocks {
+    param([string]$SourcePath, [string]$DestPath)
+    $srcLines = [System.IO.File]::ReadAllLines($SourcePath, [System.Text.Encoding]::UTF8)
+    $dstLines = [System.IO.File]::ReadAllLines($DestPath, [System.Text.Encoding]::UTF8)
+    $dstText = [System.IO.File]::ReadAllText($DestPath, [System.Text.Encoding]::UTF8)
+
+    $pkg = @(Get-MarkerBlocks $srcLines 'package')
+    $prj = @(Get-MarkerBlocks $srcLines 'project')
+    if (($pkg.Count + $prj.Count) -eq 0) {
+        return [pscustomobject]@{ Status = 'MANUAL'; Detail = 'template has no package/project markers'; Text = $null; Bom = $false }
+    }
+    $dstPrj = @(Get-MarkerBlocks $dstLines 'project')
+    $legacy = ($dstPrj.Count -eq 0)
+
+    $missing = @()
+    $kept = 0
+    $adopted = @()
+    $parts = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $srcLines.Count; $i++) {
+        $isBegin = $false
+        foreach ($b in $prj) {
+            if ($b.Begin -ne $i) { continue }
+            $isBegin = $true
+            $parts.Add($srcLines[$b.Begin])
+            $disk = @($dstPrj | Where-Object { $_.Id -eq $b.Id }) | Select-Object -First 1
+            if ($disk) {
+                for ($k = $disk.Begin + 1; $k -lt $disk.End; $k++) { $parts.Add($dstLines[$k]) }
+                $kept++
+            } else {
+                # Legacy copy (or a project block that changed id): adopt the
+                # section with the same heading, which is how an installed
+                # skill names its bindings.
+                $heading = ''
+                for ($k = $b.Begin + 1; $k -lt $b.End; $k++) {
+                    if ($srcLines[$k] -match '^##\s+') { $heading = $srcLines[$k]; break }
+                }
+                $sec = $null
+                if ($heading) { $sec = Get-SectionByHeading $dstLines $heading }
+                if ($sec) {
+                    for ($k = $sec.Begin; $k -lt $sec.End; $k++) { $parts.Add($dstLines[$k]) }
+                    $adopted += $sec
+                    $kept++
+                } else {
+                    $missing += ($b.Id + ' (' + $heading + ')')
+                    for ($k = $b.Begin + 1; $k -lt $b.End; $k++) { $parts.Add($srcLines[$k]) }
+                }
+            }
+            $parts.Add($srcLines[$b.End])
+            $i = $b.End
+            break
+        }
+        if ($isBegin) { continue }
+        $parts.Add($srcLines[$i])
+    }
+
+    # Project-only blocks (added by the team, absent from the new template) are
+    # appended instead of silently dropped.
+    $srcPrjIds = @($prj | ForEach-Object { $_.Id })
+    $appended = 0
+    foreach ($dp in $dstPrj) {
+        if ($srcPrjIds -contains $dp.Id) { continue }
+        $parts.Add('')
+        for ($k = $dp.Begin; $k -le $dp.End; $k++) { $parts.Add($dstLines[$k]) }
+        $appended++
+    }
+
+    # A pre-marker skill has no project blocks, so a team section that is not in
+    # the new template would be dropped by the skeleton swap. Wrap each such
+    # section as a project block instead of losing it.
+    $legacyAdded = 0
+    if ($legacy) {
+        $srcHeadings = @()
+        foreach ($line in $srcLines) {
+            if ($line -match '^##\s+') { $srcHeadings += (Get-HeadingKey $line) }
+        }
+        for ($i = 0; $i -lt $dstLines.Count; $i++) {
+            if ($dstLines[$i] -notmatch '^##\s+') { continue }
+            $h = Get-HeadingKey $dstLines[$i]
+            $done = $false
+            foreach ($r in $adopted) {
+                if ($i -ge $r.Begin -and $i -lt $r.End) { $done = $true; break }
+            }
+            if ($done) { continue }
+            if ($srcHeadings -contains $h) { continue }
+            $end = $dstLines.Count
+            for ($j = $i + 1; $j -lt $dstLines.Count; $j++) {
+                if ($dstLines[$j] -match '^#{1,2}\s+') { $end = $j; break }
+            }
+            $legacyAdded++
+            $parts.Add('')
+            $parts.Add('<!-- harness:project:begin legacy-' + $legacyAdded + ' -->')
+            for ($k = $i; $k -lt $end; $k++) { $parts.Add($dstLines[$k]) }
+            $parts.Add('<!-- harness:project:end -->')
+            $i = $end - 1
+        }
+    }
+
+    $outLines = @($parts)
+
+    # The compile step rewrites description for the project; replacing the
+    # frontmatter would reset those trigger words.
+    if ($srcLines.Count -gt 0 -and $srcLines[0].Trim() -eq '---' -and
+        $dstLines.Count -gt 0 -and $dstLines[0].Trim() -eq '---') {
+        $srcEnd = -1
+        for ($i = 1; $i -lt $srcLines.Count; $i++) { if ($srcLines[$i].Trim() -eq '---') { $srcEnd = $i; break } }
+        $dstEnd = -1
+        for ($i = 1; $i -lt $dstLines.Count; $i++) { if ($dstLines[$i].Trim() -eq '---') { $dstEnd = $i; break } }
+        if ($srcEnd -gt 0 -and $dstEnd -gt 0) {
+            $merged = @()
+            $merged += $dstLines[0..$dstEnd]
+            if ($srcEnd + 1 -le $outLines.Count - 1) { $merged += $outLines[($srcEnd + 1)..($outLines.Count - 1)] }
+            $outLines = $merged
+        }
+    }
+
+    $nl = if ($dstText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $text = ($outLines -join $nl)
+    if ($dstText.EndsWith("`n")) { $text += $nl }
+
+    if ($text -eq $dstText) {
+        return [pscustomobject]@{ Status = 'SAME'; Detail = ''; Text = $null; Bom = $false }
+    }
+    if ($missing.Count -gt 0) {
+        return [pscustomobject]@{ Status = 'PENDING'; Detail = ('no section for project block ' + ($missing -join ', ') + '; fill it by hand'); Text = $null; Bom = $false }
+    }
+    $slot = [regex]::Match($text, '<!--\s*slot:([A-Za-z0-9_.-]+)')
+    if ($slot.Success) {
+        return [pscustomobject]@{ Status = 'PENDING'; Detail = ('unfilled slot ' + $slot.Groups[1].Value + '; compile this skill first'); Text = $null; Bom = $false }
+    }
+    if ($outLines.Count -gt 120) {
+        return [pscustomobject]@{ Status = 'MANUAL'; Detail = ('merged result would be ' + $outLines.Count + ' lines (hard limit 120); keep manual'); Text = $null; Bom = $false }
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($DestPath)
+    $bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    $mode = if ($legacy) { 'adopted legacy skill by heading' } else { 'package blocks refreshed' }
+    $detail = $mode + '; ' + $kept + ' project block(s) kept'
+    if ($appended -gt 0) { $detail += ', ' + $appended + ' project-only block(s) appended' }
+    if ($legacyAdded -gt 0) { $detail += ', ' + $legacyAdded + ' legacy section(s) wrapped' }
+    return [pscustomobject]@{ Status = 'MERGE'; Detail = $detail; Text = $text; Bom = $bom }
+}
+
 # ------------------------------------------- skills: installed bodies only
 # The install deliberately keeps 3-5 skills, so a missing template skill is
 # NOT added here. Only files the project already has are compared; with
@@ -456,10 +661,22 @@ if (Test-Path -LiteralPath $srcSkills) {
             if ($dstText -match '<!--\s*slot:') {
                 Add-Plan 'UPDATE' $rel $src 'uncompiled skill replaced (-UpdateSkills)'
             } else {
-                Add-Plan 'MANUAL' $rel $src 'installed skill has no slot markers (compiled or empty); review, or pass -ForceSkills'
+                Add-Plan 'MANUAL' $rel $src 'installed skill has no slot markers (compiled or empty); review, or pass -MergeSkills or -ForceSkills'
+            }
+        } elseif ($MergeSkills) {
+            # New template skeleton + the project blocks already compiled on
+            # disk. Refuses (MANUAL/PENDING) when a project block has no place
+            # to go or the result would break the 120-line budget.
+            $m = Merge-SkillBlocks $src $dst
+            if ($m.Status -eq 'MERGE') {
+                Add-Plan 'MERGE' $rel $src $m.Detail
+            } elseif ($m.Status -eq 'SAME') {
+                Add-Plan 'SAME' $rel $src ''
+            } else {
+                Add-Plan $m.Status $rel $src $m.Detail
             }
         } else {
-            Add-Plan 'MANUAL' $rel $src 'installed skill differs; review or re-run with -UpdateSkills'
+            Add-Plan 'MANUAL' $rel $src 'installed skill differs; review or re-run with -MergeSkills'
         }
     }
 }
@@ -605,7 +822,7 @@ if ($ForceSkills) {
 }
 Write-Host ('-' * 64)
 
-$counts = @{ ADD = 0; UPDATE = 0; SAME = 0; SKIP = 0; MANUAL = 0; KEEP = 0; MERGE = 0; MOVE = 0; COMPACT = 0 }
+$counts = @{ ADD = 0; UPDATE = 0; SAME = 0; SKIP = 0; MANUAL = 0; PENDING = 0; KEEP = 0; MERGE = 0; MOVE = 0; COMPACT = 0 }
 foreach ($p in $plan) {
     if ($p.Action -eq 'SAME') { continue }
     $counts[$p.Action]++
@@ -613,6 +830,7 @@ foreach ($p in $plan) {
         'UPDATE' { 'Yellow' }
         'ADD'    { 'Green' }
         'MANUAL' { 'Magenta' }
+        'PENDING' { 'Magenta' }
         'KEEP'   { 'DarkGray' }
         default  { 'Gray' }
     }
@@ -620,9 +838,9 @@ foreach ($p in $plan) {
     if ($p.Detail) { Write-Host ("         " + $p.Detail) -ForegroundColor DarkGray }
 }
 Write-Host ('-' * 64)
-Write-Host ("add={0} update={1} merge={2} move={3} compact={4} skip={5} manual={6} keep={7} same={8}" -f `
+Write-Host ("add={0} update={1} merge={2} move={3} compact={4} skip={5} manual={6} pending={7} keep={8} same={9}" -f `
     $counts.ADD, $counts.UPDATE, $counts.MERGE, $counts.MOVE, $counts.COMPACT,
-    $counts.SKIP, $counts.MANUAL, $counts.KEEP,
+    $counts.SKIP, $counts.MANUAL, $counts.PENDING, $counts.KEEP,
     @($plan | Where-Object { $_.Action -eq 'SAME' }).Count)
 
 if (-not $Apply) {
@@ -706,7 +924,13 @@ foreach ($p in $plan) {
         try {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $bak) | Out-Null
             Copy-Item -LiteralPath $dst -Destination $bak
-            if ($p.Rel -eq 'scripts\harness-required.json') {
+            if ($p.Rel -like '.harness\skills\*') {
+                $m = Merge-SkillBlocks $p.Source $dst
+                if ($m.Status -ne 'MERGE') { throw ('merge refused: ' + $m.Status + ' ' + $m.Detail) }
+                $enc = New-Object System.Text.UTF8Encoding($m.Bom)
+                [System.IO.File]::WriteAllText($dst, $m.Text, $enc)
+                $manifest.Add(('MERGE {0} ({1}; old copy in backup)' -f $p.Rel, $m.Detail))
+            } elseif ($p.Rel -eq 'scripts\harness-required.json') {
                 Merge-RequiredJson $dst $p.Source | Out-Null
                 $manifest.Add(('MERGE {0} (known keys; old copy in backup)' -f $p.Rel))
             } elseif ($p.Rel -eq 'AGENTS.md') {
