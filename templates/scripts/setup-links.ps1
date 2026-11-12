@@ -27,7 +27,14 @@
     -Dest selects the discovery directory of the platform:
       TRAE         -> .trae\skills   (default)
       Claude Code  -> .claude\skills
+      Codex        -> .codex\skills
+      CodeBuddy    -> .codebuddy\skills
       others       -> skip this script and generate .harness\skills\INDEX.md instead
+
+    One machine, several platforms: this script mounts one destination per run.
+    The installer creates the current platform only and hands the user the
+    remaining commands; junctions/symlinks are not versioned, so creating them
+    for platforms the user does not use here only fakes "it is installed".
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(

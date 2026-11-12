@@ -203,13 +203,24 @@ if ($fmBad -eq 0) {
 # legal on platforms without auto-discovery.
 $discoveryDirs = @()
 if ($cfg -and $cfg.platformEntries -and $cfg.platformEntries.skillDirs) { $discoveryDirs = @($cfg.platformEntries.skillDirs) }
-if ($discoveryDirs.Count -eq 0) { $discoveryDirs = @('.trae/skills', '.claude/skills') }
+# Older installs carry only .trae/.claude in their project-owned config; append
+# the known platform dirs so a Codex/CodeBuddy entry is still recognised without
+# editing a MANUAL file.
+foreach ($builtin in @('.trae/skills', '.claude/skills', '.codex/skills', '.codebuddy/skills')) {
+    if ($discoveryDirs -notcontains $builtin) { $discoveryDirs += $builtin }
+}
 
+# Prefer a directory that actually holds entries: a platform tool may create an
+# empty skills/ dir on first run, and that must not hide a populated sibling.
 $foundRoot = $null
+$emptyRoot = $null
 foreach ($d in $discoveryDirs) {
     $p = Join-Path $rootPath ($d -replace '/', '\')
-    if (Test-Path -LiteralPath $p) { $foundRoot = $p; break }
+    if (-not (Test-Path -LiteralPath $p)) { continue }
+    if (@(Get-ChildItem -LiteralPath $p -Force -Directory).Count -gt 0) { $foundRoot = $p; break }
+    if (-not $emptyRoot) { $emptyRoot = $p }
 }
+if (-not $foundRoot) { $foundRoot = $emptyRoot }
 
 if ($foundRoot) {
     $linkCount = 0

@@ -371,6 +371,18 @@
       "file": "templates/AGENTS.md",
       "patterns": ["缓存与一致性.md", "消息与异步.md", "数据迁移与回滚.md"],
       "why": "新增规则文件必须登记到常驻索引；不登记等于没装。"
+    },
+    {
+      "id": "platform-skill-dirs",
+      "file": "templates/scripts/harness-required.json",
+      "patterns": [".codex/skills", ".codebuddy/skills"],
+      "why": "Codex 与 CodeBuddy 有技能发现目录；配置里漏掉会让 verify-harness 误判为没有发现入口。"
+    },
+    {
+      "id": "platform-multi-no-autocreate",
+      "file": "references/平台适配.md",
+      "patterns": [".codex/skills", ".codebuddy/skills", "不代建非当前平台"],
+      "why": "多平台入口是生成物、不入库；协议必须写明只建当前平台、其余给命令，否则安装会替用户铺一堆用不上的平台目录。"
     }
   ]
 }

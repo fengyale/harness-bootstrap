@@ -43,14 +43,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   56 rule/script/doc contract(s) hold
+[PASS] contract   58 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-56 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+58 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -68,7 +68,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 | --- | --- |
 | TRAE | `.trae/skills/harness-bootstrap/` |
 | Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex 或无子智能体平台 | 按索引模式引用 `SKILL.md`，不复制 agents 目录 |
+| Codex CLI | `.codex/skills/harness-bootstrap/`（无子智能体，不复制 agents 目录） |
+| CodeBuddy | `.codebuddy/skills/harness-bootstrap/`（无子智能体，不复制 agents 目录） |
+| 其它 / 不确定 | 按索引模式引用 `SKILL.md` |
 
 `tools/` 只用于本包自检，安装时不会复制进项目。
 
@@ -174,13 +176,13 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
 - 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、56 条跨文件契约和行为测试。
+- 模板包不检查自己；这个仓库有自己的 pre-commit、58 条跨文件契约和行为测试。
 
 ## 平台与限制
 
 - **Windows + Windows PowerShell 5.1**：主要支持路径，脚本与测试在这里验证。
 - **pwsh 7、macOS、Linux**：按 5.1 兼容语法编写，门禁层可跨 OS，体检层尚未逐一验证。详见 [平台适配](references/平台适配.md)。
-- **平台发现**：TRAE、Claude Code、Codex 或未知平台分别使用对应入口；没有对应目录时，不假装子智能体存在。
+- **平台发现**：TRAE `.trae/skills`、Claude Code `.claude/skills`、Codex `.codex/skills`、CodeBuddy `.codebuddy/skills` 各自建入口；一台设备有多个平台时，只建当前平台，其余列出来并给 `setup-links.ps1 -Dest` 命令，不代建（junction 不入库）。没有对应目录时，不假装子智能体存在。
 - **已知取舍**：红线扫描只覆盖新增行，存量违规不阻塞提交；新项目 E0 在代码落地后只报 WARN 要求升级，不会自动阻止合并，第一个真实任务必须把它换成 E1/E2。
 
 ## 参与贡献

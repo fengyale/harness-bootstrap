@@ -43,14 +43,14 @@ Output:
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   56 rule/script/doc contract(s) hold
+[PASS] contract   58 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 56 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 58 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
 
 Run the behavioural tests:
 
@@ -68,7 +68,9 @@ Four suites build throw-away projects under `%TEMP%` and assert real exit codes:
 | --- | --- |
 | TRAE | `.trae/skills/harness-bootstrap/` |
 | Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex or platforms without sub-agents | Reference `SKILL.md` in index mode; do not copy the agents directory |
+| Codex CLI | `.codex/skills/harness-bootstrap/` (no sub-agents; do not copy the agents directory) |
+| CodeBuddy | `.codebuddy/skills/harness-bootstrap/` (no sub-agents; do not copy the agents directory) |
+| Other / unknown | Reference `SKILL.md` in index mode |
 
 `tools/` is for this package only and is never copied into a project.
 
@@ -174,13 +176,13 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
 - A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 56 cross-file contracts and behavioural tests.
+- A template pack does not check itself; this repository has its own pre-commit, 58 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 
 - **Windows + Windows PowerShell 5.1**: the primary supported path; scripts and tests are validated here.
 - **pwsh 7, macOS, Linux**: written for 5.1-compatible syntax; the gate layer runs across OSes, the inspection layer has not been verified per platform. See [platform adapters](references/平台适配.md).
-- **Platform discovery**: TRAE, Claude Code, Codex or unknown platforms each use their own entry; without a matching directory, sub-agents are not pretended to exist.
+- **Platform discovery**: TRAE `.trae/skills`, Claude Code `.claude/skills`, Codex `.codex/skills`, CodeBuddy `.codebuddy/skills` each get their own entry; when one machine runs several platforms, only the current one is created — the rest are listed with a `setup-links.ps1 -Dest` command instead of being created for you (junctions do not travel with git). Without a matching directory, sub-agents are not pretended to exist.
 - **Known trade-offs**: the red-line scan covers new lines only, so legacy violations do not block commits; a new project's E0 anchors only emit a WARN after code lands and do not block merges—the first real task must upgrade them to E1/E2.
 
 ## Contributing

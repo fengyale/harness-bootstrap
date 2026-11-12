@@ -155,6 +155,9 @@ Harness 就是把"看运气"变成"看流程"。
 **1) 探测平台（只读）**：看仓库根有没有 `.trae/` `.claude/` `.codex/` `.codebuddy/` `.cursor/`，
 以及已有的 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`。
 **探测不到就问用户一次**；仍不确定就按"未知平台"处理（走索引模式，见第 3 步）。
+**探测到多个平台时**：当前运行的平台照常建入口，其余只列出来并给一条 `setup-links.ps1 -Dest <平台>/skills` 命令，
+**不代建**——入口是生成物（junction 不入库），替用户全建会让人误以为"这个项目在所有平台都配好了"。
+用户明确说"都挂上"再逐个执行。完整策略见 `references/平台适配.md` 2.1。
 
 **2) 落核心 + 写常驻入口**（平台无关的部分先落，入口只建一种）：
 
@@ -200,7 +203,7 @@ else {
 # 按第 1) 步的探测结果选目标目录，三个分支只走一个：
 #   TRAE         -> $AgentDir = "<项目根>\.trae\agents"
 #   Claude Code  -> $AgentDir = "<项目根>\.claude\agents"
-#   Codex / 未知 -> 不执行本行（走清单模式，别假装子智能体存在）
+#   Codex / CodeBuddy / 未知 -> 不执行本行（走清单模式，别假装子智能体存在）
 Copy-Missing "$PKG\templates\.trae\agents" $AgentDir
 
 # .gitignore：模板里有 .harness/metrics/（门禁日志每次提交都追加，不忽略会让工作区恒 dirty）
@@ -217,7 +220,10 @@ if (-not (Test-Path -LiteralPath $marker)) {
 }
 
 # 平台入口：只建与探测结果对应的一种（同样先判存在，已存在就 SKIP 并按 3.2 合并）
-# TRAE / Codex / 未知 -> AGENTS.md；Claude Code -> CLAUDE.md
+# 常驻文件：TRAE / Codex / CodeBuddy / 未知 -> AGENTS.md；Claude Code -> CLAUDE.md
+# 技能发现目录（第 2 步编译完技能后再建，模式 A 才需要）：
+#   TRAE .trae/skills · Claude .claude/skills · Codex .codex/skills · CodeBuddy .codebuddy/skills
+#   只建当前平台；探测到的其它平台逐条列给用户并给命令，不代建
 ```
 
 - **不要复制全部平台目录**：是哪个平台就建哪个入口，其余一律不建
@@ -306,8 +312,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 
 | 平台能力 | 做法 |
 | --- | --- |
-| 有自动发现目录（TRAE / Claude Code） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills` |
-| 没有自动发现（Codex / CodeBuddy / 未知） | 用 `templates\adapters\generic\HARNESS-INDEX.md` 生成 `.harness\skills\INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
+| 有自动发现目录（TRAE / Claude Code / Codex / CodeBuddy） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills`、Codex `-Dest .codex\skills`、CodeBuddy `-Dest .codebuddy\skills` |
+| 没有自动发现（未知平台） | 用 `templates\adapters\generic\HARNESS-INDEX.md` 生成 `.harness\skills\INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
 
 ```powershell
 # 有自动发现目录时

@@ -111,9 +111,13 @@ foreach ($a in @('AGENTS.md','CLAUDE.md','.trae\rules','.cursor\rules','.github\
     if (Test-Path -LiteralPath (Join-Path $rootPath $a)) { $existingAgents += $a }
 }
 $existingSkills = 0
-$trSkills = Join-Path $rootPath '.trae\skills'
-if (Test-Path -LiteralPath $trSkills) {
-    $existingSkills = @(Get-ChildItem -LiteralPath $trSkills -Force).Count
+$existingSkillDirs = @()
+foreach ($d in @('.trae\skills', '.claude\skills', '.codex\skills', '.codebuddy\skills')) {
+    $p = Join-Path $rootPath $d
+    if (-not (Test-Path -LiteralPath $p)) { continue }
+    $n = @(Get-ChildItem -LiteralPath $p -Force).Count
+    $existingSkillDirs += ("$d ($n)")
+    if ($n -gt $existingSkills) { $existingSkills = $n }
 }
 
 # ------------------------------------------------------------- stack detect
@@ -273,7 +277,7 @@ if ($existingAgents.Count -gt 0) {
     $recNotes.Add("existing rule files found ($($existingAgents -join ', ')): merge into them, never overwrite")
 }
 if ($existingSkills -gt 0) {
-    $recNotes.Add("$existingSkills entries already exist under .trae/skills: diff before linking, do not clobber")
+    $recNotes.Add("skill entries already exist ($($existingSkillDirs -join ', ')): diff before linking, do not clobber")
 }
 if ($testRoots.Count -eq 0) {
     $recNotes.Add('no test root detected: unit-test-write may not be worth installing until tests exist')
