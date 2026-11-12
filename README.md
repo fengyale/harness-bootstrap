@@ -13,17 +13,20 @@
 
 ## 它解决什么问题
 
-AI 能写出代码，但能不能放心交付是另一回事：漏掉项目里不成文的规矩、说“完成了”其实没编译、同一个错误反复犯。
+AI 写代码很快，**交付**才慢。慢的地方通常不是"不会写"，而是下面六类失败——每一类都不是靠"更小心"能解决的：
 
-这套东西把这些判断从“人盯着”变成可执行的门禁和可复查的记录：
+| 失败长什么样 | 为什么反复发生 | 这套东西怎么让它可判定 |
+| --- | --- | --- |
+| **编译过了，逻辑不对**：条件写反、边界漏一档、状态机少一条路径，测试却是绿的 | 没写验收标准就开写；测试只覆盖 happy path | `summary.md` 先写验收标准；单测技能要求覆盖边界；评审按清单逐条过 |
+| **本地跑通，一上线就错**：SQL 在开发库没事，生产库方言 / 数据量 / 索引都不一样 | 把开发库结构当成生产结构；没跑过执行计划 | SQL 正确性四层（语法 / 结构 / 绑定 / 结果）+ `EXPLAIN` + 只读沙箱；环境事实进 wiki，写错直接 FAIL |
+| **单个功能都对，链路不通**：接口字段和前端对不上、上下游协议没对齐、事务跨服务断了 | 只在单个模块里看，没人负责"接缝" | 影响面分析（模块卡 + 接口协议 + 数据模型）；事务 / 一致性技能；集成边界写进评审清单 |
+| **这次改对了，下次换个地方又错**：同一个坑靠人记着 | 纠正只留在对话里，没有落成机制 | `lesson_id` 计数：第 2 次出现就要求晋升成规则、门禁或技能 |
+| **说"完成了"，其实没验**：没编译、没跑测试、贴的是想象中的输出 | 完成与否靠自述，没有出口校验 | 阶段门真跑 `AGENTS.md` 里的命令；`summary.md` 字段校验；E1/E2 证据分级，编造会被打回 |
+| **能跑，但不敢上**：迁移没回滚、没有冒烟、出事定位不了 | 发布路径没人完整走一遍 | 迁移与回滚成对、部署验证技能、上线前的指标与回滚方案检查 |
 
-| 现状 | 装完之后 |
-| --- | --- |
-| 项目知识靠人每轮临时补充 | 写进 `AGENTS.md`、规则和 wiki，按需加载，有索引可查 |
-| 规范写了，智能体不读 | 出口校验：`summary.md` 字段、阶段门、`verify-*` 会指出来 |
-| 门禁靠自觉，`--no-verify` 一绕就过 | git hook 真拦截；绕过会被记录并计入 `bypassRate` |
-| 不知道有没有变好 | `metrics.ps1` 看纠正次数、拦截数、技能加载率的趋势 |
-| 同一个错误反复犯 | `lesson_id` 第 2 次出现时，脚本提示晋升为规则、门禁或技能 |
+这些失败的共同点是：**都能在交付前被判定**，只是过去没人把它写成判定条件。这套东西做的就是这件事——`AGENTS.md` 给索引，技能给做法，git hook 与阶段门做出口校验，`metrics` 给趋势。
+
+> 更细的病根分析见 `references/核心论述.md`；每类失败对应的技能与门禁见 `docs/usage-and-mechanism.html` 第 3 节。
 
 ## 快速开始
 
@@ -44,14 +47,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    1 template skill(s) carry balanced package/project blocks
-[PASS] contract   61 rule/script/doc contract(s) hold
+[PASS] contract   62 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-61 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+62 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -217,7 +220,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
 - 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、61 条跨文件契约和行为测试。
+- 模板包不检查自己；这个仓库有自己的 pre-commit、62 条跨文件契约和行为测试。
 
 ## 平台与限制
 

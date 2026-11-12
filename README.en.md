@@ -13,17 +13,20 @@ It is not a prompt collection and not a template pack. It probes the project, th
 
 ## What it solves
 
-AI can write code, but shipping it safely is a different question: unwritten project rules get missed, "done" is reported before the build passes, and the same mistake returns next task.
+AI writes code fast; **delivery** is slow. The bottleneck is rarely "it cannot write code" but six failure modes — none of which "being more careful" fixes:
 
-This package turns those judgements into executable gates and reviewable records:
+| What the failure looks like | Why it keeps happening | How this makes it decidable |
+| --- | --- | --- |
+| **It compiles, the logic is wrong**: an inverted condition, a missing boundary, a state machine missing one path — and the tests are green | Coding starts before acceptance criteria exist; tests only cover the happy path | `summary.md` states acceptance criteria first; the unit-test skill requires boundaries; review walks a checklist |
+| **It works locally, fails in production**: SQL is fine on the dev database, but the production dialect / data volume / indexes differ | The dev schema is treated as production; no plan was ever run | SQL correctness in four layers (syntax / structure / binding / result) + `EXPLAIN` + a read-only sandbox; environment facts live in the wiki and a mismatch fails the gate |
+| **Each feature is right, the chain is not**: API fields disagree with the frontend, upstream/downstream protocols are misaligned, a transaction breaks across services | Work stays inside one module; nobody owns the seams | Impact analysis (module card + API protocol + data model); transaction / consistency skills; integration boundaries in the review checklist |
+| **Fixed this time, wrong somewhere else next time**: the same trap survives on human memory | Corrections stay in the conversation and never become mechanism | `lesson_id` counting: the second occurrence must become a rule, a gate or a skill |
+| **"Done" without verification**: no compile, no tests, output imagined rather than pasted | Completion is self-reported; there is no exit check | Stage gates really run the commands in `AGENTS.md`; `summary.md` fields are validated; E1/E2 evidence grading rejects invented output |
+| **It runs, but nobody dares ship it**: no rollback for the migration, no smoke test, no way to diagnose an incident | Nobody walked the release path end to end | Migration and rollback in pairs, a deploy-verify skill, and pre-release metric/rollback checks |
 
-| Before | After |
-| --- | --- |
-| Project knowledge is re-supplied by hand every round | Written into `AGENTS.md`, rules and wiki, loaded on demand, indexed |
-| Rules exist but the agent never reads them | Exit checks: `summary.md` fields, stage gates, `verify-*` scripts |
-| Gates rely on discipline; `--no-verify` skips them | git hooks block; bypasses are recorded and counted in `bypassRate` |
-| No way to tell whether things improve | `metrics.ps1` trends corrections, blocks and skill load rate |
-| The same mistake repeats | On the 2nd `lesson_id`, the script prompts promotion to a rule, gate or skill |
+What these share: **all of them are decidable before delivery** — nobody had written the decision down. That is what this does: `AGENTS.md` is the index, skills carry the how, git hooks and stage gates are the exit check, and `metrics` shows the trend.
+
+> Deeper root-cause analysis: `references/核心论述.md`; the skill and gate behind each failure mode: `docs/usage-and-mechanism.html` section 3.
 
 ## Quick start
 
@@ -44,14 +47,14 @@ Output:
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    1 template skill(s) carry balanced package/project blocks
-[PASS] contract   61 rule/script/doc contract(s) hold
+[PASS] contract   62 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 61 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 62 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
 
 Run the behavioural tests:
 
@@ -217,7 +220,7 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
 - A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 61 cross-file contracts and behavioural tests.
+- A template pack does not check itself; this repository has its own pre-commit, 62 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

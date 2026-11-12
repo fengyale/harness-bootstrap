@@ -560,7 +560,7 @@
         装完之后，项目的约定由机器执行，人只确认关键决策。
       </p>
       <div class="chips">
-        <span class="chip"><b>61</b> 条跨文件契约</span>
+        <span class="chip"><b>62</b> 条跨文件契约</span>
         <span class="chip"><b>10</b> 个阶段门</span>
         <span class="chip"><b>3</b> 个 git hook</span>
         <span class="chip"><b>2</b> 条落地路径</span>
@@ -574,6 +574,24 @@
         <span class="sec-num">01</span>
         <h2>它是什么</h2>
         <span class="hint">先看边界，再决定要不要用</span>
+      </div>
+
+      <h3 style="font-size:15px;margin:8px 0">真正难的不是写代码，是六类交付失败</h3>
+      <p class="lede" style="font-size:13px;margin:0 0 12px">
+        它们都能在交付前判定，只是过去没人把判定条件写下来。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>失败</th><th>典型现场</th><th>靠什么判定</th></tr></thead>
+          <tbody>
+            <tr><td>逻辑错</td><td>编译过、测试绿，条件写反或边界漏了</td><td>验收标准先于编码；边界用例；评审清单</td></tr>
+            <tr><td>环境错</td><td>开发库跑通，生产库方言 / 数据量 / 索引不同，上线报错</td><td>四层正确性 + 执行计划 + 只读沙箱</td></tr>
+            <tr><td>集成错</td><td>单模块都对，接口字段 / 协议 / 跨服务事务接缝断了</td><td>影响面分析 + 接口协议 + 一致性技能</td></tr>
+            <tr><td>记忆错</td><td>这次纠正，下次换个模块又犯</td><td><code>lesson_id</code> 计数 → 晋升为规则 / 门禁 / 技能</td></tr>
+            <tr><td>证据错</td><td>说完成但没编译，或贴想象中的输出</td><td>阶段门真跑命令 + 字段校验 + E1/E2</td></tr>
+            <tr><td>运维错</td><td>能跑但不敢上：无回滚、无冒烟、不可观测</td><td>迁移回滚成对 + 部署验证 + 发布检查</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="grid">
@@ -920,7 +938,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
           <li><strong>json</strong>：所有 JSON 可解析</li>
           <li><strong>version</strong>：<code>VERSION</code> 与 <code>releases.json</code> 顶部版本一致</li>
           <li><strong>structure</strong>：必需文件存在，仅本包文件不存在于项目分发包</li>
-          <li><strong>contract</strong>：61 条「同一规则必须同一写法」的跨文件断言</li>
+          <li><strong>contract</strong>：62 条「同一规则必须同一写法」的跨文件断言</li>
           <li><strong>smoke</strong>：临时副本安装 → 阶段 4 → 未填 summary 被拒 → 卸载</li>
         </ul>
         <p style="margin-top:8px">提交时 pre-commit 自动跑 <code>-Fast</code>（跳过 smoke）；发布前跑全量。</p>
