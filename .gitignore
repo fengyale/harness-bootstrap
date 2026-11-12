@@ -13,4 +13,5 @@ TODO-*.md
 # local tool outputs (scratch; never part of the package)
 .drawio-tmp/
 .trae-html-share-packages/
+dist/
 @{_note=*
