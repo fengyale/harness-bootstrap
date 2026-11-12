@@ -10,6 +10,9 @@ jobs:
     # Windows-first: the scripts and tests are validated on Windows PowerShell 5.1.
     # Add a pwsh/ubuntu job once path separators and chmod behaviour are verified.
     runs-on: windows-latest
+    # The behaviour suite spawns a PowerShell process per git hook; a hung step
+    # would otherwise burn the default budget (6 h).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
 

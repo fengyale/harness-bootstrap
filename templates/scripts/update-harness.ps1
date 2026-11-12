@@ -1044,6 +1044,7 @@ Write-Host ''
 if ($failed -gt 0) {
     Write-Host ("UPDATE FINISHED WITH {0} FAILURE(S); see messages above" -f $failed) -ForegroundColor Red
     Write-Host ("backup kept for rollback: {0}" -f $backupRoot) -ForegroundColor Yellow
+    Write-Host ("roll back with: Copy-Item '{0}\*' '{1}' -Recurse -Force" -f $backupRoot, $rootPath) -ForegroundColor Yellow
     Write-Host 'version marker was NOT advanced; fix the failures and re-run the upgrade.' -ForegroundColor Yellow
     exit 1
 }

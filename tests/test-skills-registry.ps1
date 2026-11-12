@@ -14,6 +14,7 @@
     - listing it in the index and creating an entry turns the check green
     - removing only the entry reports "no platform entry", not "not listed"
     - .harness/skills/INDEX.md (index-only platforms) satisfies the entry side
+    - a missing skills/README.md is one failure, not one per skill
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-skills-registry.ps1
@@ -72,10 +73,11 @@ Check 'missing index is named' ($out -match 'not listed in \.harness/skills/READ
 Check 'missing entry is named' ($out -match 'no platform entry')
 Check 'listed and linked skill is not flagged' (-not ($out -match 'main-dev/demo-skill:'))
 
-Step 'metrics separates "not registered" from "never loaded"'
+Step 'metrics names the skill as unregistered'
 $m = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 28 2>&1 | Out-String)
 Check 'metrics reports the skill as not registered' ($m -match 'skill not registered: extra-helper')
-Check 'metrics says it is not a retirement signal' ($m -match 'not a retirement signal')
+# The retirement side is asserted at the end, where five tasks and an old skill
+# make the verdict observable; a string check here would pass either way.
 
 Step 'index + entry fixes it'
 Add-Content -LiteralPath $indexPath -Value '| `extra-helper` | demo |' -Encoding UTF8
@@ -94,6 +96,43 @@ Step 'index-only platform satisfies the entry side'
 Set-Content -LiteralPath "$proj\.harness\skills\INDEX.md" -Value '# index mode' -Encoding UTF8
 $out = RunVerify
 Check 'INDEX.md turns the registry check green' ($out -match 'PASS\] skills-registry')
+
+Step 'metrics: unregistered is not a retirement candidate'
+# An old, unregistered skill plus five tasks: the retirement loop only runs with
+# >= 5 tasks, and the age gate only passes after 28 days. Without the explicit
+# skip, this skill would be reported as a retire candidate even though no
+# platform could ever have loaded it.
+$orphanDir = New-Skill 'biz-dev' '98-orphan-helper' 'orphan-helper'
+foreach ($p in @($demoDir, $orphanDir)) {
+    $f = Join-Path $p 'SKILL.md'
+    [System.IO.File]::SetCreationTime($f, (Get-Date).AddDays(-40))
+    [System.IO.File]::SetLastWriteTime($f, (Get-Date).AddDays(-40))
+}
+$tpl = [System.IO.File]::ReadAllText("$pkg\templates\.harness\changes\_template\summary.md", [System.Text.Encoding]::UTF8)
+$tpl = $tpl -replace 'YYYY-MM-DD', (Get-Date -Format 'yyyy-MM-dd')
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])impl_corrections:[^\r\n]*', 'impl_corrections: 0'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', 'corrections: 0'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: none'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])load_skip_reason:[^\r\n]*', 'load_skip_reason: n/a'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: demo'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])lesson_id:[^\r\n]*', 'lesson_id: -'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', 'sql_review: no SQL change'
+for ($i = 1; $i -le 5; $i++) {
+    $d = Join-Path $proj ".harness\changes\task$i"
+    New-Item -ItemType Directory -Force -Path $d | Out-Null
+    Set-Content -LiteralPath (Join-Path $d 'summary.md') -Value $tpl -Encoding UTF8
+}
+$m = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 28 2>&1 | Out-String)
+Check 'metrics reports the skill as not registered' ($m -match 'skill not registered: orphan-helper')
+Check 'unregistered skill is not a retire candidate' (-not ($m -match 'orphan-helper.*retire candidate'))
+Check 'registered but never loaded is still a retire candidate' ($m -match 'demo-skill.*retire candidate')
+
+Step 'missing README is reported once'
+Remove-Item -LiteralPath $indexPath -Force
+$out = RunVerify
+Check 'missing index file is reported' ($out -match 'missing \.harness/skills/README\.md')
+Check 'one message instead of one per skill' (-not ($out -match 'not listed in \.harness/skills/README\.md'))
 
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'SKILLS REGISTRY TEST OK' -ForegroundColor Green; exit 0 }

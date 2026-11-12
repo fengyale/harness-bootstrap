@@ -269,7 +269,14 @@ $registryPath = Join-Path $skillsRoot 'README.md'
 if (Test-Path -LiteralPath $registryPath) {
     $registryText = [System.IO.File]::ReadAllText($registryPath, [System.Text.Encoding]::UTF8)
 }
+$registryMissing = ($skillDirs.Count -gt 0 -and -not $registryText)
+if ($registryMissing) {
+    # One failure instead of one per skill: without the index no skill is readable.
+    Add-Result 'skills-registry' 'FAIL' 'missing .harness/skills/README.md: copy templates/.harness/skills/README.md and list every skill'
+    $registryBad++
+}
 foreach ($s in $skillDirs) {
+    if ($registryMissing) { continue }
     $plain = $s.Name -replace '^\d+-', ''
     $listed = $false
     if ($registryText) {

@@ -3,6 +3,8 @@
   "_为什么": "同一套门禁语义写在脚本、JSON、SKILL、AGENTS、规则五处；没有机器检查时，改一处就会漂一处。本文件把「五处必须一致」变成可判定的断言。",
 
   "requiredFiles": [
+    "VERSION",
+    "releases.json",
     "SKILL.md",
     "README.md",
     "README.en.md",
@@ -12,6 +14,9 @@
     "tests/run-all.ps1",
     "tests/gate-auto.ps1",
     "tests/regression.ps1",
+    "tests/test-update.ps1",
+    "tests/test-audit-order.ps1",
+    "tests/test-skills-registry.ps1",
     "templates/AGENTS.md",
     "templates/.gitignore",
     "templates/.harness/changes/_small.md",

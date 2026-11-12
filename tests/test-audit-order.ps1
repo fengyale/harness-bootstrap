@@ -28,9 +28,23 @@ function GitCmd {
     & git -C $proj @GitArgs 2>$null
 }
 function RunAudit {
-    param([string[]]$Extra = @())
-    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Root $proj -Base $baseSha @Extra 2>&1 | Out-String
-    return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+    param([string[]]$Extra = @(), [string]$Feature = 'demo')
+    # The script falls back to GITHUB_HEAD_REF / HARNESS_TASK / the branch name.
+    # On a PR runner GITHUB_HEAD_REF is set, which would silently change which
+    # feature is audited; pin it here instead of inheriting the environment.
+    $oldHead = $env:GITHUB_HEAD_REF
+    $oldTask = $env:HARNESS_TASK
+    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
+    Remove-Item Env:HARNESS_TASK -ErrorAction SilentlyContinue
+    try {
+        $callArgs = @('-File', $script, '-Root', $proj, '-Base', $baseSha)
+        if ($Feature) { $callArgs += @('-Feature', $Feature) }
+        $out = & powershell -NoProfile -ExecutionPolicy Bypass @callArgs @Extra 2>&1 | Out-String
+        return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+    } finally {
+        if ($oldHead) { $env:GITHUB_HEAD_REF = $oldHead }
+        if ($oldTask) { $env:HARNESS_TASK = $oldTask }
+    }
 }
 function HeadSha {
     return ([string](GitCmd -GitArgs @('rev-parse', 'HEAD') | Select-Object -First 1)).Trim()
@@ -102,7 +116,7 @@ try {
     Set-Content -LiteralPath "$proj\F.java" -Value 'public class F {}' -Encoding UTF8
     GitCmd -GitArgs @('add', 'F.java')
     GitCmd -GitArgs @('commit', '-q', '-m', 'feat: no pointer')
-    $r = RunAudit
+    $r = RunAudit -Feature ''
     Check 'missing feature pointer skips' (($r.Code -eq 0) -and ($r.Text -match 'no feature pointer'))
 
     Write-Host '=== missing base ===' -ForegroundColor Cyan
