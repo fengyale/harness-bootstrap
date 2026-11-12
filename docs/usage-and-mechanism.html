@@ -658,7 +658,7 @@
           <div class="step-num">1</div>
           <div>
             <h3>放到技能目录</h3>
-            <p>TRAE 用 <code>.trae/skills/harness-bootstrap/</code>；Claude Code 用 <code>.claude/skills/harness-bootstrap/</code>；Codex 用 <code>.codex/skills/harness-bootstrap/</code>；CodeBuddy 用 <code>.codebuddy/skills/harness-bootstrap/</code>；其它平台按索引模式引用 <code>SKILL.md</code>。同一台设备有多个平台时，只建当前平台，其余给 <code>setup-links.ps1 -Dest</code> 命令，不代建。</p>
+            <p>TRAE 用 <code>.trae/skills/harness-bootstrap/</code>；Claude Code 用 <code>.claude/skills/harness-bootstrap/</code>；Codex 用 <code>.agents/skills/harness-bootstrap/</code>（子代理在 <code>.codex/agents/*.toml</code>）；CodeBuddy 用 <code>.codebuddy/skills/harness-bootstrap/</code>（子代理在 <code>.codebuddy/agents/*.md</code>）；其它平台按索引模式引用 <code>SKILL.md</code>。同一台设备有多个平台时，只建当前平台，其余给 <code>setup-links.ps1 -Dest</code> 命令，不代建。</p>
             <pre><code># 包内只有 templates/ 会被复制进项目
 # tools/ 是本包自检用，不随安装分发</code></pre>
           </div>

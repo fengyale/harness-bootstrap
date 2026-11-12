@@ -206,7 +206,7 @@ if ($cfg -and $cfg.platformEntries -and $cfg.platformEntries.skillDirs) { $disco
 # Older installs carry only .trae/.claude in their project-owned config; append
 # the known platform dirs so a Codex/CodeBuddy entry is still recognised without
 # editing a MANUAL file.
-foreach ($builtin in @('.trae/skills', '.claude/skills', '.codex/skills', '.codebuddy/skills')) {
+foreach ($builtin in @('.trae/skills', '.claude/skills', '.agents/skills', '.codebuddy/skills')) {
     if ($discoveryDirs -notcontains $builtin) { $discoveryDirs += $builtin }
 }
 

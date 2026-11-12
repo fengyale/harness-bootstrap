@@ -69,8 +69,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 | --- | --- |
 | TRAE | `.trae/skills/harness-bootstrap/` |
 | Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex CLI | `.codex/skills/harness-bootstrap/`（无子智能体，不复制 agents 目录） |
-| CodeBuddy | `.codebuddy/skills/harness-bootstrap/`（无子智能体，不复制 agents 目录） |
+| Codex CLI | `.agents/skills/harness-bootstrap/`（子代理在 `.codex/agents/*.toml`，需按 TOML 重写） |
+| CodeBuddy | `.codebuddy/skills/harness-bootstrap/`（子代理在 `.codebuddy/agents/*.md`，可直接复用） |
 | 其它 / 不确定 | 按索引模式引用 `SKILL.md` |
 
 `tools/` 只用于本包自检，安装时不会复制进项目。
@@ -223,7 +223,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - **Windows + Windows PowerShell 5.1**：主要支持路径，脚本与测试在这里验证。
 - **pwsh 7、macOS、Linux**：按 5.1 兼容语法编写，门禁层可跨 OS，体检层尚未逐一验证。详见 [平台适配](references/平台适配.md)。
-- **平台发现**：TRAE `.trae/skills`、Claude Code `.claude/skills`、Codex `.codex/skills`、CodeBuddy `.codebuddy/skills` 各自建入口；一台设备有多个平台时，只建当前平台，其余列出来并给 `setup-links.ps1 -Dest` 命令，不代建（junction 不入库）。没有对应目录时，不假装子智能体存在。
+- **平台发现**：TRAE `.trae/skills`、Claude Code `.claude/skills`、Codex `.agents/skills`、CodeBuddy `.codebuddy/skills` 各自建入口；一台设备有多个平台时，只建当前平台，其余列出来并给 `setup-links.ps1 -Dest` 命令，不代建（junction 不入库）。子代理：TRAE `.trae/agents`、Claude `.claude/agents`、CodeBuddy `.codebuddy/agents` 可直接复用 Markdown；Codex 用 `.codex/agents/*.toml`，需按 TOML 重写。
 - **已知取舍**：红线扫描只覆盖新增行，存量违规不阻塞提交；新项目 E0 在代码落地后只报 WARN 要求升级，不会自动阻止合并，第一个真实任务必须把它换成 E1/E2。
 
 ## 参与贡献

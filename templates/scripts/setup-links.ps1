@@ -27,7 +27,7 @@
     -Dest selects the discovery directory of the platform:
       TRAE         -> .trae\skills   (default)
       Claude Code  -> .claude\skills
-      Codex        -> .codex\skills
+      Codex CLI    -> .agents\skills   (repo root; .codex\ holds config only)
       CodeBuddy    -> .codebuddy\skills
       others       -> skip this script and generate .harness\skills\INDEX.md instead
 

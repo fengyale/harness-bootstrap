@@ -152,8 +152,8 @@ Harness 就是把"看运气"变成"看流程"。
 
 两件事，顺序不能反（完整契约见 `references/平台适配.md`）：
 
-**1) 探测平台（只读）**：看仓库根有没有 `.trae/` `.claude/` `.codex/` `.codebuddy/` `.cursor/`，
-以及已有的 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`。
+**1) 探测平台（只读）**：看仓库根有没有 `.trae/` `.claude/` `.agents/` `.codex/` `.codebuddy/` `.cursor/`，
+以及已有的 `AGENTS.md` / `CLAUDE.md` / `CODEBUDDY.md` / `.cursorrules`。
 **探测不到就问用户一次**；仍不确定就按"未知平台"处理（走索引模式，见第 3 步）。
 **探测到多个平台时**：当前运行的平台照常建入口，其余只列出来并给一条 `setup-links.ps1 -Dest <平台>/skills` 命令，
 **不代建**——入口是生成物（junction 不入库），替用户全建会让人误以为"这个项目在所有平台都配好了"。
@@ -203,7 +203,9 @@ else {
 # 按第 1) 步的探测结果选目标目录，三个分支只走一个：
 #   TRAE         -> $AgentDir = "<项目根>\.trae\agents"
 #   Claude Code  -> $AgentDir = "<项目根>\.claude\agents"
-#   Codex / CodeBuddy / 未知 -> 不执行本行（走清单模式，别假装子智能体存在）
+#   CodeBuddy    -> $AgentDir = "<项目根>\.codebuddy\agents"（Markdown agents 兼容）
+#   Codex        -> 不执行本行：它用 .codex\agents\*.toml，需要按 TOML 重写
+#   未知         -> 不执行本行（走清单模式，别假装子智能体存在）
 Copy-Missing "$PKG\templates\.trae\agents" $AgentDir
 
 # .gitignore：模板里有 .harness/metrics/（门禁日志每次提交都追加，不忽略会让工作区恒 dirty）
@@ -222,14 +224,14 @@ if (-not (Test-Path -LiteralPath $marker)) {
 # 平台入口：只建与探测结果对应的一种（同样先判存在，已存在就 SKIP 并按 3.2 合并）
 # 常驻文件：TRAE / Codex / CodeBuddy / 未知 -> AGENTS.md；Claude Code -> CLAUDE.md
 # 技能发现目录（第 2 步编译完技能后再建，模式 A 才需要）：
-#   TRAE .trae/skills · Claude .claude/skills · Codex .codex/skills · CodeBuddy .codebuddy/skills
+#   TRAE .trae/skills · Claude .claude/skills · Codex .agents/skills · CodeBuddy .codebuddy/skills
 #   只建当前平台；探测到的其它平台逐条列给用户并给命令，不代建
 ```
 
 - **不要复制全部平台目录**：是哪个平台就建哪个入口，其余一律不建
 - `scripts\` / `.harness\` **可能已存在**：输出里的每一条 `[SKIP] conflict` 都要**逐条列给用户**，按 3.2 冲突策略**读后合并，不覆盖**；忽略 SKIP 等于默默丢掉已有规则
-- **agents 目录同理**：`.trae\agents` 已存在就 SKIP 并读后合并；Claude 项目改拷到 `.claude\agents`；
-  Codex / 未知平台不装，按清单模式手工评审（不要假装子智能体存在）
+- **agents 目录同理**：`.trae\agents` 已存在就 SKIP 并读后合并；Claude 项目拷到 `.claude\agents`，CodeBuddy 拷到 `.codebuddy\agents`（Markdown 兼容）；
+  Codex 用 `.codex\agents\*.toml`，需按 TOML 重写；未知平台不装，按清单模式手工评审（不要假装子智能体存在）
 - **技能模板不进项目**：`.harness\skills\<分类>\<技能>\` 在第 2 步由启用集编译生成；
   第 0 步只复制 `skills\README.md` 索引。需要骨架时从 `$PKG\templates\.harness\skills\<分类>\<技能>\SKILL.md` 读取后改写
 - 后面所有命令都假设 `scripts\` 在项目根；跳过这一步，下一步会直接失败
@@ -312,7 +314,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 
 | 平台能力 | 做法 |
 | --- | --- |
-| 有自动发现目录（TRAE / Claude Code / Codex / CodeBuddy） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills`、Codex `-Dest .codex\skills`、CodeBuddy `-Dest .codebuddy\skills` |
+| 有自动发现目录（TRAE / Claude Code / Codex / CodeBuddy） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills`、Codex `-Dest .agents\skills`、CodeBuddy `-Dest .codebuddy\skills` |
 | 没有自动发现（未知平台） | 用 `templates\adapters\generic\HARNESS-INDEX.md` 生成 `.harness\skills\INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
 
 ```powershell

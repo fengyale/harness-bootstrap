@@ -69,8 +69,8 @@ Five suites build throw-away projects under `%TEMP%` and assert real exit codes:
 | --- | --- |
 | TRAE | `.trae/skills/harness-bootstrap/` |
 | Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex CLI | `.codex/skills/harness-bootstrap/` (no sub-agents; do not copy the agents directory) |
-| CodeBuddy | `.codebuddy/skills/harness-bootstrap/` (no sub-agents; do not copy the agents directory) |
+| Codex CLI | `.agents/skills/harness-bootstrap/` (subagents live in `.codex/agents/*.toml` and need to be rewritten as TOML) |
+| CodeBuddy | `.codebuddy/skills/harness-bootstrap/` (subagents live in `.codebuddy/agents/*.md` and can be reused as is) |
 | Other / unknown | Reference `SKILL.md` in index mode |
 
 `tools/` is for this package only and is never copied into a project.
@@ -223,7 +223,7 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - **Windows + Windows PowerShell 5.1**: the primary supported path; scripts and tests are validated here.
 - **pwsh 7, macOS, Linux**: written for 5.1-compatible syntax; the gate layer runs across OSes, the inspection layer has not been verified per platform. See [platform adapters](references/平台适配.md).
-- **Platform discovery**: TRAE `.trae/skills`, Claude Code `.claude/skills`, Codex `.codex/skills`, CodeBuddy `.codebuddy/skills` each get their own entry; when one machine runs several platforms, only the current one is created — the rest are listed with a `setup-links.ps1 -Dest` command instead of being created for you (junctions do not travel with git). Without a matching directory, sub-agents are not pretended to exist.
+- **Platform discovery**: TRAE `.trae/skills`, Claude Code `.claude/skills`, Codex `.agents/skills`, CodeBuddy `.codebuddy/skills` each get their own entry; when one machine runs several platforms, only the current one is created — the rest are listed with a `setup-links.ps1 -Dest` command instead of being created for you (junctions do not travel with git). Subagents: TRAE `.trae/agents`, Claude `.claude/agents` and CodeBuddy `.codebuddy/agents` reuse the Markdown files directly; Codex uses `.codex/agents/*.toml` and needs a TOML rewrite.
 - **Known trade-offs**: the red-line scan covers new lines only, so legacy violations do not block commits; a new project's E0 anchors only emit a WARN after code lands and do not block merges—the first real task must upgrade them to E1/E2.
 
 ## Contributing

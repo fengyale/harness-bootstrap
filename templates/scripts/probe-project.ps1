@@ -112,7 +112,7 @@ foreach ($a in @('AGENTS.md','CLAUDE.md','.trae\rules','.cursor\rules','.github\
 }
 $existingSkills = 0
 $existingSkillDirs = @()
-foreach ($d in @('.trae\skills', '.claude\skills', '.codex\skills', '.codebuddy\skills')) {
+foreach ($d in @('.trae\skills', '.claude\skills', '.agents\skills', '.codebuddy\skills')) {
     $p = Join-Path $rootPath $d
     if (-not (Test-Path -LiteralPath $p)) { continue }
     $n = @(Get-ChildItem -LiteralPath $p -Force).Count
