@@ -340,26 +340,29 @@ function Merge-RedlineRows {
 # Merge known keys into scripts/harness-required.json; keep every project-owned
 # key and value that is not part of the known set.
 function Merge-RequiredJson {
-    param([string]$Dst, [string]$Src)
-    $src = (Get-Content -LiteralPath $Src -Raw -Encoding UTF8) | ConvertFrom-Json
-    $dst = (Get-Content -LiteralPath $Dst -Raw -Encoding UTF8) | ConvertFrom-Json
-    $req = @($dst.required)
+    # Keep the path and the parsed document in differently named variables:
+    # PowerShell is case-insensitive, so a local $dst would silently overwrite
+    # the $Dst parameter and WriteAllText would turn the object into a filename.
+    param([string]$DstPath, [string]$SrcPath)
+    $src = (Get-Content -LiteralPath $SrcPath -Raw -Encoding UTF8) | ConvertFrom-Json
+    $cfg = (Get-Content -LiteralPath $DstPath -Raw -Encoding UTF8) | ConvertFrom-Json
+    $req = @($cfg.required)
     foreach ($r in @($src.required)) {
         if ($req -notcontains $r) { $req += $r }
     }
     # The scanner moved from required to requiredAnyOf in 1.25.
     $req = @($req | Where-Object { $_ -ne 'scripts/red-line-scan.ps1' })
-    if ($dst.PSObject.Properties.Name -contains 'required') { $dst.required = $req }
-    else { $dst | Add-Member -NotePropertyName required -NotePropertyValue $req }
+    if ($cfg.PSObject.Properties.Name -contains 'required') { $cfg.required = $req }
+    else { $cfg | Add-Member -NotePropertyName required -NotePropertyValue $req }
     if (($src.PSObject.Properties.Name -contains 'requiredAnyOf') -and
-        -not ($dst.PSObject.Properties.Name -contains 'requiredAnyOf')) {
-        $dst | Add-Member -NotePropertyName requiredAnyOf -NotePropertyValue $src.requiredAnyOf
+        -not ($cfg.PSObject.Properties.Name -contains 'requiredAnyOf')) {
+        $cfg | Add-Member -NotePropertyName requiredAnyOf -NotePropertyValue $src.requiredAnyOf
     }
     if (($src.PSObject.Properties.Name -contains 'sqlGate') -and
-        -not ($dst.PSObject.Properties.Name -contains 'sqlGate')) {
-        $dst | Add-Member -NotePropertyName sqlGate -NotePropertyValue $src.sqlGate
+        -not ($cfg.PSObject.Properties.Name -contains 'sqlGate')) {
+        $cfg | Add-Member -NotePropertyName sqlGate -NotePropertyValue $src.sqlGate
     }
-    [System.IO.File]::WriteAllText($Dst, (($dst | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($DstPath, (($cfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
     return $true
 }
 

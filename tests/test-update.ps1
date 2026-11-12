@@ -367,6 +367,17 @@ Check 'old promoted moved to tracked path' ((Test-Path -LiteralPath "$proj\.harn
 Check 'version marker updated' ((Get-Content -LiteralPath "$proj\.harness\.installed-version" -TotalCount 1) -eq '9.9.9')
 Check 'history preserved' ((Get-Content -LiteralPath "$proj\.harness\changes\demo\summary.md") -eq 'history-record')
 Check 'project JSON untouched' ((Get-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Raw) -eq $jsonBefore)
+
+# The MERGE branch once lost the destination path (a local $dst overwrote the
+# $Dst parameter), so the project config was never merged and a junk file named
+# @{...} appeared in the process working directory.
+$mergedConfig = (Get-Content -LiteralPath "$proj\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+Check 'required JSON merged: sqlGate added' ($mergedConfig.PSObject.Properties.Name -contains 'sqlGate')
+Check 'required JSON merged: requiredAnyOf added' ($mergedConfig.PSObject.Properties.Name -contains 'requiredAnyOf')
+Check 'required JSON merged: project note kept' ($mergedConfig._note -eq 'old install')
+Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.required) -contains 'scripts/red-line-scan.ps1'))
+Check 'required JSON merged: package entries added' (@($mergedConfig.required) -contains 'scripts/stage-gate.ps1')
+Check 'no @{...} junk file left in the package root' (@(Get-ChildItem -LiteralPath $pkg -Force -Filter '@{*' -ErrorAction SilentlyContinue).Count -eq 0)
 Check 'AGENTS.md untouched' ((Get-Content -LiteralPath "$proj\AGENTS.md" -Raw) -notmatch 'new template line')
 Check '.py scanner replaced' ((Select-String -LiteralPath "$proj\scripts\red-line-scan.py" -Pattern 'upgrade-test-marker' -Quiet))
 Check 'installed skill untouched by default' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -notmatch 'upgraded-skill')
