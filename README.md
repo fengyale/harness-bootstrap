@@ -38,19 +38,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      23 .ps1 file(s) parse
+[PASS] parse      24 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   60 rule/script/doc contract(s) hold
+[PASS] contract   61 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-60 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+61 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -58,7 +58,7 @@ package gate: OPEN
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-四套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计。
+五套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）。
 
 ## 装到项目
 
@@ -174,7 +174,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 | --- | --- | --- |
 | **该触发不触发** | 入口是否建了、`description` 是否写了用户原话、是否和别的技能撞词 | 平台技能列表里有没有它；重启后重发一句原话；`metrics.ps1` 看 `load_skip_reason` 是否集中出现 |
 | **触发了不照做** | 正文步骤是否可判定、指向的路径是否存在、技能是否已和代码脱节 | `verify-grounding.ps1` 查路径与证据；正文里"应该/尽量"这类词改成可勾选的检查项 |
-| **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 links / frontmatter 两项；`verify-grounding.ps1` 的 references 一项 |
+| **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 `skills-registry`（登记 + 平台入口）、links / frontmatter；`verify-grounding.ps1` 的 references |
 
 > 三种症状都不靠"感觉"：`loaded_skills` 与 `load_skip_reason` 有记录，`verify-*` 有断言。调触发词的具体做法见 `references/维护与体检.md` 第三节。
 
@@ -212,7 +212,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
 - 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、60 条跨文件契约和行为测试。
+- 模板包不检查自己；这个仓库有自己的 pre-commit、61 条跨文件契约和行为测试。
 
 ## 平台与限制
 

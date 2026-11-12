@@ -205,6 +205,12 @@
       "why": "分层放置只解释了「为什么放这里」；缺运行期加载链，读者会以为把所有文件复制齐就等于装好了。"
     },
     {
+      "id": "skills-registry-check",
+      "file": "templates/scripts/verify-harness.ps1",
+      "patterns": ["skills-registry", "not listed in .harness/skills/README.md"],
+      "why": "技能只有目录、没登记或没入口就是死文件；缺这项检查，新增技能会静默失效，metrics 还会把「没接上线」误判成「没人用」。"
+    },
+    {
       "id": "sqlGate-data",
       "file": "templates/scripts/harness-required.json",
       "pattern": "\"sqlGate\"",

@@ -550,6 +550,23 @@ $skillRate = $stats.SkillRate
 # Same normalized name in two categories would be merged into one count; flag it
 # instead of silently making one skill vouch for the other.
 $duplicateSkillNames = @($installed | Group-Object Name | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+# A skill directory that was never listed in .harness/skills/README.md was never
+# reachable from the platform index either, so zero loads means "not wired up",
+# not "unused". Diagnose it separately instead of offering it for retirement.
+$skillIndexText = ''
+$skillIndexPath = Join-Path $skillsRoot 'README.md'
+if (Test-Path -LiteralPath $skillIndexPath) {
+    $skillIndexText = [System.IO.File]::ReadAllText($skillIndexPath, [System.Text.Encoding]::UTF8)
+}
+$unregistered = @()
+foreach ($skill in $installed) {
+    $hit = $false
+    if ($skillIndexText) {
+        $probe = '(?i)(?<![A-Za-z0-9_-])' + [regex]::Escape($skill.Name) + '(?![A-Za-z0-9_-])'
+        $hit = ($skillIndexText -match $probe)
+    }
+    if (-not $hit) { $unregistered += $skill.Name }
+}
 # Report each field separately: "7 files missing all three fields" is false when
 # the real gap is only impl_corrections, and it sends the reader to the wrong fix.
 $missingCorr = @($tasks | Where-Object { -not $_.HasCorrections }).Count
@@ -596,6 +613,9 @@ if ($Compare -and $null -ne $prevStats) {
 
 # ------------------------------------------------------------------- verdict
 $verdict = @()
+foreach ($u in $unregistered) {
+    $verdict += "skill not registered: $u (missing from .harness/skills/README.md; add it and run setup-links -- zero loads here is not a retirement signal)"
+}
 if ($Days -gt 0) {
     $verdict += "window: last $Days day(s), since $($cutoff.ToString('yyyy-MM-dd'))"
     if ($undatedTasks.Count -gt 0) {
@@ -645,6 +665,7 @@ if ($tasks.Count -eq 0) {
         $requiredAge = if ($Days -gt 0) { [Math]::Max($SkillMinAgeDays, $Days) } else { $SkillMinAgeDays }
         foreach ($skill in $installed) {
             if ($skillCounts.ContainsKey($skill.Name)) { continue }
+            if ($unregistered -contains $skill.Name) { continue }
             if ($Days -lt 28) {
                 $verdict += "skill never loaded in this window: $($skill.Name) (extend -Days to 28 or more before judging retirement)"
             } elseif ($null -eq $skill.AgeDays) {

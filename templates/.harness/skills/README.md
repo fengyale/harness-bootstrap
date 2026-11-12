@@ -75,6 +75,7 @@
 2. frontmatter 只写 `name` + `description`（**不需要** whenToUse，触发条件写在正文和 description 里）
 3. 跑 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-links.ps1` 建入口
 4. 在根 `AGENTS.md` 的技能分类里登记，并在**本文件**的对应表里加一行
+   （`verify-harness.ps1` 的 `skills-registry` 会查两件事：本文件有没有登记、平台发现目录有没有同名入口；缺任一项直接 FAIL）
 5. 重启工具，发一句匹配 `description` 的话，**验证它真的自动触发**
 
 ## 淘汰机制（别忘了）

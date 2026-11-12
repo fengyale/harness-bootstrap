@@ -13,6 +13,7 @@
     regression.ps1  install -> fill summary -> stage-gate -All -> metrics -> uninstall
     test-update.ps1 upgrade plan: replace .ps1, keep JSON/history, backup, version marker
     test-audit-order.ps1  CI-side summary-order audit over a commit range
+    test-skills-registry.ps1  a new skill must be indexed and reachable, or it is a dead file
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
@@ -29,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
 $failed = 0
 
-foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1')) {
+foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1', 'test-skills-registry.ps1')) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
     & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $name)

@@ -246,6 +246,61 @@ if ($foundRoot) {
     }
 }
 
+# ------------------------------------------------- 3b skills registration
+# A skill directory that is absent from .harness/skills/README.md and has no
+# platform entry is a dead file: nothing discovers it, no summary can record a
+# load, and metrics would later mistake "never wired up" for "never used".
+$registryBad = 0
+$entryNames = @()
+foreach ($d in $discoveryDirs) {
+    $p = Join-Path $rootPath ($d -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $p)) { continue }
+    foreach ($e in Get-ChildItem -LiteralPath $p -Force -Directory -ErrorAction SilentlyContinue) {
+        $entryNames += $e.Name
+    }
+}
+$indexMode = Test-Path -LiteralPath (Join-Path $skillsRoot 'INDEX.md')
+# Without any discovery mechanism (no entry, no INDEX.md) the links check above
+# already warns; do not turn every skill into a second failure. The index listing
+# is still checked: an unlisted skill is unreadable no matter how it is found.
+$entrySideApplies = $indexMode -or ($entryNames.Count -gt 0)
+$registryText = ''
+$registryPath = Join-Path $skillsRoot 'README.md'
+if (Test-Path -LiteralPath $registryPath) {
+    $registryText = [System.IO.File]::ReadAllText($registryPath, [System.Text.Encoding]::UTF8)
+}
+foreach ($s in $skillDirs) {
+    $plain = $s.Name -replace '^\d+-', ''
+    $listed = $false
+    if ($registryText) {
+        foreach ($n in @($s.Name, $plain)) {
+            if ($registryText -match ('(?i)(?<![A-Za-z0-9_-])' + [regex]::Escape($n) + '(?![A-Za-z0-9_-])')) { $listed = $true; break }
+        }
+    }
+    $hasEntry = $indexMode
+    if (-not $hasEntry -and $entrySideApplies) {
+        foreach ($n in @($s.Name, $plain)) {
+            if ($entryNames -contains $n) { $hasEntry = $true; break }
+        }
+    } elseif (-not $entrySideApplies) {
+        $hasEntry = $true
+    }
+    $missing = @()
+    if (-not $listed) { $missing += 'not listed in .harness/skills/README.md' }
+    if (-not $hasEntry) { $missing += 'no platform entry (run scripts/setup-links.ps1, or add .harness/skills/INDEX.md)' }
+    if ($missing.Count -gt 0) {
+        Add-Result 'skills-registry' 'FAIL' "$($s.Category)/$($s.Name): $($missing -join '; ')"
+        $registryBad++
+    }
+}
+if ($registryBad -eq 0 -and $skillDirs.Count -gt 0) {
+    if ($entrySideApplies) {
+        Add-Result 'skills-registry' 'PASS' "$($skillDirs.Count) skill(s) listed in the index and reachable from a discovery entry"
+    } else {
+        Add-Result 'skills-registry' 'PASS' "$($skillDirs.Count) skill(s) listed in the index (no discovery entry yet; see the links warning)"
+    }
+}
+
 # ---------------------------------------------------------------- 4 red lines
 $jsonPath = Join-Path $rootPath 'scripts\red-line-rules.json'
 $agentsPath = Join-Path $rootPath 'AGENTS.md'
