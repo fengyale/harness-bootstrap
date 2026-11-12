@@ -43,14 +43,14 @@ Output:
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   58 rule/script/doc contract(s) hold
+[PASS] contract   60 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 58 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 60 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
 
 Run the behavioural tests:
 
@@ -142,6 +142,32 @@ AGENTS.md                    the only resident file (<=150 lines): stack, comman
 scripts/                     probe, scan, stage gate, field checks, metrics, uninstall
 ```
 
+## How a single task is guided
+
+After installation every task follows the same loading chain instead of dumping every rule into context:
+
+| Layer | Where | When it enters context |
+| --- | --- | --- |
+| **Resident** | `AGENTS.md`: stack, commands, red lines, file index, mandatory skills | Every turn (≤150 lines) |
+| **Trigger** | `name` + `description` of each installed skill (the platform matches only these) | The list is always present; **the body loads only when it matches the task** |
+| **Reference** | `.harness/rules`, `wiki`, `modules` pointed to by the skill body | Only when the body tells you to read them |
+
+Example: "add a status filter to the order list query".
+
+1. The index in `AGENTS.md` says "load `request-analysis` on a new requirement" → it produces `summary.md` (requirement / acceptance / impact / split)
+2. `coding-skill` matches "start writing code" → its body points to `编码规范.md` and the order module card, and only then are those read
+3. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`
+4. `expert-reviewer` matches before merging → review verdict and "missing capability" go back into `summary.md`
+5. On commit, `pre-commit` checks the base summary fields and the SQL verdict; stage 10 checks `lesson_id` / `sql_review`
+
+Three things keep this from degenerating into luck:
+
+- **The index is explicit**: the file index and mandatory-skill list in `AGENTS.md` pin down which document a task type must read
+- **Triggering is platform-native**: skill bodies are not resident; only a matching `description` loads them, which is why descriptions must use the user's own words and must not overlap
+- **Loading is recorded**: `loaded_skills` / `load_skip_reason` are required `summary.md` fields, and `metrics.ps1` computes the load rate — so "it did not trigger when it should" becomes measurable
+
+On platforms without auto-discovery, this degrades to `.harness/skills/README.md` as the index plus a mandatory-reading list in the resident file: reliability comes from writing it down, not from platform matching.
+
 ## What it changes
 
 - **The resident layer stays small**: `AGENTS.md` stays within 150 lines; details live in rules, wiki pages and module cards loaded on demand.
@@ -176,7 +202,7 @@ Real case: a 12-module Java system with 182 legacy violations and 2 test files.
 
 - A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
 - A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 58 cross-file contracts and behavioural tests.
+- A template pack does not check itself; this repository has its own pre-commit, 60 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

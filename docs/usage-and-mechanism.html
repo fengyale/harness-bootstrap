@@ -560,7 +560,7 @@
         装完之后，项目的约定由机器执行，人只确认关键决策。
       </p>
       <div class="chips">
-        <span class="chip"><b>58</b> 条跨文件契约</span>
+        <span class="chip"><b>60</b> 条跨文件契约</span>
         <span class="chip"><b>10</b> 个阶段门</span>
         <span class="chip"><b>3</b> 个 git hook</span>
         <span class="chip"><b>2</b> 条落地路径</span>
@@ -716,6 +716,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         <h2>日常使用</h2>
         <span class="hint">一个任务从进入到收尾</span>
       </div>
+
+      <div class="table-wrap" style="margin-bottom:8px">
+        <table>
+          <thead><tr><th>层</th><th>读什么</th><th>什么时候进上下文</th></tr></thead>
+          <tbody>
+            <tr><td>常驻</td><td><code>AGENTS.md</code>：技术栈、必跑命令、红线、文件索引、必上技能</td><td>每轮都在（≤150 行）</td></tr>
+            <tr><td>触发</td><td>已装技能的 <code>name</code> + <code>description</code>（平台只按这两个匹配）</td><td>清单每轮在场，<b>命中当前任务才加载正文</b></td></tr>
+            <tr><td>引用</td><td>技能正文指到的 <code>rules/</code>、<code>wiki/</code>、<code>modules/</code></td><td>正文让你读时才读</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede" style="font-size:13px;margin:8px 0 16px">
+        一个任务不会把全部规范塞进上下文：先按 <code>AGENTS.md</code> 的索引找到该加载哪个技能，再由 <code>description</code> 匹配当前任务，最后只读技能正文指向的那几份文件。加载情况写进 <code>summary.md</code> 的 <code>loaded_skills</code>，<code>metrics.ps1</code> 据此计算加载率；平台没有自动发现能力时，退化为
+        <code>.harness/skills/README.md</code> 索引 + 常驻文件里的必读清单。
+      </p>
 
       <section class="diagram-shell">
         <p class="diagram-shell__hint">十个阶段；标 AUTO 的判据由脚本判定，HUMAN 只提示不阻断。</p>
@@ -905,7 +920,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
           <li><strong>json</strong>：所有 JSON 可解析</li>
           <li><strong>version</strong>：<code>VERSION</code> 与 <code>releases.json</code> 顶部版本一致</li>
           <li><strong>structure</strong>：必需文件存在，仅本包文件不存在于项目分发包</li>
-          <li><strong>contract</strong>：58 条「同一规则必须同一写法」的跨文件断言</li>
+          <li><strong>contract</strong>：60 条「同一规则必须同一写法」的跨文件断言</li>
           <li><strong>smoke</strong>：临时副本安装 → 阶段 4 → 未填 summary 被拒 → 卸载</li>
         </ul>
         <p style="margin-top:8px">提交时 pre-commit 自动跑 <code>-Fast</code>（跳过 smoke）；发布前跑全量。</p>

@@ -193,6 +193,18 @@
       "why": "README 是外部用户的第一入口；技能名和自检命令必须与仓库实际一致。"
     },
     {
+      "id": "readme-on-demand-loading",
+      "file": "README.md",
+      "patterns": ["一次任务是怎么被引导的", "命中当前任务才加载正文", "loaded_skills"],
+      "why": "渐进式按需加载是运行期的核心机制；README 不讲清楚，外部读者只会看到一堆静态文件，不知道每个任务是怎么被技能和索引引导的。"
+    },
+    {
+      "id": "arch-runtime-loading",
+      "file": "references/架构与职责.md",
+      "patterns": ["运行期：一次任务怎么按需加载", "`description` 是触发开关", "一次只读相关部分"],
+      "why": "分层放置只解释了「为什么放这里」；缺运行期加载链，读者会以为把所有文件复制齐就等于装好了。"
+    },
+    {
       "id": "sqlGate-data",
       "file": "templates/scripts/harness-required.json",
       "pattern": "\"sqlGate\"",

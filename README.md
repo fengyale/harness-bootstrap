@@ -43,14 +43,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] contract   58 rule/script/doc contract(s) hold
+[PASS] contract   60 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-58 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+60 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -142,6 +142,32 @@ AGENTS.md                    唯一常驻文件（≤150 行）：技术栈、�
 scripts/                     探测、扫描、阶段门、字段校验、度量、卸载
 ```
 
+## 一次任务是怎么被引导的
+
+装完之后，每个任务都走同一条加载链，而不是把所有规范一次性塞进上下文：
+
+| 层 | 在哪里 | 什么时候进上下文 |
+| --- | --- | --- |
+| **常驻** | `AGENTS.md`：技术栈、必跑命令、红线、文件索引、必上技能 | 每轮都在（≤150 行） |
+| **触发** | 已装技能的 `name` + `description`（平台只按这两个匹配） | 技能清单每轮在场；**命中当前任务才加载正文** |
+| **引用** | 技能正文里指到的 `.harness/rules`、`wiki`、`modules` | 正文让你读时才读 |
+
+以「给订单列表加一个按状态过滤的查询」为例：
+
+1. `AGENTS.md` 的索引写着"收到需求先加载 `request-analysis`" → 产出 `summary.md`（需求 / 验收 / 影响面 / 任务拆分）
+2. 动代码时 `coding-skill` 命中"开始写代码" → 正文指向 `编码规范.md` 和订单模块卡，这时才读这两份
+3. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`
+4. 合并前 `expert-reviewer` 命中 → 评审结论与「待补短板」写回 `summary.md`
+5. 提交时 `pre-commit` 校验 summary 基础字段与 SQL 结论；阶段 10 校验 `lesson_id` / `sql_review`
+
+保证它不退化成"看运气"的是三件事：
+
+- **索引是显式的**：`AGENTS.md` 的「文件索引」和「必上技能」写死哪类任务读哪份，不靠模型自由发挥
+- **触发是平台原生的**：技能正文不常驻，只有 `description` 匹配当前任务才加载；所以 `description` 要写用户会说的话，且技能之间不能重叠
+- **加载有记录**：`loaded_skills` / `load_skip_reason` 是 `summary.md` 必填字段，`metrics.ps1` 统计加载率——"该触发不触发"因此能被度量出来
+
+平台没有自动发现能力时（未知工具），退化为 `.harness/skills/README.md` 当索引 + 常驻文件写死必读清单：可靠性靠"写清楚"，不靠平台匹配。
+
 ## 它改了什么
 
 - **常驻层只保留每轮必读的内容**：`AGENTS.md` 控制在 150 行内，细节放进按需加载的规则、wiki 和模块卡。
@@ -176,7 +202,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 - 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
 - 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、58 条跨文件契约和行为测试。
+- 模板包不检查自己；这个仓库有自己的 pre-commit、60 条跨文件契约和行为测试。
 
 ## 平台与限制
 
