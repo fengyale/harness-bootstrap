@@ -41,7 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      24 .ps1 file(s) parse
+[PASS] parse      25 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -236,6 +236,8 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+# 打发布包：排除 .git/.idea/dist/.trae 等本地目录，只留可安装资产
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-zip.ps1
 ```
 
 ## License

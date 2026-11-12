@@ -41,7 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      24 .ps1 file(s) parse
+[PASS] parse      25 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -236,6 +236,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Before changing anything:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+# release zip: drops .git/.idea/dist/.trae and keeps installable assets only
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-zip.ps1
 ```
 
 ## License
