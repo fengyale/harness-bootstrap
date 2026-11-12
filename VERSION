@@ -1,7 +1,14 @@
-HARNESS-BOOTSTRAP VERSION 1.27.0
+HARNESS-BOOTSTRAP VERSION 1.27.1
 
 changelog
 ---------
+1.27.1  (升级占位符误判修复)
+- 修复：templates/AGENTS.md 与 templates/.harness/rules/编码规范.md 的
+  R5/R6 检查格、记录关联行、提交信息行原先用 <...> 包住说明文字；升级
+  MERGE 会把它们写回项目，被 verify-harness 判为「模板占位符残留」而
+  FAIL，且重跑只会再写回一次。现保留 scoped 文案、只去掉尖括号
+- 测试：test-update.ps1 增加 4 条断言，锁住「合并进项目的行不含占位符」
+
 1.27.0  (CI 反序审计 / 自检数字断言)
 - 审计：新增 scripts/audit-order.ps1，对提交区间检查「源码提交前是否已有
   该特性 summary」；合并提交跳过，提交信息含 [L0] 显式豁免，

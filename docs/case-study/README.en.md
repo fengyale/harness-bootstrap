@@ -6,7 +6,7 @@
 >
 > **Recorded 2026-10-29 (v1.18.0).** Every state below — especially section 6,
 > "What is not done yet" — is the state **at that time** and is not rewritten as
-> later progress lands. The package itself is now v1.27.0; see
+> later progress lands. The package itself is now v1.27.1; see
 > [VERSION](../VERSION) for what changed since.
 >
 > [中文版](README.md)
