@@ -4,6 +4,11 @@
 > credential locations and vendor names are desensitised; the stack, the
 > structure, the rules and the decision trail are unchanged.
 >
+> **Recorded 2026-10-29 (v1.18.0).** Every state below — especially section 6,
+> "What is not done yet" — is the state **at that time** and is not rewritten as
+> later progress lands. The package itself is now v1.27.0; see
+> [VERSION](../VERSION) for what changed since.
+>
 > [中文版](README.md)
 
 ---
@@ -255,13 +260,14 @@ something a script can count.**
 
 ---
 
-## 6. What is not done yet
+## 6. What is not done yet (as of 2026-10-29)
 
-Honestly:
+Honestly. Each row has its original evidence in `excerpt/` and is not backfilled
+when the package upgrades:
 
 | Item | State |
 |---|---|
-| A1–A4 / A6 | The mechanisms exist, but at that point they had only been exercised on harness self-maintenance tasks, not on a real business requirement end to end |
+| A1–A4 / A6 | The mechanisms exist, but at that point they had only been exercised on harness self-maintenance tasks, not on a real business requirement end to end (`loaded_skills: none` and `touched_modules: none` in `excerpt/.harness/changes/load-coverage-and-gate/summary.md`) |
 | A7 (closed loop) | Needs two consecutive 14-day windows. There is one entry in `promoted.txt`, but the trend metric does not have enough samples yet |
 | Test coverage | The project had 2 test files to begin with, so `tests-green` stayed a HUMAN criterion for a long time |
 | Legacy violations | Only "no new ones" was achieved; paying down the 182 had not started |
