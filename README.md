@@ -168,6 +168,16 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 平台没有自动发现能力时（未知工具），退化为 `.harness/skills/README.md` 当索引 + 常驻文件写死必读清单：可靠性靠"写清楚"，不靠平台匹配。
 
+加载链断了通常只有三种样子，按症状查：
+
+| 症状 | 先查什么 | 怎么查 |
+| --- | --- | --- |
+| **该触发不触发** | 入口是否建了、`description` 是否写了用户原话、是否和别的技能撞词 | 平台技能列表里有没有它；重启后重发一句原话；`metrics.ps1` 看 `load_skip_reason` 是否集中出现 |
+| **触发了不照做** | 正文步骤是否可判定、指向的路径是否存在、技能是否已和代码脱节 | `verify-grounding.ps1` 查路径与证据；正文里"应该/尽量"这类词改成可勾选的检查项 |
+| **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 links / frontmatter 两项；`verify-grounding.ps1` 的 references 一项 |
+
+> 三种症状都不靠"感觉"：`loaded_skills` 与 `load_skip_reason` 有记录，`verify-*` 有断言。调触发词的具体做法见 `references/维护与体检.md` 第三节。
+
 ## 它改了什么
 
 - **常驻层只保留每轮必读的内容**：`AGENTS.md` 控制在 150 行内，细节放进按需加载的规则、wiki 和模块卡。

@@ -168,6 +168,16 @@ Three things keep this from degenerating into luck:
 
 On platforms without auto-discovery, this degrades to `.harness/skills/README.md` as the index plus a mandatory-reading list in the resident file: reliability comes from writing it down, not from platform matching.
 
+A broken loading chain shows up in only three ways:
+
+| Symptom | Check first | How |
+| --- | --- | --- |
+| **It should trigger but does not** | Whether the entry exists, whether `description` uses the user's own words, whether two skills share trigger words | Look for it in the platform skill list; restart and repeat the sentence; `metrics.ps1` shows whether `load_skip_reason` clusters |
+| **It triggers but is not followed** | Whether the steps are decidable, whether referenced paths exist, whether the skill has drifted from the code | `verify-grounding.ps1` checks paths and evidence; rewrite "should / try to" into checkable items |
+| **The index is missing an entry** | Whether a new rule / wiki page / skill was added to the `AGENTS.md` file index and `skills/README.md` | The links / frontmatter checks in `verify-harness.ps1`; the references check in `verify-grounding.ps1` |
+
+> None of the three relies on a feeling: `loaded_skills` and `load_skip_reason` are recorded, and `verify-*` asserts the structure. Tuning trigger words is covered in `references/维护与体检.md` section 3.
+
 ## What it changes
 
 - **The resident layer stays small**: `AGENTS.md` stays within 150 lines; details live in rules, wiki pages and module cards loaded on demand.
