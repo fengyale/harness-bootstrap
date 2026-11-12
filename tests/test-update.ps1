@@ -170,6 +170,27 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-
 New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-big" | Out-Null
 [System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-big\SKILL.md", @('# big skill', 'old-big-line'), (New-Object System.Text.UTF8Encoding($false)))
 
+# Renamed skill: the project keeps the template skill under its own directory
+# name (04-sql-review instead of 14-sql-review). Matching is by frontmatter name.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\biz-dev\04-renamed-probe" | Out-Null
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\biz-dev\04-renamed-probe\SKILL.md", @(
+    '---',
+    'name: renamed-probe',
+    'description: renamed tuned description',
+    '---',
+    '',
+    '# renamed skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    'old-renamed-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings',
+    '- cache: RenamedCache',
+    '<!-- harness:project:end -->'
+), (New-Object System.Text.UTF8Encoding($false)))
+
 # Remove the new ignore line so the MANUAL branch for .gitignore is exercised.
 # Use .NET UTF-8 explicitly: PS 5.1 Get-Content/Set-Content on a UTF-8 file
 # without BOM decodes the Chinese comments as ANSI and corrupts the file.
@@ -287,6 +308,26 @@ $bigLines = @('---', 'name: merge-big', 'description: template description', '--
 for ($i = 1; $i -le 130; $i++) { $bigLines += "filler-$i" }
 $bigLines += '<!-- harness:package:end -->'
 [System.IO.File]::WriteAllLines("$newPkg\templates\.harness\skills\main-dev\merge-big\SKILL.md", $bigLines, (New-Object System.Text.UTF8Encoding($false)))
+
+# Same skill in the template under the canonical directory name.
+New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\biz-dev\14-renamed-probe" | Out-Null
+Set-Content -LiteralPath "$newPkg\templates\.harness\skills\biz-dev\14-renamed-probe\SKILL.md" -Value @(
+    '---',
+    'name: renamed-probe',
+    'description: template description',
+    '---',
+    '',
+    '# renamed skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    'new-renamed-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings (fill at install)',
+    '- cache: <!-- slot:cache.api -->',
+    '<!-- harness:project:end -->'
+) -Encoding UTF8
 # The change template is package-owned: a newer one must reach the project.
 New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\changes\_template" | Out-Null
 Copy-Item -LiteralPath "$pkg\templates\.harness\changes\_template\summary.md" `
@@ -352,6 +393,8 @@ Check 'dry-run: marker skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\m
 Check 'dry-run: legacy skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-legacy\\SKILL\.md')
 Check 'dry-run: missing project block PENDING' ($dryMerge -match '\[PENDING\s*\].*main-dev\\merge-pending\\SKILL\.md')
 Check 'dry-run: over-budget skill MANUAL' ($dryMerge -match '\[MANUAL\s*\].*main-dev\\merge-big\\SKILL\.md')
+Check 'dry-run: renamed skill MERGE' ($dryMerge -match '\[MERGE\s*\].*biz-dev\\04-renamed-probe\\SKILL\.md')
+Check 'dry-run: renamed match is explained' ($dryMerge -match 'matched by frontmatter name')
 Check 'dry-run: over-budget reason names the limit' ($dryMerge -match 'hard limit 120')
 
 # -------------------------------------------------------------------- apply
@@ -459,6 +502,13 @@ Check 'merge: old package text gone' ($mergeAfter -notmatch 'old-package-line')
 Check 'merge: project block kept' ($mergeAfter -match 'ProjectCache')
 Check 'merge: project-only block kept' ($mergeAfter -match 'keep-me')
 Check 'merge: project description kept' ($mergeAfter -match 'description: project-tuned description')
+
+# A skill installed under a project-chosen directory name must still be found.
+$renamedAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\biz-dev\04-renamed-probe\SKILL.md", [System.Text.Encoding]::UTF8)
+Check 'renamed: package text refreshed' ($renamedAfter -match 'new-renamed-package')
+Check 'renamed: old package text gone' ($renamedAfter -notmatch 'old-renamed-package')
+Check 'renamed: project binding kept' ($renamedAfter -match 'RenamedCache')
+Check 'renamed: template slot did not leak' ($renamedAfter -notmatch '<!--\s*slot:')
 Check 'merge: markers kept' (($mergeAfter -match 'harness:package:begin mode') -and ($mergeAfter -match 'harness:project:begin bindings'))
 Check 'merge: template slot did not leak' ($mergeAfter -notmatch '<!--\s*slot:')
 

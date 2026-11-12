@@ -621,6 +621,27 @@ function Merge-SkillBlocks {
 # -UpdateSkills they are replaced (old copies go to .harness/upgrade).
 $srcSkills = Join-Path $templates '.harness\skills'
 if (Test-Path -LiteralPath $srcSkills) {
+    # A compiled skill can live under a directory the project chose
+    # (04-sql-review instead of 14-sql-review). Matching on the declared
+    # frontmatter name keeps it visible; a path-only comparison skips it and the
+    # skill silently never upgrades.
+    $installedByName = @{}
+    $installedRoot = Join-Path $rootPath '.harness\skills'
+    if (Test-Path -LiteralPath $installedRoot) {
+        foreach ($cat in Get-ChildItem -LiteralPath $installedRoot -Directory -Force) {
+            foreach ($sk in Get-ChildItem -LiteralPath $cat.FullName -Directory -Force) {
+                $skillFile = Join-Path $sk.FullName 'SKILL.md'
+                if (-not (Test-Path -LiteralPath $skillFile)) { continue }
+                $name = ''
+                foreach ($line in (Get-Content -LiteralPath $skillFile -TotalCount 6 -Encoding UTF8)) {
+                    if ($line -match '^name:\s*(\S+)') { $name = $matches[1].Trim(); break }
+                }
+                if (-not $name) { continue }
+                if (-not $installedByName.ContainsKey($name)) { $installedByName[$name] = @() }
+                $installedByName[$name] += $sk.FullName
+            }
+        }
+    }
     $readmeSrc = Join-Path $srcSkills 'README.md'
     $readmeRel = '.harness\skills\README.md'
     $readmeDst = Join-Path $rootPath $readmeRel
@@ -641,7 +662,20 @@ if (Test-Path -LiteralPath $srcSkills) {
         $src = Join-Path $srcSkills $relPath
         $rel = '.harness\skills\' + $relPath
         $dst = Join-Path $rootPath $rel
-        if (-not (Test-Path -LiteralPath $dst)) { continue }
+        $matchedByName = $false
+        if (-not (Test-Path -LiteralPath $dst)) {
+            $tplName = (Split-Path -Leaf (Split-Path -Parent $relPath)) -replace '^\d+-', ''
+            $cands = @()
+            if ($installedByName.ContainsKey($tplName)) { $cands = @($installedByName[$tplName]) }
+            if ($cands.Count -gt 1) {
+                Add-Plan 'MANUAL' $rel $src 'several installed skills declare the same name; merge by hand'
+                continue
+            }
+            if ($cands.Count -eq 0) { continue }
+            $dst = Join-Path $cands[0] 'SKILL.md'
+            $rel = $dst.Substring($rootPath.Length).TrimStart('\')
+            $matchedByName = $true
+        }
         # Category indexes are project-owned like the top-level one: -ForceSkills
         # must not replace a hand-maintained list with the template index.
         if ((Split-Path -Leaf $relPath) -eq 'README.md') {
@@ -654,6 +688,10 @@ if (Test-Path -LiteralPath $srcSkills) {
         }
         if ((Get-Hash $src) -eq (Get-Hash $dst)) {
             Add-Plan 'SAME' $rel $src ''
+        } elseif ($matchedByName -and -not $MergeSkills) {
+            # Replacing or forcing a renamed copy would leave the project with a
+            # skeleton in a directory whose name the template does not know.
+            Add-Plan 'MANUAL' $rel $src 'installed under a different directory name; pass -MergeSkills or merge by hand'
         } elseif ($ForceSkills) {
             Add-Plan 'UPDATE' $rel $src 'installed skill replaced (-ForceSkills)'
         } elseif ($UpdateSkills) {
@@ -671,12 +709,13 @@ if (Test-Path -LiteralPath $srcSkills) {
             # disk. Refuses (MANUAL/PENDING) when a project block has no place
             # to go or the result would break the 120-line budget.
             $m = Merge-SkillBlocks $src $dst
+            $detail = if ($matchedByName) { 'matched by frontmatter name (renamed directory); ' + $m.Detail } else { $m.Detail }
             if ($m.Status -eq 'MERGE') {
-                Add-Plan 'MERGE' $rel $src $m.Detail
+                Add-Plan 'MERGE' $rel $src $detail
             } elseif ($m.Status -eq 'SAME') {
                 Add-Plan 'SAME' $rel $src ''
             } else {
-                Add-Plan $m.Status $rel $src $m.Detail
+                Add-Plan $m.Status $rel $src $detail
             }
         } else {
             Add-Plan 'MANUAL' $rel $src 'installed skill differs; review or re-run with -MergeSkills'
@@ -818,6 +857,11 @@ Write-Host "update harness: $rootPath" -ForegroundColor Cyan
 Write-Host "package:        $pkgPath"
 Write-Host "version:        $installedVersion -> $newVersion"
 Write-Host ("mode:           " + $(if ($Apply) { 'APPLY' } else { 'DRY-RUN (add -Apply to execute)' }))
+if ($SkipHooks) {
+    Write-Host 'hooks:          keep existing (stale hooks keep the verify-harness gate rows failing)'
+} else {
+    Write-Host 'hooks:          reinstalled on -Apply (repairs hooks older than the summary-order guard)'
+}
 if ($ForceSkills) {
     Write-Host '[WARN] -ForceSkills resets installed skills to skeletons (slots are empty again).' -ForegroundColor Yellow
     Write-Host '       Recompile them after the reset, then run verify-harness.ps1 by hand; a verified run will fail until then.' -ForegroundColor Yellow

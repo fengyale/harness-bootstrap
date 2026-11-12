@@ -119,7 +119,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
   -PackagePath <新包根目录> -Apply -MergeSkills
 ```
 
-`-MergeSkills` 让已装技能跟进新版正文：以新模板为骨架，只把 `harness:project` 区块换回项目自己的。不加它时已装技能只报 `MANUAL`，机制脚本照常升级。
+`-MergeSkills` 让已装技能跟进新版正文：以新模板为骨架，只把 `harness:project` 区块换回项目自己的。**按 frontmatter 的 `name` 匹配**，所以目录被项目改过名也能找到（如项目里的 `04-sql-review` 对应模板的 `14-sql-review`）；找不到对应章节就标 `PENDING`，不会覆盖。不加 `-MergeSkills` 时已装技能只报 `MANUAL`，机制脚本照常升级。
 
 替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。`AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键（`-NoMergeKnown` 退回只打印差异）；红线汇总只替换 R5/R6 的脚本检查格。旧 L1 summary 目录移到升级备份并随验证删除（`-KeepL1` 保留），L2/L3 历史不动。已装技能正文默认只提示差异；`-MergeSkills` 以新模板为骨架、只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加；定位不到或仍有 slot 标 PENDING，超过 120 行标 MANUAL，均不写盘）；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖（但它会把技能重置为含 slot 的骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤建议配合 `-SkipVerify`），技能索引与 `_template` 的处理也各自按项目资产/包资产区分。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
