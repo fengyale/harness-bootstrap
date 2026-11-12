@@ -40,8 +40,8 @@
 | R2 | `<如 缓存 Key 必须有统一前缀>` | `<扫描 Key 构造点>` |
 | R3 | `<如 异常必须走统一异常体系>` | `<搜 throw new RuntimeException\|IllegalStateException>` |
 | R4 | `<如 禁止 @Autowired 字段注入>` | `<搜 @Autowired 后接 private>` |
-| R5 | `<如 事务必须声明回滚范围>` | `<扫描器只拦 @Transactional() 空括号；无括号/带属性未声明 rollbackFor 人工复核>` |
-| R6 | `<如 禁止敏感信息入日志>` | `<扫描器覆盖单行/多行 log 调用；嵌套括号或复杂拼接人工复核>` |
+| R5 | `<如 事务必须声明回滚范围>` | 扫描器只拦 `@Transactional()` 空括号；无括号 / 带属性未声明 `rollbackFor` 人工复核 |
+| R6 | `<如 禁止敏感信息入日志>` | 扫描器覆盖单行 / 多行 log 调用；嵌套括号或复杂拼接人工复核 |
 | R7 | `<如 Mapper XML 禁止 ${} 占位>` | `<搜 *mapper*.xml 里的 ${}>` |
 | R8 | `<占位红线：按项目补充，或三处一并删除>` | `<改 red-line-rules.json 的占位 pattern，或删掉三处的 R8>` |
 
@@ -135,5 +135,5 @@
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；stage-gate 阶段 10 校验，缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed。分工：**pre-commit 只查 summary 基础字段**，`lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查。**缺字段或留占位符 = 任务未完成**
-- **源码提交必须能归因到记录**：在 `feature/<名>` / `fix/<名>` 分支或 `HARNESS_TASK=<名>` 下，HEAD 需已有 `.harness/changes/<名>/summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
-- **提交信息用中文**：格式仍是 `<type>(<scope>): <中文说明>`，type 取 `<feat|fix|refactor|test|docs|chore>`；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子
+- **源码提交必须能归因到记录**：在 `feature/` 或 `fix/` 前缀的分支下（分支名即特性名），或设置 `HARNESS_TASK` 环境变量指向特性名；HEAD 需已有该特性的 `summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
+- **提交信息用中文**：格式为 `type(scope): 中文说明`，type 取 feat / fix / refactor / test / docs / chore；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子

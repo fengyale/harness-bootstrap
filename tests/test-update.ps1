@@ -422,6 +422,23 @@ Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.re
 Check 'required JSON merged: package entries added' (@($mergedConfig.required) -contains 'scripts/stage-gate.ps1')
 Check 'no @{...} junk file left in the package root' (@(Get-ChildItem -LiteralPath $pkg -Force -Filter '@{*' -ErrorAction SilentlyContinue).Count -eq 0)
 Check 'AGENTS.md untouched' ((Get-Content -LiteralPath "$proj\AGENTS.md" -Raw) -notmatch 'new template line')
+
+# R5/R6 check cells and the record-association line are copied into the project
+# by the known-line merge. If the template wraps that prose in <...>, every
+# upgraded project fails verify-harness with "template placeholder left".
+# Read as UTF-8 explicitly: PS 5.1 Select-String would decode a BOM-less file as
+# ANSI. The Chinese assertion text is built from code points because this file
+# must stay pure ASCII (a .ps1 without a BOM is parsed as ANSI).
+$agentsMerged = [System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8)
+$r5Line = @($agentsMerged | Where-Object { $_ -match '^\| R5 ' })[0]
+$r6Line = @($agentsMerged | Where-Object { $_ -match '^\| R6 ' })[0]
+$recordLine = @($agentsMerged | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })[0]
+$manualReview = -join @([char]0x4EBA, [char]0x5DE5, [char]0x590D, [char]0x6838)
+Check 'merged R5 line found' ($null -ne $r5Line)
+Check 'merged R5 cell has no template angle brackets' ($r5Line -notmatch '<[^<>]+>')
+Check 'merged R6 cell has no template angle brackets' ($r6Line -notmatch '<[^<>]+>')
+Check 'merged R5 cell keeps the scoped wording' ($r5Line -match $manualReview)
+Check 'merged record line has no template angle brackets' ($recordLine -notmatch '<[^<>]+>')
 Check '.py scanner replaced' ((Select-String -LiteralPath "$proj\scripts\red-line-scan.py" -Pattern 'upgrade-test-marker' -Quiet))
 Check 'installed skill untouched by default' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -notmatch 'upgraded-skill')
 Check 'change template replaced' ((Get-Content -LiteralPath "$proj\.harness\changes\_template\summary.md" -Raw -Encoding UTF8) -match 'template-upgrade-marker')
