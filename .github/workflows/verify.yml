@@ -26,6 +26,10 @@ jobs:
         # on the public run page; the summary is readable without auth.
         shell: powershell
         run: |
+          # 2>&1 plus the default Stop preference turns any stderr byte from the
+          # child into a NativeCommandError that kills this step before the
+          # summary and annotation are written. Keep collecting on stderr.
+          $ErrorActionPreference = 'Continue'
           $log = (powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 2>&1 | Out-String)
           $code = $LASTEXITCODE
           Write-Host $log
