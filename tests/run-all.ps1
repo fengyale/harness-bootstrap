@@ -33,9 +33,24 @@ $failed = 0
 foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1', 'test-skills-registry.ps1')) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
-    & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $name)
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "FAILED: $name (exit $LASTEXITCODE)" -ForegroundColor Red
+    # Keep the output so a red suite can be described in one ::error:: line.
+    # The raw job log needs a signed-in session to download; the annotation is
+    # readable on the public run page, so it is the only evidence CI leaves.
+    # No 2>&1: with $ErrorActionPreference='Stop' a child writing to stderr
+    # would surface as NativeCommandError and kill the runner itself.
+    $lines = New-Object System.Collections.Generic.List[string]
+    & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $name) | ForEach-Object {
+        $lines.Add([string]$_)
+        Write-Host $_
+    }
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+        Write-Host "FAILED: $name (exit $code)" -ForegroundColor Red
+        $misses = @($lines | Where-Object { $_ -match '^(FAIL|not ok|GATE-AUTO FAILURES|REGRESSION FAILURES|UPDATE TEST FAILURES|SKILLS REGISTRY TEST FAILED)' })
+        $detail = if ($misses.Count -gt 0) { ($misses | Select-Object -First 3) -join ' | ' } else { 'no FAIL line; run this suite locally' }
+        $detail = $detail -replace '[\r\n]+', ' '
+        if ($detail.Length -gt 900) { $detail = $detail.Substring(0, 900) }
+        Write-Host ("::error title=$name failed::$detail")
         $failed++
     }
 }
