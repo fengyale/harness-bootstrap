@@ -14,3 +14,12 @@ TODO-*.md
 .drawio-tmp/
 .trae-html-share-packages/
 dist/
+
+# maintainer-local (this repository is the package, not a project using it).
+# Templates live under templates/; these root-level copies only exist so the
+# maintainer's own agent can use them while developing. Never shipped, never
+# pushed. AGENTS.md is anchored to the repo root on purpose: templates/AGENTS.md
+# is the product and must stay tracked.
+/.trae/agents/
+/.trae/rules/
+/AGENTS.md

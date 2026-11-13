@@ -42,6 +42,9 @@ if ($versionLine -notmatch '(\d+\.\d+\.\d+)') {
 $version = $matches[1]
 
 $skipDirs = @('.git', '.idea', '.screenshots', 'dist', '.trae', '.trae-html-share-packages')
+# Root AGENTS.md is the maintainer's own copy; the product one is
+# templates\AGENTS.md. Shipping both would install a stale duplicate.
+$skipFiles = @('AGENTS.md')
 $skipFilePattern = 'TODO-*.md'
 
 if (-not $OutDir) { $OutDir = Join-Path $root 'dist' }
@@ -55,6 +58,7 @@ try {
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
     foreach ($item in @(Get-ChildItem -LiteralPath $root -Force)) {
         if ($item.PSIsContainer -and ($skipDirs -contains $item.Name)) { continue }
+        if (-not $item.PSIsContainer -and ($skipFiles -contains $item.Name)) { continue }
         if (-not $item.PSIsContainer -and $item.Name -like $skipFilePattern) { continue }
         Copy-Item -LiteralPath $item.FullName -Destination $dst -Recurse -Force
     }
@@ -86,7 +90,7 @@ try {
     Write-Host "version:  $version"
     Write-Host "files:    $($files.Count)"
     Write-Host "size:     $size bytes"
-    Write-Host ("excluded: " + ($skipDirs -join ', ') + ', ' + $skipFilePattern)
+    Write-Host ("excluded: " + (($skipDirs + $skipFiles) -join ', ') + ', ' + $skipFilePattern)
 } finally {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 }
