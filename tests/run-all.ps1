@@ -47,7 +47,11 @@ foreach ($name in @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-
     if ($code -ne 0) {
         Write-Host "FAILED: $name (exit $code)" -ForegroundColor Red
         $misses = @($lines | Where-Object { $_ -match '^(FAIL|not ok|GATE-AUTO FAILURES|REGRESSION FAILURES|UPDATE TEST FAILURES|SKILLS REGISTRY TEST FAILED)' })
+        # Skill decisions explain most merge failures; the plan line says whether
+        # the skill was MERGE, MANUAL or PENDING, which the assertion alone hides.
+        $plans = @($lines | Where-Object { $_ -match '^\s*\[(MERGE|MANUAL|PENDING|SKIP|UPDATE)\]' -and $_ -match 'SKILL\.md' } | Select-Object -First 6)
         $detail = if ($misses.Count -gt 0) { ($misses | Select-Object -First 3) -join ' | ' } else { 'no FAIL line; run this suite locally' }
+        if ($plans.Count -gt 0) { $detail = $detail + ' || plan: ' + ($plans -join ' | ') }
         $detail = $detail -replace '[\r\n]+', ' '
         if ($detail.Length -gt 900) { $detail = $detail.Substring(0, 900) }
         Write-Host ("::error title=$name failed::$detail")
