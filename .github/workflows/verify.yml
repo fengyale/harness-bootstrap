@@ -30,12 +30,19 @@ jobs:
           $code = $LASTEXITCODE
           Write-Host $log
           if ($code -ne 0) {
+            # Emit the annotation from the step shell itself: a ::error written by
+            # a grandchild process (run-all -> suite) is not always parsed.
+            $fails = @($log -split '\r?\n' | Where-Object { $_ -match '^(FAIL|FAILED|not ok|::error)' } | Select-Object -First 3)
+            $msg = if ($fails.Count -gt 0) { ($fails -join ' ; ') } else { 'no FAIL line; the suite died before its first assertion' }
+            if ($msg.Length -gt 900) { $msg = $msg.Substring(0, 900) }
             $fence = '```'
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Behaviour tests failed (exit $code)" -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $log -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
-            exit 1
+            # throw, not exit: a PowerShell error always becomes a visible
+            # annotation, while a bare ::error line from a nested process may not.
+            throw ("Behaviour tests failed (exit {0}): {1}" -f $code, $msg)
           }
 
       - name: Audit summary order
