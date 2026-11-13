@@ -673,7 +673,16 @@ if (Test-Path -LiteralPath $srcSkills) {
             }
             if ($cands.Count -eq 0) { continue }
             $dst = Join-Path $cands[0] 'SKILL.md'
-            $rel = $dst.Substring($rootPath.Length).TrimStart('\')
+            # Never slice by $rootPath.Length here. On CI %TEMP% is the 8.3 form
+            # (C:\Users\RUNNER~1\...) while Get-ChildItem returns long names, so
+            # the two prefixes differ in length and the slice lands mid-directory
+            # ("roj\.harness\..."). Anchor on the fixed layout instead.
+            $relMatch = [regex]::Match($dst, '\\\.harness\\skills\\(.+)$')
+            if ($relMatch.Success) {
+                $rel = '.harness\skills\' + $relMatch.Groups[1].Value
+            } else {
+                $rel = $dst.Substring($rootPath.Length).TrimStart('\')
+            }
             $matchedByName = $true
         }
         # Category indexes are project-owned like the top-level one: -ForceSkills

@@ -1,7 +1,17 @@
-HARNESS-BOOTSTRAP VERSION 1.27.1
+HARNESS-BOOTSTRAP VERSION 1.27.2
 
 changelog
 ---------
+1.27.2  (改名技能升级路径修复)
+- 修复：update-harness 按 frontmatter name 匹配到改名技能后，用
+  Substring(根目录长度) 反推相对路径；CI 的 %TEMP% 是 8.3 短名
+  （C:\Users\RUNNER~1\...），而 Get-ChildItem 返回长名，两者长度不同，
+  切片落在目录中间（roj\.harness\...），合并结果写到错误位置，导致
+  改名技能升级静默失效。现改为按 .harness\skills\ 固定布局锚定
+- 测试：改名技能的四条断言在 CI 上就是该缺陷的回归用例，修复后转绿
+- CI：行为测试失败时把全部 FAIL 行写进 ::error:: 注解，公开 run 页面
+  无需登录即可定位（此前只看到 "Process completed with exit code 1."）
+
 1.27.1  (升级占位符误判修复)
 - 修复：templates/AGENTS.md 与 templates/.harness/rules/编码规范.md 的
   R5/R6 检查格、记录关联行、提交信息行原先用 <...> 包住说明文字；升级

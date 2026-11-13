@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.27.2",
+    "title": "(改名技能升级路径修复)",
+    "body": [
+      "- 修复：update-harness 按 frontmatter name 匹配到改名技能后，用",
+      "  Substring(根目录长度) 反推相对路径；CI 的 %TEMP% 是 8.3 短名，",
+      "  而 Get-ChildItem 返回长名，切片落在目录中间（roj\\.harness\\...），",
+      "  合并结果写到错误位置，改名技能升级静默失效。现按 .harness\\skills\\",
+      "  固定布局锚定",
+      "- CI：行为测试失败时把全部 FAIL 行写进 ::error:: 注解，公开 run 页面",
+      "  无需登录即可定位失败原因"
+    ]
+  },
+  {
     "version": "1.27.1",
     "title": "(升级占位符误判修复)",
     "body": [
