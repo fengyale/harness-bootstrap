@@ -35,14 +35,16 @@ jobs:
             $fails = @($log -split '\r?\n' | Where-Object { $_ -match '^(FAIL|FAILED|not ok|::error)' } | Select-Object -First 3)
             $msg = if ($fails.Count -gt 0) { ($fails -join ' ; ') } else { 'no FAIL line; the suite died before its first assertion' }
             if ($msg.Length -gt 900) { $msg = $msg.Substring(0, 900) }
+            # Strip the command separator: an unescaped "::" inside the message
+            # makes the runner treat the rest as a property list and drop it.
+            $msg = $msg -replace '::', ':' -replace '%', '%25'
             $fence = '```'
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Behaviour tests failed (exit $code)" -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $log -Encoding UTF8
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
-            # throw, not exit: a PowerShell error always becomes a visible
-            # annotation, while a bare ::error line from a nested process may not.
-            throw ("Behaviour tests failed (exit {0}): {1}" -f $code, $msg)
+            Write-Output ("::error::" + $msg)
+            exit 1
           }
 
       - name: Audit summary order
