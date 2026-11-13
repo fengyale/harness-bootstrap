@@ -21,8 +21,22 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 
       - name: Behaviour tests
+        # Mirror the suite output into the run summary. The raw job log needs a
+        # signed-in session to download, so a red run used to leave no evidence
+        # on the public run page; the summary is readable without auth.
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+        run: |
+          $log = (powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 2>&1 | Out-String)
+          $code = $LASTEXITCODE
+          Write-Host $log
+          if ($code -ne 0) {
+            $fence = '```'
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Behaviour tests failed (exit $code)" -Encoding UTF8
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $log -Encoding UTF8
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $fence -Encoding UTF8
+            exit 1
+          }
 
       - name: Audit summary order
         # The package itself has no .harness/changes, so this step skips here;
