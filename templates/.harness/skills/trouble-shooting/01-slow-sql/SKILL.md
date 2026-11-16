@@ -3,9 +3,11 @@ name: slow-sql
 description: 慢查询排查与优化：接口响应变慢、数据库 CPU 高、报表查询超时时使用。
 ---
 
+<!-- harness:package:begin body -->
+
 # 慢查询
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 慢查询排查与优化：接口响应变慢、数据库 CPU 高�
 - 日志出现慢查询
 - 数据库 CPU / 连接数异常
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - ORM 与 SQL 的书写位置：<!-- slot:orm.kind -->
 - 数据源清单：<!-- slot:datasource.list -->
 - 执行计划的获取方式：<!-- slot:explain.tool -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -42,6 +50,10 @@ description: 慢查询排查与优化：接口响应变慢、数据库 CPU 高�
 - 加索引不看写入成本
 - `select *` 拉全列
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

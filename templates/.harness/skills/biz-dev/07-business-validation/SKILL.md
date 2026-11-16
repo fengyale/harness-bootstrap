@@ -3,9 +3,11 @@ name: business-validation
 description: 业务规则校验散落在多处、同一错误在入口与落库时口径不一、并发下出现重复提交时使用；解决四层校验顺序、状态流转约束与可读错误信息。
 ---
 
+<!-- harness:package:begin body -->
+
 # 业务校验
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 业务规则校验散落在多处、同一错误在入口与落库�
 - 现有校验散在页面、接口、存储三处且说法不同
 - 需要把错误信息改到使用者能照着修正
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 校验入口与失败抛出方式：<!-- slot:validate.api -->
 - 错误码与提示文案的组织位置：<!-- slot:error.code -->
 - 状态流转定义与允许的操作集合：<!-- slot:state.machine -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 业务规则校验散落在多处、同一错误在入口与落库�
 - 校验通过后直接写入，中间被并发改写导致覆盖
 - 页面与接口各写一份规则，改一端漏另一端
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

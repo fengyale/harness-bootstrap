@@ -602,6 +602,22 @@ Check 'install: every slot sits in a project block' ((@([regex]::Matches($realSk
 $outsidePrj = [regex]::Replace($realSkill, $prjPat, '')
 Check 'install: no slot outside a project block' ($outsidePrj -notmatch '<!--\s*slot:')
 
+# Every shipped template must be structurally mergeable, not only sql-review.
+# A template with no project block can never be compiled for a real project, and
+# a slot outside a project block would be replaced by the next -MergeSkills.
+$tplRoot = Join-Path $repoRoot 'templates\.harness\skills'
+$tplFiles = @(Get-ChildItem -LiteralPath $tplRoot -Recurse -Filter 'SKILL.md' -File)
+$noPrj = 0
+$slotOut = 0
+foreach ($tf in $tplFiles) {
+    $txt = [System.IO.File]::ReadAllText($tf.FullName, [System.Text.Encoding]::UTF8)
+    if ($txt -notmatch '<!--\s*harness:project:begin') { $noPrj++; Write-Host ("  no project block: " + $tf.Directory.Name) -ForegroundColor Red }
+    $out2 = [regex]::Replace($txt, $prjPat, '')
+    if ($out2 -match '<!--\s*slot:') { $slotOut++; Write-Host ("  slot outside a project block: " + $tf.Directory.Name) -ForegroundColor Red }
+}
+Check ("all {0} templates declare a project block" -f $tplFiles.Count) ($noPrj -eq 0)
+Check 'no template leaves a slot outside a project block' ($slotOut -eq 0)
+
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'UPDATE TEST OK' -ForegroundColor Green; exit 0 }
 Write-Host ("UPDATE TEST FAILURES: {0}" -f $fail) -ForegroundColor Red

@@ -3,9 +3,11 @@ name: pagination-query
 description: 列表总数与数据对不上、翻到深页明显变慢、同一条件两次查询顺序不一致时使用；解决统计与取数条件一致、深分页、排序索引与空结果语义。
 ---
 
+<!-- harness:package:begin body -->
+
 # 分页查询
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,6 +15,9 @@ description: 列表总数与数据对不上、翻到深页明显变慢、同一�
 - 现有分页在深页变慢，或被慢查询告警命中
 - 前端反馈翻页后数据重复、缺失，或总数与实际条数不符
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 数据访问方式与分页写法：<!-- slot:orm.kind -->
@@ -20,6 +25,9 @@ description: 列表总数与数据对不上、翻到深页明显变慢、同一�
 - 排序与过滤字段的索引要求：<!-- slot:index.rule -->
 - 编译与自测命令：<!-- slot:build.cmd -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 列表总数与数据对不上、翻到深页明显变慢、同一�
 - 用非唯一字段排序，翻页出现重复行或漏行
 - 先联多表再分页，深页代价随偏移线性增长
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

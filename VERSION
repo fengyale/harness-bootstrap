@@ -1,7 +1,16 @@
-HARNESS-BOOTSTRAP VERSION 1.27.3
+HARNESS-BOOTSTRAP VERSION 1.27.4
 
 changelog
 ---------
+1.27.4  (全部技能可增量合并)
+- 结构：24 个模板技能补齐 package/project 区块（此前只有 14-sql-review），
+  项目绑定与证据锚点放进 project 块。升级 -MergeSkills 从此对所有已装技能
+  生效，不再只能手工并；旧的无标记安装仍按标题认领，不丢项目小节
+- 文案：模板骨架说明里的字面 `<!-- slot:… -->` 改为 `slot:` 注释，否则
+  区块化后会被判成"槽位落在 package 块内"
+- 自检：模板技能若没有 project 块（无处放项目事实）直接 FAIL
+- 文档：质量分级技能行数与 README 的 markers 计数同步为 25
+
 1.27.3  (五角色审查：把"看起来有"改成"真的挡得住")
 - 修复（升级会写回占位符）：AGENTS.md 的「先定档再落盘」行含 <特性>，
   它属于已知行合并范围，会把尖括号写回项目并让 verify 必红；去掉尖括号

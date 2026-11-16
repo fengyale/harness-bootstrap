@@ -3,9 +3,11 @@ name: mq-backlog-troubleshoot
 description: 消息积压、消费延迟持续增长或消费速度明显低于生产速度时使用；解决先看速率与分区分布、临时扩容、死信隔离以及根因定位。
 ---
 
+<!-- harness:package:begin body -->
+
 # 消息积压排查
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 消息积压、消费延迟持续增长或消费速度明显低于�
 - 下游数据延迟，业务方反馈"数据没更新"
 - 消费端扩容后积压仍不下降
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 消息查看与消费状态查询入口：<!-- slot:mq.api -->
 - 积压量、速率与延迟的观测位置：<!-- slot:monitor.tool -->
 - 重试与死信策略的配置位置：<!-- slot:retry.policy -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -46,6 +54,10 @@ description: 消息积压、消费延迟持续增长或消费速度明显低于�
 - 对毒消息无限重试，堵住整条链路
 - 只看积压总量，忽略消费速率已下降的事实
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

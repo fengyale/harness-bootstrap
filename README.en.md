@@ -46,7 +46,7 @@ Output:
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] markers    1 template skill(s) carry balanced package/project blocks
+[PASS] markers    25 template skill(s) carry balanced package/project blocks
 [PASS] contract   62 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy

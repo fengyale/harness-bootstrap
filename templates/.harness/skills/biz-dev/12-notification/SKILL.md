@@ -3,9 +3,11 @@ name: notification
 description: 面向使用者的消息提醒（站内、短信、邮件、推送）上线或改造时使用；解决渠道选择与降级、模板与变量分离、失败重试与去重防打扰。
 ---
 
+<!-- harness:package:begin body -->
+
 # 通知发送
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 面向使用者的消息提醒（站内、短信、邮件、推送�
 - 已出现同一事件重复提醒、骚扰投诉
 - 通知静默失败，事后才发现没人收到
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 可用渠道与降级顺序：<!-- slot:notify.channel -->
 - 模板存放位置与变量约定：<!-- slot:template.store -->
 - 重试次数、退避与兜底策略：<!-- slot:retry.policy -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 面向使用者的消息提醒（站内、短信、邮件、推送�
 - 重试无上限，故障期间对使用者形成轰炸
 - 同一事件的多个入口各发一次，参数化去重缺失
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

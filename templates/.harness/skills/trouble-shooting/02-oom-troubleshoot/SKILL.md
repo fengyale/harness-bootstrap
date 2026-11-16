@@ -3,9 +3,11 @@ name: oom-troubleshoot
 description: 进程内存持续上涨、频繁被系统终止或响应逐渐变慢时使用；解决先取证再改、区分缓慢泄漏与瞬时峰值、定位大对象以及编写可复现验证。
 ---
 
+<!-- harness:package:begin body -->
+
 # 内存问题排查
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 进程内存持续上涨、频繁被系统终止或响应逐渐变�
 - 进程被系统强制终止，日志里没有业务异常
 - 大流量时段内存打满，需要判断是峰值还是泄漏
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 内存快照与现场采集工具：<!-- slot:dump.tool -->
 - 运行时内存上限与回收参数：<!-- slot:jvm.opts -->
 - 内存与回收指标的观测入口：<!-- slot:monitor.tool -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 进程内存持续上涨、频繁被系统终止或响应逐渐变�
 - 重启恢复但不采现场，问题必然复发
 - 把瞬时峰值当泄漏去改对象结构，收益为零
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

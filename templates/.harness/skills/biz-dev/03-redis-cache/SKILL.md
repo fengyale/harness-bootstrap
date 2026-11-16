@@ -3,21 +3,29 @@ name: redis-cache
 description: 缓存设计与读写：给查询接口加缓存、处理缓存与数据库不一致、应对缓存穿透击穿雪崩时使用。
 ---
 
+<!-- harness:package:begin body -->
+
 # 缓存
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
 - 高频读、接口变慢、需要降低数据库压力
 - 已有缓存出现不一致
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 缓存访问入口（唯一入口）：<!-- slot:cache.api -->
 - Key 的命名与拼接约定：<!-- slot:cache.key -->
 - TTL 策略与默认值：<!-- slot:ttl.policy -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -41,6 +49,10 @@ description: 缓存设计与读写：给查询接口加缓存、处理缓存与�
 - key 只用业务 id → 跨模块撞 key
 - 所有 key 同一 TTL → 同时失效引发雪崩
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

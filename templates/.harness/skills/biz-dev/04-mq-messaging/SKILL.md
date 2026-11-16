@@ -3,9 +3,11 @@ name: mq-messaging
 description: 需要跨进程事件通知、异步解耦或削峰时使用；解决事件契约先行、消费幂等、失败重试与死信、需要保序时的键选择以及发送确认。
 ---
 
+<!-- harness:package:begin body -->
+
 # 消息生产与消费
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,6 +15,9 @@ description: 需要跨进程事件通知、异步解耦或削峰时使用；解�
 - 已有消费者出现重复处理、丢消息或无限重试
 - 同一业务实体的多个事件必须按发生顺序被处理
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 消息客户端与收发写法：<!-- slot:mq.api -->
@@ -20,6 +25,9 @@ description: 需要跨进程事件通知、异步解耦或削峰时使用；解�
 - 重试次数、退避与死信策略：<!-- slot:retry.policy -->
 - 积压与失败率的观测入口：<!-- slot:monitor.tool -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -46,6 +54,10 @@ description: 需要跨进程事件通知、异步解耦或削峰时使用；解�
 - 无限重试毒消息，堵住队列里后面所有事件
 - 靠全局并发消费还要保序，顺序实际不成立
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

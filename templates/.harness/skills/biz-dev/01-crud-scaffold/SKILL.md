@@ -3,9 +3,11 @@ name: crud-scaffold
 description: 为一张新业务表从零搭建增删改查能力，或补齐管理端缺失的维护接口时使用；解决字段与校验先行、读写模型分离、分页列表、删除语义与写操作留痕的落地顺序。
 ---
 
+<!-- harness:package:begin body -->
+
 # 单表增删改查脚手架
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,6 +15,9 @@ description: 为一张新业务表从零搭建增删改查能力，或补齐管�
 - 已有表缺管理端维护接口，且不希望逐个手写样板
 - 需要交付一套字段、校验、错误提示口径一致的接口
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 模块落位与分层目录：<!-- slot:module.map -->
@@ -20,6 +25,9 @@ description: 为一张新业务表从零搭建增删改查能力，或补齐管�
 - 数据访问方式与主键、审计字段来源：<!-- slot:data.access -->
 - 编译与自测命令：<!-- slot:build.cmd -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -46,6 +54,10 @@ description: 为一张新业务表从零搭建增删改查能力，或补齐管�
 - 直接把存储结构当接口出入参，改表即破约
 - 删除时顺带清理关联数据，缺事务边界导致部分成功
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

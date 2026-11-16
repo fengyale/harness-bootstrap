@@ -3,9 +3,11 @@ name: unit-test-write
 description: 为新逻辑补测试、或修完缺陷后补回归用例时使用；解决只测行为不测实现、边界与异常覆盖、外部依赖打桩以及用例命名即文档。
 ---
 
+<!-- harness:package:begin body -->
+
 # 单元测试编写
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 为新逻辑补测试、或修完缺陷后补回归用例时使用�
 - 修复缺陷后要固化复现场景
 - 现有测试改一处实现就大面积失败，说明测在实现而非行为
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 测试框架与断言风格：<!-- slot:test.framework -->
 - 执行单个与全量测试的命令：<!-- slot:build.cmd -->
 - 当前测试现状（数量、覆盖范围、已知空缺）：<!-- slot:test.reality -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 为新逻辑补测试、或修完缺陷后补回归用例时使用�
 - 断言内部方法被调用几次，实现一变就红
 - 依赖共享状态或真实外部资源，导致偶发失败
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

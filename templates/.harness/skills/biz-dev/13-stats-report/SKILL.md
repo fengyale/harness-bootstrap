@@ -3,9 +3,11 @@ name: stats-report
 description: 报表或看板指标开发、口径争议、数据刷新不及时时使用；解决口径定义先行、数据源与实时性选择、缓存刷新策略与导出分页。
 ---
 
+<!-- harness:package:begin body -->
+
 # 统计报表
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 报表或看板指标开发、口径争议、数据刷新不及时�
 - 同一指标在不同页面数值不一致，无法解释
 - 报表查询变慢，或数据延迟被质疑
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 明细库、汇总表与可用的取数入口：<!-- slot:report.datasource -->
 - 查询缓存的读写方式：<!-- slot:cache.api -->
 - 刷新周期与手动刷新入口：<!-- slot:refresh.policy -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 报表或看板指标开发、口径争议、数据刷新不及时�
 - 缓存键漏参数，不同筛选条件互相串数据
 - 直接对明细做重聚合，既无缓存也无上限
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

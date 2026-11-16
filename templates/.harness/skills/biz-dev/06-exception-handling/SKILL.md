@@ -3,9 +3,11 @@ name: exception-handling
 description: 接口报错信息前后端理解不一致、对外暴露内部堆栈、线上排障找不到对应请求时使用；解决错误分类、统一错误码、对外话术与链路标识。
 ---
 
+<!-- harness:package:begin body -->
+
 # 统一异常处理
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 接口报错信息前后端理解不一致、对外暴露内部堆�
 - 现有接口报错五花八门，前端无法按码分支处理
 - 线上问题需要从用户描述对应到具体一次请求
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 全局异常捕获入口与兜底返回：<!-- slot:error.handler -->
 - 错误码分配规则与字典位置：<!-- slot:error.code -->
 - 日志格式与链路标识字段：<!-- slot:log.convention -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 接口报错信息前后端理解不一致、对外暴露内部堆�
 - 用同一错误码表达所有失败，前端只能靠文案猜分支
 - 只记错误消息不记请求标识，事后无法定位是哪一次调用
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

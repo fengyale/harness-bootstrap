@@ -3,9 +3,11 @@ name: unit-test-ci
 description: 搭建或调整持续集成流水线时使用；解决阶段顺序、覆盖率门禁、失败即停、产物与日志保留，以及门禁形式化的自查。
 ---
 
+<!-- harness:package:begin body -->
+
 # 持续集成流水线
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 搭建或调整持续集成流水线时使用；解决阶段顺序�
 - 流水线绿灯但线上仍出问题，门禁形同虚设
 - 失败构建难以复现，日志与产物已丢失
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 流水线配置位置与触发条件：<!-- slot:ci.config -->
 - 覆盖率门禁的指标与阈值：<!-- slot:coverage.threshold -->
 - 可本地执行的门禁命令：<!-- slot:gate.cmd -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 搭建或调整持续集成流水线时使用；解决阶段顺序�
 - 阈值靠无断言用例凑数，绿灯但无保护力
 - 只保留成功构建产物，失败现场无法复盘
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

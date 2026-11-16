@@ -3,9 +3,11 @@ name: file-upload
 description: 附件、头像、凭证等文件上传功能开发或改造时使用；解决类型与大小白名单、存储与访问分离、临时文件清理以及失败重试的幂等。
 ---
 
+<!-- harness:package:begin body -->
+
 # 文件上传
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 附件、头像、凭证等文件上传功能开发或改造时使�
 - 已上传文件被直接暴露为可猜路径
 - 上传失败或超时后残留大量孤儿文件
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 存储位置与访问方式（对象键、签名下载等）：<!-- slot:upload.storage -->
 - 类型与体积上限的具体数值：<!-- slot:size.limit -->
 - 内容检测与安全扫描环节：<!-- slot:virus.scan -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 附件、头像、凭证等文件上传功能开发或改造时使�
 - 上传目录直接对外提供静态访问
 - 失败或中断时残留半份文件，长期占空间
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

@@ -3,9 +3,11 @@ name: cpu-high-troubleshoot
 description: 进程占用持续偏高、请求响应变慢或线程疑似卡死时使用；解决进程到线程到调用栈的逐层定位、区分计算密集与死循环、热点图分析以及回滚优先。
 ---
 
+<!-- harness:package:begin body -->
+
 # 处理器占用高排查
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 进程占用持续偏高、请求响应变慢或线程疑似卡死�
 - 请求整体变慢，但依赖与网络均正常
 - 上线后同一压力下耗时显著上升
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 热点采样与火焰图工具：<!-- slot:profile.tool -->
 - 线程栈采集方式与保存位置：<!-- slot:thread.dump -->
 - 进程与主机指标的观测入口：<!-- slot:monitor.tool -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 进程占用持续偏高、请求响应变慢或线程疑似卡死�
 - 只采一次栈，恰好没抓到热点线程
 - 直接扩容机器，掩盖死循环或忙等
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

@@ -3,9 +3,11 @@ name: expert-reviewer
 description: 代码评审：按结构、红线、性能、安全、一致性、可测性六个维度评审改动并输出分级结论。准备合并或用户要求 review 时使用。
 ---
 
+<!-- harness:package:begin body -->
+
 # 代码评审
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换。
 > 目标：每个结论都能复核，阻断项有证据，建议项不冒充红线。
 
 ## 何时用
@@ -13,12 +15,18 @@ description: 代码评审：按结构、红线、性能、安全、一致性、�
 - 编码完成、准备合并
 - 用户说"审一下 / review / 能不能上"
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 项目红线清单：<!-- slot:redlines -->
 - 本项目高发的额外检查项：<!-- slot:extra.checks -->
 - 评审结论写回位置：<!-- slot:review.output -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 评审范围
 
 - 只看本次 diff 及其直接调用方；未改动代码的问题记为「存量」，不阻断本次合并
@@ -66,6 +74,10 @@ description: 代码评审：按结构、红线、性能、安全、一致性、�
 - 用"建议加测试"代替可测性结论 → 没给出可执行的验证步骤
 - 相信作者自述，不跑验证命令
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

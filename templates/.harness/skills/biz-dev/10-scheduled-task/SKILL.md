@@ -3,9 +3,11 @@ name: scheduled-task
 description: 周期性批处理、定时同步或定时清理任务上线时使用；解决多实例重复执行、任务自身幂等、失败重试、执行留痕与手动补跑。
 ---
 
+<!-- harness:package:begin body -->
+
 # 定时任务
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 周期性批处理、定时同步或定时清理任务上线时使�
 - 已有任务在多实例部署后重复执行
 - 任务失败无人知晓，需要可观测与补跑入口
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 调度注册方式与周期配置位置：<!-- slot:schedule.api -->
 - 互斥锁或选主机制：<!-- slot:lock.api -->
 - 执行结果与耗时的观测入口：<!-- slot:monitor.tool -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 周期性批处理、定时同步或定时清理任务上线时使�
 - 捕获异常后只打日志不上报，失败静默
 - 锁不设过期，进程异常退出后任务永久卡死
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

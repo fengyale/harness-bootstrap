@@ -3,9 +3,11 @@ name: db-migration
 description: 表结构变更、字段增删或大表数据订正上线时使用；解决脚本可重入、变更与回滚成对、大表拆步灰度与上线顺序安排。
 ---
 
+<!-- harness:package:begin body -->
+
 # 数据库变更
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 表结构变更、字段增删或大表数据订正上线时使用�
 - 需要给大表做数据订正，担心锁表与耗时
 - 变更出问题需要回滚，但没准备反向脚本
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 变更脚本的组织方式与执行入口：<!-- slot:migration.tool -->
 - 表结构与命名红线（主键、可空、注释等）：<!-- slot:ddl.rule -->
 - 回滚脚本的存放与执行命令：<!-- slot:rollback.cmd -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 表结构变更、字段增删或大表数据订正上线时使用�
 - 回滚脚本最后补写，从未被执行验证
 - 先删旧列，导致仍在运行的旧版本代码报错
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

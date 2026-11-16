@@ -3,9 +3,11 @@ name: excel-import-export
 description: 批量导入表格文件或按条件导出大数据量时使用；解决流式处理、表头与逐行校验、失败行回滚或报告、导出分批与临时文件清理。
 ---
 
+<!-- harness:package:begin body -->
+
 # 表格导入与导出
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 批量导入表格文件或按条件导出大数据量时使用；�
 - 导出结果可达数万行以上，页面同步等待会超时
 - 已有导入只回一句失败，无法定位是哪一行出错
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 读写表格文件的组件与用法：<!-- slot:excel.lib -->
 - 临时文件的存放位置与清理策略：<!-- slot:storage.tmp -->
 - 单次行数与文件体积上限：<!-- slot:size.limit -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -45,6 +53,10 @@ description: 批量导入表格文件或按条件导出大数据量时使用；�
 - 失败只返回一句"导入失败"，使用者无从修正
 - 先查全量再拼装导出，内存与耗时双双失控
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

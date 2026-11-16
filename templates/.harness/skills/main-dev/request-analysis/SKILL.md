@@ -3,9 +3,11 @@ name: request-analysis
 description: 需求分析与拆解：把一句话需求转成可验证的任务清单，判断落在哪个模块、影响哪些接口与表。收到新需求或变更、进入开发之前使用。
 ---
 
+<!-- harness:package:begin body -->
+
 # 需求分析
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除；目标：开工前把「做什么、改哪里、怎么算完成」写死，避免边写边想。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除；目标：开工前把「做什么、改哪里、怎么算完成」写死，避免边写边想。
 
 ## 何时用
 
@@ -14,6 +16,9 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 
 > **先定档，再选记录方式**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `L0 / L1 / L2 / L3`。
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 模块划分与归属规则：<!-- slot:module.map -->
@@ -21,6 +26,9 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 - 领域词表位置：<!-- slot:domain.terms -->
 - 接口形态与返回结构：<!-- slot:api.contract -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -75,6 +83,10 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 - 只列接口不列表，改到一半才发现要迁移
 - 漏掉定时任务 / 消息消费者等非 HTTP 入口
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

@@ -190,6 +190,7 @@ if (Test-Path -LiteralPath $tplSkills) {
         $inFence = $false
         $slotInPkg = 0
         $anchorInPkg = 0
+        $prjN = 0
         $bad = 0
         foreach ($line in $lines) {
             if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
@@ -197,6 +198,7 @@ if (Test-Path -LiteralPath $tplSkills) {
             if ($line -match '<!--\s*harness:(package|project):begin\s+([A-Za-z0-9][A-Za-z0-9-]*)\s*-->') {
                 $kind = $matches[1]
                 $id = $matches[2]
+                if ($kind -eq 'project') { $prjN++ }
                 if ($stack.Count -gt 0) {
                     Add-Result 'markers' 'FAIL' "${rel}: nested marker $kind/$id"
                     $bad++
@@ -241,6 +243,12 @@ if (Test-Path -LiteralPath $tplSkills) {
         }
         if ($anchorInPkg -gt 0) {
             Add-Result 'markers' 'FAIL' "${rel}: $anchorInPkg evidence anchor(s) inside a package block"
+            $bad++
+        }
+        # A template with only package blocks has nowhere for the installer to put
+        # project facts, so the skill can never be compiled for a real project.
+        if ($prjN -eq 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: no project block (slots need a project block to live in)"
             $bad++
         }
         $markerBad += $bad

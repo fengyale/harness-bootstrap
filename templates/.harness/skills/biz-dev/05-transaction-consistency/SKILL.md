@@ -3,21 +3,29 @@ name: transaction-consistency
 description: 事务与一致性：多表写入、跨模块调用、缓存与库同步、需要保证原子性或幂等时使用。
 ---
 
+<!-- harness:package:begin body -->
+
 # 事务与一致性
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换。
 
 ## 何时用
 
 - 一次改动写多张表 / 调外部接口 / 更新缓存
 - 同一请求可能重复提交或重复消费
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 事务原语与既有写法：<!-- slot:tx.primitive -->
 - 幂等键的取法：<!-- slot:idempotency.key -->
 - 项目特有的事务约束：<!-- slot:tx.constraints -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -41,6 +49,10 @@ description: 事务与一致性：多表写入、跨模块调用、缓存与库�
 - 先删缓存再提交 → 脏读
 - 只包了一半写入 → 半提交
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

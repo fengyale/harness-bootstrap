@@ -3,9 +3,11 @@ name: redis-hotkey-troubleshoot
 description: 缓存中单个键访问极度集中，导致某节点负载不均、时延抖动或热点集体失效击穿时使用；解决先监控定位热键、拆分或本地化、过期时间打散以及避免全量扫描。
 ---
 
+<!-- harness:package:begin body -->
+
 # 缓存热键排查
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 缓存中单个键访问极度集中，导致某节点负载不均�
 - 某接口时延周期性抖动，与键过期时间吻合
 - 热门数据过期瞬间大量回源，依赖被打满
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 缓存读写接口与键命名规则：<!-- slot:cache.api -->
 - 键级访问量与节点负载的观测入口：<!-- slot:monitor.tool -->
 - 过期时间设置与打散策略：<!-- slot:ttl.policy -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -46,6 +54,10 @@ description: 缓存中单个键访问极度集中，导致某节点负载不均�
 - 分片后仍用同一过期时间，击穿照旧
 - 为找热键在生产扫全量，把整个实例拖慢
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->

@@ -3,9 +3,11 @@ name: deploy-verify
 description: 一次发布上线前后使用；解决变更清单、发布顺序、健康检查、回滚预案与验证证据留存，避免出问题时临场找步骤。
 ---
 
+<!-- harness:package:begin body -->
+
 # 发布与验证
 
-> **本文件是骨架**：`<!-- slot:… -->` 必须在安装时用项目事实替换，替换不到就整条删除。
+> **本文件是骨架**：`slot:` 注释必须在安装时用项目事实替换，替换不到就整条删除。
 
 ## 何时用
 
@@ -13,12 +15,18 @@ description: 一次发布上线前后使用；解决变更清单、发布顺序�
 - 上线后需要判断"是否成功"，而不只是"进程起来了"
 - 出现异常需要回滚，但缺可执行的回滚步骤
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
 ## 项目绑定（编译时替换）
 
 - 发布与重启的执行命令：<!-- slot:deploy.cmd -->
 - 健康检查的判定项与阈值：<!-- slot:health.check -->
 - 回滚命令及其前置条件：<!-- slot:rollback.cmd -->
 
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
 ### 步骤
@@ -46,6 +54,10 @@ description: 一次发布上线前后使用；解决变更清单、发布顺序�
 - 健康检查只探端口，依赖不通也判成功
 - 出问题才开始想回滚步骤，延长故障时长
 
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
 ## 证据锚点（编译后填写）
 
 <!-- slot:evidence - 至少一条 - [E2] <真实文件路径> :: <证明了什么> -->
+<!-- harness:project:end -->
