@@ -246,7 +246,11 @@ if (Test-Path -LiteralPath $tplSkills) {
         $markerBad += $bad
     }
 }
-if ($markerBad -eq 0) {
+if ($markerCount -eq 0) {
+    # The loop above skips a file without markers, so an empty template tree (or
+    # a broken marker syntax) used to print "0 template skill(s)" and PASS.
+    Add-Result 'markers' 'FAIL' 'no template skill carries package/project markers'
+} elseif ($markerBad -eq 0) {
     Add-Result 'markers' 'PASS' "$markerCount template skill(s) carry balanced package/project blocks"
 }
 
@@ -504,6 +508,17 @@ if (-not $Fast) {
             }
         }
 
+        # Negative probe: replacing the scanner with "exit 0" used to pass the
+        # runnability check and silently switch every red-line gate off.
+        if ($smokeBad -eq 0) {
+            Set-Content -LiteralPath (Join-Path $tmp 'scripts\red-line-scan.ps1') -Value 'exit 0' -Encoding ASCII
+            $scanOut = & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\verify-harness.ps1') -Root $tmp 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0 -or $scanOut -notmatch 'scanner looks hollow') {
+                Add-Result 'smoke' 'FAIL' 'verify-harness accepted a no-op red-line-scan.ps1'
+                $smokeBad++
+            }
+        }
+
         if ($smokeBad -eq 0) {
             & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\uninstall-harness.ps1') -Root $tmp | Out-Null
             if ($LASTEXITCODE -ne 0) { Add-Result 'smoke' 'FAIL' 'uninstall-harness.ps1 failed'; $smokeBad++ }
@@ -515,7 +530,7 @@ if (-not $Fast) {
             }
         }
 
-        if ($smokeBad -eq 0) { Add-Result 'smoke' 'PASS' 'install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy' }
+        if ($smokeBad -eq 0) { Add-Result 'smoke' 'PASS' 'install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> hollow scanner probe -> uninstall, in a temp copy' }
     } catch {
         Add-Result 'smoke' 'FAIL' $_.Exception.Message
         $smokeBad++

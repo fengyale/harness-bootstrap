@@ -210,11 +210,16 @@ Set-Content -LiteralPath "$proj\.harness\changes\l1-demo\summary.md" -Value @('#
 Add-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Value ' ' -Encoding UTF8
 $jsonBefore = Get-Content -LiteralPath "$proj\scripts\red-line-rules.json" -Raw
 
+# agents-delta must accept the template's bold command-table label (the template
+# uses "**...**", not a heading). When only markdown headings counted as
+# sections, every freshly installed AGENTS.md reported [MISSING] and exited 1.
+$deltaOut = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\agents-delta.ps1" -Root $proj 2>&1 | Out-String
+Check 'agents-delta accepts the bold command-table label' ($LASTEXITCODE -eq 0)
+
 # Deliberately old required list (no sqlGate, legacy ps1 entry): the upgrade
 # must print a machine-readable delta so a human can merge the new entries and
 # remove the ps1-only requirement in favour of requiredAnyOf.
 Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value '{"_note":"old install","required":["AGENTS.md","scripts/red-line-scan.ps1"]}' -Encoding UTF8
-
 # ------------------------------------------------------------ fake package
 Set-Content -LiteralPath "$newPkg\VERSION" -Value 'HARNESS-BOOTSTRAP VERSION 9.9.9' -Encoding ASCII
 # update-harness fails early when the package's checker is missing, so the fake
@@ -435,10 +440,11 @@ $r6Line = @($agentsMerged | Where-Object { $_ -match '^\| R6 ' })[0]
 $recordLine = @($agentsMerged | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' })[0]
 $manualReview = -join @([char]0x4EBA, [char]0x5DE5, [char]0x590D, [char]0x6838)
 Check 'merged R5 line found' ($null -ne $r5Line)
-Check 'merged R5 cell has no template angle brackets' ($r5Line -notmatch '<[^<>]+>')
-Check 'merged R6 cell has no template angle brackets' ($r6Line -notmatch '<[^<>]+>')
-Check 'merged R5 cell keeps the scoped wording' ($r5Line -match $manualReview)
-Check 'merged record line has no template angle brackets' ($recordLine -notmatch '<[^<>]+>')
+Check 'merged R5 cell has no template angle brackets' (($null -ne $r5Line) -and ($r5Line -notmatch '<[^<>]+>'))
+Check 'merged R6 cell has no template angle brackets' (($null -ne $r6Line) -and ($r6Line -notmatch '<[^<>]+>'))
+Check 'merged R5 cell keeps the scoped wording' (($null -ne $r5Line) -and ($r5Line -match $manualReview))
+Check 'merged record line found' ($null -ne $recordLine)
+Check 'merged record line has no template angle brackets' (($null -ne $recordLine) -and ($recordLine -notmatch '<[^<>]+>'))
 Check '.py scanner replaced' ((Select-String -LiteralPath "$proj\scripts\red-line-scan.py" -Pattern 'upgrade-test-marker' -Quiet))
 Check 'installed skill untouched by default' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -notmatch 'upgraded-skill')
 Check 'change template replaced' ((Get-Content -LiteralPath "$proj\.harness\changes\_template\summary.md" -Raw -Encoding UTF8) -match 'template-upgrade-marker')
@@ -546,6 +552,11 @@ $legacyStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\me
 if ($LASTEXITCODE -ne 0) { Write-Host 'MERGE REPEAT FAILED' -ForegroundColor Red; $fail++ }
 Check 'merge second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8) -eq $mergeStable)
 Check 'legacy second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8) -eq $legacyStable)
+
+# PENDING is not a failure, but an upgrade that left a skill on its old package
+# text must be visible afterwards: the audit line carries the count.
+$markerAfterMerge = Get-Content -LiteralPath "$proj\.harness\.installed-version" -Raw -Encoding UTF8
+Check 'audit line records the pending count' ($markerAfterMerge -match 'pending: 1')
 
 Write-Host ''
 Write-Host '=== apply with -ForceSkills ===' -ForegroundColor Cyan

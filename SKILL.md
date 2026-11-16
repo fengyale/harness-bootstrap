@@ -206,7 +206,8 @@ else {
 #   CodeBuddy    -> $AgentDir = "<项目根>\.codebuddy\agents"（Markdown agents 兼容）
 #   Codex        -> 不执行本行：它用 .codex\agents\*.toml，需要按 TOML 重写
 #   未知         -> 不执行本行（走清单模式，别假装子智能体存在）
-Copy-Missing "$PKG\templates\.trae\agents" $AgentDir
+if ($AgentDir) { Copy-Missing "$PKG\templates\.trae\agents" $AgentDir }
+else { Write-Host "[SKIP] no agents directory for this platform; review by checklist instead" }
 
 # .gitignore：模板里有 .harness/metrics/（门禁日志每次提交都追加，不忽略会让工作区恒 dirty）
 # 项目已有 .gitignore 时不要覆盖，把缺的那几行读后手工补上，并列进冲突清单
@@ -222,7 +223,8 @@ if (-not (Test-Path -LiteralPath $marker)) {
 }
 
 # 平台入口：只建与探测结果对应的一种（同样先判存在，已存在就 SKIP 并按 3.2 合并）
-# 常驻文件：TRAE / Codex / CodeBuddy / 未知 -> AGENTS.md；Claude Code -> CLAUDE.md
+# 常驻文件：一律产出 AGENTS.md（verify-harness 只认它）；Claude Code 另加一个薄入口
+#   CLAUDE.md，正文只有一行 @AGENTS.md —— 不要写第二份规则正文，否则必然漂移
 # 技能发现目录（第 2 步编译完技能后再建，模式 A 才需要）：
 #   TRAE .trae/skills · Claude .claude/skills · Codex .agents/skills · CodeBuddy .codebuddy/skills
 #   只建当前平台；探测到的其它平台逐条列给用户并给命令，不代建

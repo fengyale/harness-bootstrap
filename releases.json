@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.27.3",
+    "title": "(五角色审查：把「看起来有」改成「真的挡得住」)",
+    "body": [
+      "- 修复：AGENTS.md 的「先定档再落盘」行含尖括号占位符，属于已知行合并",
+      "  范围，升级会把它写回项目并让 verify 必红；现已去掉",
+      "- 修复：agents-delta 只认 Markdown 标题，而模板用加粗的「必跑命令」",
+      "  标签，全新安装必报 MISSING 并 exit 1；现两种形式都认",
+      "- 修复：red-line-scan 被换成 exit 0 时 verify 仍判 runnable PASS；现按",
+      "  长度与扫描输出行判空壳并 FAIL，smoke 增加反向探针",
+      "- 修复：模板技能零标记时 markers 仍 PASS；质量分级.md 缺失被静默跳过",
+      "- 升级：PENDING 技能不刷新包文本却显示升级成功；审计行新增 pending: N",
+      "- 平台：Claude 改为「一律产出 AGENTS.md + 一行 @AGENTS.md 的 CLAUDE.md」；",
+      "  卸载清理四个平台入口；CodeBuddy 子代理纳入升级"
+    ]
+  },
+  {
     "version": "1.27.2",
     "title": "(改名技能升级路径修复)",
     "body": [

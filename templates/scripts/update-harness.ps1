@@ -828,6 +828,9 @@ if (Test-Path -LiteralPath $srcAgents) {
 $agentRel = $null
 if (Test-Path -LiteralPath (Join-Path $rootPath '.trae')) { $agentRel = '.trae\agents' }
 elseif (Test-Path -LiteralPath (Join-Path $rootPath '.claude')) { $agentRel = '.claude\agents' }
+# CodeBuddy reuses Markdown agents, so an upgrade must refresh them too; leaving
+# it out sent every CodeBuddy project to the MANUAL branch.
+elseif (Test-Path -LiteralPath (Join-Path $rootPath '.codebuddy')) { $agentRel = '.codebuddy\agents' }
 $srcAgentsDir = Join-Path $templates '.trae\agents'
 if (Test-Path -LiteralPath $srcAgentsDir) {
     if ($null -eq $agentRel) {
@@ -1141,10 +1144,18 @@ if ($KeepBackup) {
 }
 
 $marker = Join-Path $rootPath '.harness\.installed-version'
+# PENDING is not a failure by design (the project has to fill a section), but an
+# upgrade that leaves a skill on its old package text must not look clean: record
+# the count in the audit line so a later reader can tell.
+$pendingN = 0
+if ($counts.ContainsKey('PENDING')) { $pendingN = [int]$counts['PENDING'] }
+if ($pendingN -gt 0) {
+    Write-Host ("[WARN] {0} skill(s) left PENDING: their package text was NOT refreshed. Fill the missing project section(s), then re-run with -MergeSkills." -f $pendingN) -ForegroundColor Yellow
+}
 $markerLines = @(
     $newVersion,
     ('updated: ' + (Get-Date -Format 'yyyy-MM-dd')),
-    ("upgraded: {0} -> {1}; verify: {2}; backup: {3}" -f $installedVersion, $newVersion, $verifyState, $backupState)
+    ("upgraded: {0} -> {1}; verify: {2}; backup: {3}; pending: {4}" -f $installedVersion, $newVersion, $verifyState, $backupState, $pendingN)
 )
 [System.IO.File]::WriteAllText($marker, (($markerLines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 

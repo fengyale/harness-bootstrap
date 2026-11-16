@@ -49,7 +49,16 @@ function Get-Body {
     $out = @()
     $inside = $false
     $level = 0
+    $bold = '^\*\*' + [regex]::Escape($Name) + '\*\*'
     foreach ($line in $lines) {
+        # The template labels the command table with a bold line, not a heading.
+        # Treating only headings as sections made a freshly installed AGENTS.md
+        # report MISSING and exit 1.
+        if (-not $inside -and $line -match $bold) {
+            $inside = $true
+            $level = 2
+            continue
+        }
         if ($line -match '^(#{1,6})\s') {
             $hLevel = $matches[1].Length
             if ($inside) {
@@ -76,8 +85,11 @@ $missing = 0
 $hollow  = 0
 foreach ($name in $sections) {
     $hasHeading = $false
+    $namePattern = [regex]::Escape($name)
     foreach ($line in $lines) {
-        if (($line -match '^#{1,6}\s') -and ($line -match [regex]::Escape($name))) { $hasHeading = $true; break }
+        if ($line -match ('^#{1,6}\s.*' + $namePattern)) { $hasHeading = $true; break }
+        # Bold label (the command table) counts as a section start too.
+        if ($line -match ('^\*\*' + $namePattern + '\*\*')) { $hasHeading = $true; break }
     }
     $body  = @(Get-Body $name)
     $nonEmpty = @($body | Where-Object { $_.Trim().Length -gt 0 }).Count

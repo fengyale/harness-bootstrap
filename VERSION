@@ -1,7 +1,25 @@
-HARNESS-BOOTSTRAP VERSION 1.27.2
+HARNESS-BOOTSTRAP VERSION 1.27.3
 
 changelog
 ---------
+1.27.3  (五角色审查：把"看起来有"改成"真的挡得住")
+- 修复（升级会写回占位符）：AGENTS.md 的「先定档再落盘」行含 <特性>，
+  它属于已知行合并范围，会把尖括号写回项目并让 verify 必红；去掉尖括号
+- 修复（安装即失败）：agents-delta 只认 Markdown 标题，而模板用
+  **必跑命令** 加粗标签，导致全新安装必报 [MISSING] 并 exit 1；现两种
+  形式都认，并补断言
+- 修复（门禁可被一次提交关停）：red-line-scan.ps1 被换成 exit 0 时，
+  verify-harness 仍判 runnable PASS；现按长度与扫描输出行判空壳并 FAIL，
+  smoke 增加反向探针
+- 修复（自检死断言）：模板技能一个标记都没有时 markers 仍 PASS；现直接
+  FAIL。references/质量分级.md 纳入必需文件，缺失不再静默跳过
+- 修复（升级状态不透明）：PENDING 技能不会刷新包文本却显示升级成功；
+  审计行新增 pending: N，并在有 PENDING 时打印 WARN
+- 修复（平台）：Claude 的 CLAUDE.md 与 verify 只认 AGENTS.md 冲突，改为
+  「一律产出 AGENTS.md，CLAUDE.md 仅一行 @AGENTS.md」；卸载清理四个平台
+  的技能入口；CodeBuddy 子代理纳入升级
+- 测试：agents-delta 接受加粗标签、pending 计数入审计行两条断言
+
 1.27.2  (改名技能升级路径修复)
 - 修复：update-harness 按 frontmatter name 匹配到改名技能后，用
   Substring(根目录长度) 反推相对路径；CI 的 %TEMP% 是 8.3 短名

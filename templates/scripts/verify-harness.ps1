@@ -465,19 +465,32 @@ elseif (Get-Command python -ErrorAction SilentlyContinue) { $pyHost = 'python' }
 
 $scanOut = $null
 $scanCode = $null
-if ((Test-Path -LiteralPath $scanPs) -and $psHost) {
+# A scanner replaced by "exit 0" still runs, still exits 0 and turns the whole
+# red-line gate off in one ordinary commit. The SQL gate refuses a hollow file;
+# the scanner is the more valuable target, so it gets the same treatment.
+$scanHollow = $false
+if (Test-Path -LiteralPath $scanPs) {
+    $scanText = [System.IO.File]::ReadAllText($scanPs, [System.Text.Encoding]::UTF8)
+    if ($scanText.Length -lt 800 -or $scanText -notmatch 'red-line scan (found|passed)') {
+        Add-Result 'runnable' 'FAIL' ("scanner looks hollow or truncated ({0} chars, no scan output line): {1}" -f $scanText.Length, $scanPs)
+        $scanHollow = $true
+    }
+}
+if (-not $scanHollow -and (Test-Path -LiteralPath $scanPs) -and $psHost) {
     if ($psHost -eq 'powershell') {
         $scanOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $scanPs -Root $rootPath 2>&1
     } else {
         $scanOut = & pwsh -NoProfile -File $scanPs -Root $rootPath 2>&1
     }
     $scanCode = $LASTEXITCODE
-} elseif ((Test-Path -LiteralPath $scanPy) -and $pyHost) {
+} elseif (-not $scanHollow -and (Test-Path -LiteralPath $scanPy) -and $pyHost) {
     $scanOut = & $pyHost $scanPy --root $rootPath 2>&1
     $scanCode = $LASTEXITCODE
 }
 
-if ($null -eq $scanCode) {
+if ($scanHollow) {
+    # already reported
+} elseif ($null -eq $scanCode) {
     Add-Result 'runnable' 'FAIL' 'no runnable scanner (need powershell/pwsh or python3, plus scripts/red-line-scan.*)'
 } elseif ($scanCode -eq 0) {
     Add-Result 'runnable' 'PASS' 'red-line-scan runs and reports clean'

@@ -9,6 +9,7 @@
     "README.md",
     "README.en.md",
     "docs/usage-and-mechanism.html",
+    "references/质量分级.md",
     "LICENSE",
     "CONTRIBUTING.md",
     "tests/run-all.ps1",

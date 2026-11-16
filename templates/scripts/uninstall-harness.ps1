@@ -53,30 +53,34 @@ if ($hooksDir) {
 if (-not $hooksDir) { $hooksDir = Join-Path $rootPath '.git\hooks' }
 
 # ------------------------------------------------- 1 junction entries only
-$linkRoot = Join-Path $rootPath '.trae\skills'
-if (Test-Path -LiteralPath $linkRoot) {
-    foreach ($e in Get-ChildItem -LiteralPath $linkRoot -Force -Directory) {
-        $isLink = [bool]($e.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
-        if ($isLink) {
-            if ($PSCmdlet.ShouldProcess($e.FullName, 'remove junction')) {
-                cmd /c rmdir "$($e.FullName)" | Out-Null
-                Write-Host "  removed junction: $($e.Name)" -ForegroundColor Yellow
-                $removed++
+# All four platform entry dirs: uninstall used to clean only .trae, so Claude /
+# Codex / CodeBuddy projects kept dangling links that point at deleted sources.
+foreach ($platformRel in @('.trae\skills', '.claude\skills', '.agents\skills', '.codebuddy\skills')) {
+    $linkRoot = Join-Path $rootPath $platformRel
+    if (Test-Path -LiteralPath $linkRoot) {
+        foreach ($e in Get-ChildItem -LiteralPath $linkRoot -Force -Directory) {
+            $isLink = [bool]($e.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+            if ($isLink) {
+                if ($PSCmdlet.ShouldProcess($e.FullName, 'remove junction')) {
+                    cmd /c rmdir "$($e.FullName)" | Out-Null
+                    Write-Host "  removed junction: $($e.Name)" -ForegroundColor Yellow
+                    $removed++
+                }
+            } else {
+                Write-Host "  kept real directory: $($e.Name)" -ForegroundColor DarkGray
+                $kept++
             }
-        } else {
-            Write-Host "  kept real directory: $($e.Name)" -ForegroundColor DarkGray
-            $kept++
         }
-    }
-    $left = @(Get-ChildItem -LiteralPath $linkRoot -Force -ErrorAction SilentlyContinue).Count
-    if ($left -eq 0) {
-        if ($PSCmdlet.ShouldProcess($linkRoot, 'remove empty .trae\skills')) {
-            Remove-Item -LiteralPath $linkRoot -Force -ErrorAction SilentlyContinue
-            Write-Host "  removed empty: .trae\skills" -ForegroundColor Yellow
+        $left = @(Get-ChildItem -LiteralPath $linkRoot -Force -ErrorAction SilentlyContinue).Count
+        if ($left -eq 0) {
+            if ($PSCmdlet.ShouldProcess($linkRoot, ('remove empty ' + $platformRel))) {
+                Remove-Item -LiteralPath $linkRoot -Force -ErrorAction SilentlyContinue
+                Write-Host ("  removed empty: " + $platformRel) -ForegroundColor Yellow
+            }
         }
+    } else {
+        Write-Host ("  no " + $platformRel) -ForegroundColor DarkGray
     }
-} else {
-    Write-Host "  no .trae\skills" -ForegroundColor DarkGray
 }
 
 # ------------------------------------------------------------ 2 git hooks
