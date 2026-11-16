@@ -1,7 +1,20 @@
-HARNESS-BOOTSTRAP VERSION 1.27.4
+HARNESS-BOOTSTRAP VERSION 1.28.0
 
 changelog
 ---------
+1.28.0  (教训必须变成断言 / 红线按栈判定)
+- 自进化闭环：`metrics.ps1 -LessonGate` 要求"重复 ≥2 次的教训"必须晋升为
+  可失败的检查：格式 `id :: check=路径::说明`，路径必须是存在的 `.ps1/.py`
+  且不得越出项目根；只写 id、写文档路径、写目录、文件缺失都判 FAIL
+- 入口：`stage-gate` 阶段 10 新增 lessons-asserted 与 corrections-attributed
+  （`corrections ≥ 1` 必须带真实 `lesson_id`，否则收尾不通过）；verify-harness
+  的 lessons 检查调用同一脚本，两处口径不会漂
+- 红线按栈：`red-line-rules.json` 每条规则新增 stack 字段（java / any）；
+  verify-harness 读 `.harness/stack.json`，非 Java 项目仍挂 Java 专用规则时
+  WARN，若一条适用规则都没有则 FAIL（等于没有红线门禁）
+- 测试：regression 覆盖未晋升 / 已带检查 / 检查文件缺失 / 文档路径 / 目录
+  五种情形；`-Json -LessonGate` 输出机器可读结果
+
 1.27.4  (全部技能可增量合并)
 - 结构：24 个模板技能补齐 package/project 区块（此前只有 14-sql-review），
   项目绑定与证据锚点放进 project 块。升级 -MergeSkills 从此对所有已装技能

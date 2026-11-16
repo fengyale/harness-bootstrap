@@ -96,6 +96,34 @@ if ($j2.smallRecordErrors -lt 1) { Write-Host "MALFORMED SMALL ROWS NOT REPORTED
 if ($j2.tasks -ne 2) { Write-Host "MALFORMED SMALL ROWS CHANGED task count: $($j2.tasks)" -ForegroundColor Red; $script:fail++ }
 if (($j2.verdict -join "`n") -notmatch 'malformed') { Write-Host "MALFORMED SMALL ROWS NOT IN VERDICT" -ForegroundColor Red; $script:fail++ }
 
+Step 'lesson gate: a repeated lesson must become a check'
+Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
+    ('| {0} | dup-a | L1 | none | 1 | 0 | dup-lesson -- first | demo | a |' -f $smallDate),
+    ('| {0} | dup-b | L1 | none | 1 | 0 | dup-lesson -- second | demo | b |' -f $smallDate)
+) -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A REPEATED LESSON WITHOUT A CHECK" -ForegroundColor Red; $script:fail++ }
+Add-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value 'dup-lesson :: check=scripts/red-line-scan.ps1::duplicate lesson blocked' -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "LESSON GATE REJECTED A REGISTERED CHECK" -ForegroundColor Red; $script:fail++ }
+# A promoted lesson that points at a file which does not exist is not evidence.
+$lp = Get-Content "$proj\.harness\lessons-promoted.txt" -Raw -Encoding UTF8
+$lp = $lp -replace 'check=scripts/red-line-scan\.ps1', 'check=scripts/does-not-exist.ps1'
+Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A MISSING CHECK FILE" -ForegroundColor Red; $script:fail++ }
+$lp = $lp -replace 'check=scripts/does-not-exist\.ps1', 'check=scripts/red-line-scan.ps1'
+Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
+# A doc or a directory proves nothing; only an executable check counts.
+foreach ($bad in @('.harness/lessons.md', '.harness')) {
+    $lp = $lp -replace 'check=scripts/red-line-scan\.ps1', ('check=' + $bad)
+    Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+    if ($LASTEXITCODE -eq 0) { Write-Host ("LESSON GATE ACCEPTED A NON-EXECUTABLE CHECK: " + $bad) -ForegroundColor Red; $script:fail++ }
+    $lp = $lp -replace ('check=' + [regex]::Escape($bad)), 'check=scripts/red-line-scan.ps1'
+}
+Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
+
 Step 'A3+ spoof must fail'
 $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
 $s2 = $s -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', ''

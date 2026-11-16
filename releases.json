@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.28.0",
+    "title": "(教训必须变成断言 / 红线按栈判定)",
+    "body": [
+      "- 自进化：metrics.ps1 -LessonGate 要求重复 ≥2 次的教训必须晋升为可失败的",
+      "  检查，格式 id :: check=路径::说明；路径必须是存在的 .ps1/.py、不得越界，",
+      "  写文档/目录/缺失文件都 FAIL。-Json -LessonGate 输出机器可读结果",
+      "- 入口：stage-gate 阶段 10 新增 lessons-asserted 与 corrections-attributed",
+      "  （corrections ≥ 1 必须带 lesson_id）；verify-harness 的 lessons 检查同源",
+      "- 红线按栈：red-line-rules.json 每条规则新增 stack 字段；非 Java 项目仍挂",
+      "  Java 专用规则时 WARN，若一条适用规则都没有则 FAIL",
+      "- 测试：regression 覆盖未晋升 / 带检查 / 缺文件 / 文档路径 / 目录五种情形"
+    ]
+  },
+  {
     "version": "1.27.4",
     "title": "(全部技能可增量合并)",
     "body": [

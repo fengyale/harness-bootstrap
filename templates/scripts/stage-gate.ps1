@@ -105,6 +105,8 @@ $stageDefs = @(
     )
     New-Stage '10' 'distill' @(
         @{ Id='distill-recorded'; Kind='AUTO';  Text='summary.md has a distill / lesson section' },
+        @{ Id='lessons-asserted'; Kind='AUTO';  Text='every repeated lesson is promoted into a check' },
+        @{ Id='corrections-attributed'; Kind='AUTO'; Text='corrections carry a lesson_id so they can be promoted' },
         @{ Id='summary-fields-final'; Kind='AUTO'; Text='summary.md fields are complete and valid' },
         @{ Id='metrics-normal';   Kind='HUMAN'; Text='no new error type left unrecorded' }
     )
@@ -326,6 +328,28 @@ function Test-Criterion {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
             if (Test-SectionHeading -Text $summary -Needles $S.distill) { return @{ Ok=$true; Detail=$M.present } }
             return @{ Ok=$false; Detail='no distill / lesson section' }
+        }
+        'lessons-asserted' {
+            # Delegated to metrics.ps1 so the count and the gate cannot drift.
+            $mp = Join-Path $ProjectRoot 'scripts\metrics.ps1'
+            if (-not (Test-Path -LiteralPath $mp)) { return @{ Ok=$false; Detail='missing scripts\metrics.ps1' } }
+            $lg = & powershell -NoProfile -ExecutionPolicy Bypass -File $mp -Root $ProjectRoot -LessonGate 2>&1
+            if ($LASTEXITCODE -eq 0) { return @{ Ok=$true; Detail='repeated lessons have checks' } }
+            $first = @($lg | Where-Object { $_ -match '\[FAIL\]' } | Select-Object -First 1)
+            return @{ Ok=$false; Detail=("repeated lesson without a check: " + $first) }
+        }
+        'corrections-attributed' {
+            # The template already says "corrections >= 1 requires a real id"; without
+            # this check a summary could report corrections and attribute none, and
+            # the lesson counter (the input to the lesson gate) would stay empty.
+            if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
+            $cm = [regex]::Match($summary, '(?m)^\s*[-*]?\s*corrections:\s*(\d+)')
+            if (-not $cm.Success) { return @{ Ok=$true; Detail='no corrections field' } }
+            if ([int]$cm.Groups[1].Value -le 0) { return @{ Ok=$true; Detail='no corrections to attribute' } }
+            if ($summary -match '(?m)^\s*[-*]?\s*lesson_id:\s*[A-Za-z0-9]') {
+                return @{ Ok=$true; Detail='corrections attributed to a lesson id' }
+            }
+            return @{ Ok=$false; Detail='corrections > 0 but no lesson_id; attribute it so the lesson can be promoted' }
         }
         'compiles' {
             return Test-RunCommand -RawCell (Get-AgentsCommandRow -ProjectRoot $ProjectRoot -Keywords $RULES.agentsCommandPurpose.compile -SectionNames $RULES.agentsCommandSection) -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact

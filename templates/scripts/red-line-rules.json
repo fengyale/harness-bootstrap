@@ -9,11 +9,13 @@
     "include": "只在这些扩展名里查，如 [\"*.java\"]",
     "includePath": "可选；再按相对路径收窄，如 [\"*mapper*\"]（防止通用规则扫到构建文件）",
     "multiline": "可选；true 表示按整个文件做多行匹配（默认逐行匹配，跨行正则必须开这个）",
-    "hint": "修复建议"
+    "hint": "修复建议",
+    "stack": "可选；该规则适用的技术栈（java / any）。安装时把不适用的规则删掉或改写，verify-harness 会在 .harness/stack.json 与本值冲突时告警"
   },
   "rules": [
     {
       "id": "R1",
+      "stack": "any",
       "name": "金额字段必须用整数最小单位",
       "pattern": "\\b(BigDecimal|double|float|Double|Float)\\b",
       "requireAlso": "(amount|price|money|fee|cost|cents|金额|价格|费用)",
@@ -22,6 +24,7 @@
     },
     {
       "id": "R2",
+      "stack": "java",
       "name": "缓存 Key 必须用统一前缀常量",
       "pattern": "opsForValue\\(\\)\\s*\\.\\s*(get|set|delete)\\s*\\(\\s*\"",
       "include": ["*.java", "*.kt"],
@@ -29,6 +32,7 @@
     },
     {
       "id": "R3",
+      "stack": "java",
       "name": "异常必须走统一异常体系",
       "pattern": "throw\\s+new\\s+(RuntimeException|IllegalStateException|IllegalArgumentException|Exception)\\b",
       "include": ["*.java", "*.kt"],
@@ -36,6 +40,7 @@
     },
     {
       "id": "R4",
+      "stack": "java",
       "name": "禁止字段注入",
       "pattern": "@Autowired\\s*(?:\\r?\\n\\s*)*private",
       "include": ["*.java", "*.kt"],
@@ -44,6 +49,7 @@
     },
     {
       "id": "R5",
+      "stack": "java",
       "name": "事务必须声明回滚范围",
       "pattern": "@Transactional\\s*\\(\\s*\\)",
       "include": ["*.java", "*.kt"],
@@ -51,6 +57,7 @@
     },
     {
       "id": "R6",
+      "stack": "java",
       "name": "禁止把敏感信息写进日志",
       "pattern": "(log|logger)\\.(info|warn|error|debug)\\s*\\([^)]*(password|passwd|token|secret|mobile|phone)",
       "include": ["*.java", "*.kt", "*.ts", "*.tsx"],
@@ -59,6 +66,7 @@
     },
     {
       "id": "R7",
+      "stack": "java",
       "name": "SQL 禁止字符串替换占位",
       "pattern": "\\$\\{",
       "include": ["*.xml"],
@@ -67,6 +75,7 @@
     },
     {
       "id": "R8",
+      "stack": "any",
       "name": "（示例占位）按项目实际补充第 8 条红线，或删掉本条",
       "pattern": "__HARNESS_PLACEHOLDER_NEVER_MATCHES__",
       "include": ["*.md"],

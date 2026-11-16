@@ -20,6 +20,7 @@
     11. modules      .harness/modules cards have sections and evidence
     12. summary      task summaries pass scripts/check-summary.ps1 (same rules as the gates)
     13. sql-gate     sqlGate policy: rule + runnable gate + hook wiring, or explicit opt-out
+    14. lessons      a lesson that repeated twice must be promoted into a check, not a note
 
   USAGE  (no pwsh on Windows PowerShell 5.1 boxes; Bypass is required by policy)
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1
@@ -365,6 +366,30 @@ if ($jsonIds.Count -gt 0) {
     }
 }
 
+# The shipped rules are Java/Spring patterns. A non-Java project that kept them
+# ends up with rules it can never satisfy and rules that silently never match.
+# probe-stack already writes .harness/stack.json; use it instead of guessing.
+$stackPath = Join-Path $rootPath '.harness\stack.json'
+if ($rulesCfg -and (Test-Path -LiteralPath $stackPath)) {
+    try {
+        $stackCfg = (Get-Content -LiteralPath $stackPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        $lang = [string]$stackCfg.language
+        if ($lang -and $lang -ne 'unknown' -and $lang -ne 'java') {
+            $javaRules = @($rulesCfg.rules | Where-Object { $_.stack -eq 'java' } | ForEach-Object { $_.id })
+            # A rule with no stack (older installs) still counts as applicable.
+            $applicable = @($rulesCfg.rules | Where-Object { $_.stack -ne 'java' })
+            if ($applicable.Count -eq 0) {
+                # Every rule is Java-only: the project has no red-line gate at all.
+                Add-Result 'red-lines' 'FAIL' ("no red-line rule applies to a '$lang' project; rewrite the Java rules or add stack=any ones in scripts/red-line-rules.json")
+            } elseif ($javaRules.Count -gt 0) {
+                Add-Result 'red-lines' 'WARN' ("$($javaRules.Count) Java-specific rule(s) enabled for a '$lang' project ($($javaRules -join ', ')); rewrite or delete them in scripts/red-line-rules.json")
+            }
+        }
+    } catch {
+        Add-Result 'red-lines' 'WARN' 'cannot read .harness/stack.json; stack-aware red-line check skipped'
+    }
+}
+
 # --------------------------------------------------------------------- 5 gate
 # Ask git for the EFFECTIVE hooks directory. In a linked worktree
 # --absolute-git-dir is .git/worktrees/<name> (git never runs its hooks/);
@@ -503,6 +528,22 @@ if ($scanHollow) {
         Add-Result 'runnable' 'PASS' "scanner runs; legacy violations present, incremental gate only checks new changes: $ranLine"
     } else {
         Add-Result 'runnable' 'FAIL' "scanner crashed (exit $scanCode): $(@($scanOut)[0])"
+    }
+}
+
+# ------------------------------------------------------------ 6a lesson gate
+# "Persist on the second occurrence" only holds if the second occurrence forces
+# a check. metrics.ps1 owns the counting; this delegates so the numbers cannot
+# drift between the report and the gate.
+$metricsPath = Join-Path $rootPath 'scripts\metrics.ps1'
+if (Test-Path -LiteralPath $metricsPath) {
+    $lgOut = & $PS -NoProfile -ExecutionPolicy Bypass -File $metricsPath -Root $rootPath -LessonGate 2>&1
+    $lgCode = $LASTEXITCODE
+    if ($lgCode -eq 0) {
+        Add-Result 'lessons' 'PASS' 'every repeated lesson has a registered check'
+    } else {
+        $firstFail = @($lgOut | Where-Object { $_ -match '\[FAIL\]' } | Select-Object -First 1)
+        Add-Result 'lessons' 'FAIL' ("repeated lesson without a registered check: " + $firstFail)
     }
 }
 

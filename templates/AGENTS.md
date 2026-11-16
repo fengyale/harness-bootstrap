@@ -115,7 +115,7 @@
 | `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体 |
 | `.trae/agents/red-line-auditor.md` | 全库红线扫描智能体 |
 | `.harness/lessons.md` | 教训索引（`metrics.ps1` 自动刷新、团队共享）；写 `lesson_id` 前先查表 |
-| `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；晋升后追加 id，`metrics` 不再重复提醒 |
+| `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；**晋升必须带断言**：`id :: check=路径::说明`，只写 id 会被 `metrics.ps1 -LessonGate` 判 FAIL |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
 | `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-MergeSkills` 用新版通用段并保留项目绑定（推荐）；`-UpdateSkills` 只替换未编译技能；`-ForceSkills` 强制覆盖 |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |

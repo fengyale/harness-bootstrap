@@ -1,4 +1,10 @@
 # Promoted lesson ids (one per line).
 # metrics.ps1 reads this file. Keep it tracked so every clone sees the same
-# "already promoted" status; append an id only after the lesson was promoted
-# into a rule, a gate or a skill.
+# "already promoted" status.
+#
+# A promoted lesson must carry the check that makes it impossible to repeat:
+#   lesson-id :: check=<path relative to the project root>::<what the check proves>
+# Plain "lesson-id" lines still count as promoted, but metrics.ps1 -LessonGate
+# (run by verify-harness) rejects a repeated lesson that has no check path.
+# Example:
+#   gate-binding-too-strict :: check=tests/test-update.ps1::merged rows keep project names

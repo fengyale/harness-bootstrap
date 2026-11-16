@@ -53,7 +53,8 @@ param(
     [int]$SkillMinAgeDays = 28,
     [switch]$Compare,
     [switch]$Json,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$LessonGate
 )
 
 $ErrorActionPreference = 'Stop'
@@ -480,11 +481,70 @@ foreach ($t in $allTasks) {
     }
 }
 
-# lessons already promoted stop nagging (but keep being counted)
+# lessons already promoted stop nagging (but keep being counted).
+# Two line shapes are accepted:
+#   lesson-id
+#   lesson-id :: check=<path relative to the project root>::<what the check proves>
+# Only the second turns a lesson into something that can fail again; -LessonGate
+# refuses the first for any lesson that repeated.
 $promoted = @()
+$promotedChecks = @{}
 if (Test-Path -LiteralPath $promotedPath) {
-    $promoted = @(Get-Content -LiteralPath $promotedPath -Encoding UTF8 |
-        ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+    foreach ($raw in (Get-Content -LiteralPath $promotedPath -Encoding UTF8)) {
+        $line = $raw.Trim()
+        if (-not $line -or $line.StartsWith('#')) { continue }
+        $id = $line
+        $checkPath = ''
+        $checkLabel = ''
+        $m = [regex]::Match($line, '^([A-Za-z0-9][A-Za-z0-9_.\-]*)\s*::\s*check=(.+?)::(.*)$')
+        if ($m.Success) {
+            $id = $m.Groups[1].Value
+            $checkPath = $m.Groups[2].Value.Trim()
+            $checkLabel = $m.Groups[3].Value.Trim()
+        }
+        if ($promoted -notcontains $id) { $promoted += $id }
+        $promotedChecks[$id] = [pscustomobject]@{ Path = $checkPath; Label = $checkLabel }
+    }
+}
+
+# -LessonGate: the only mechanically enforceable part of "persist on the second
+# occurrence". A repeated lesson whose promotion has no check path is still just
+# a note -- it will be forgotten again.
+if ($LessonGate) {
+    $bad = @()
+    foreach ($k in ($lessonCounts.Keys | Sort-Object)) {
+        if ($lessonCounts[$k] -lt 2) { continue }
+        $c = $promotedChecks[$k]
+        if (-not $c) {
+            $bad += "$k repeated $($lessonCounts[$k])x and is not promoted"
+        } elseif (-not $c.Path) {
+            $bad += "$k is promoted without a check (add ':: check=<file>::<label>')"
+        } elseif ($c.Path -match '\.\.' -or $c.Path -match '^[A-Za-z]:') {
+            $bad += "$k check path escapes the project root: $($c.Path)"
+        } elseif ($c.Path -notmatch '\.(ps1|py)$') {
+            # A doc or a directory proves nothing: the check has to be something
+            # that can fail. Gate and test scripts are the only executable forms.
+            $bad += "$k check must be a .ps1/.py check, not '$($c.Path)'"
+        } else {
+            $full = Join-Path $rootPath ($c.Path -replace '/', '\')
+            if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+                $bad += "$k points at a missing check file: $($c.Path)"
+            }
+        }
+    }
+    if ($Json) {
+        $payload = [ordered]@{ lessonGateOk = ($bad.Count -eq 0); violations = @($bad) }
+        Write-Output ($payload | ConvertTo-Json -Depth 4)
+    } else {
+        foreach ($b in $bad) { Write-Host ("[FAIL] lesson gate: " + $b) -ForegroundColor Red }
+        if ($bad.Count -gt 0) {
+            Write-Host 'A repeated lesson must become a check that can fail; see .harness/lessons-promoted.txt' -ForegroundColor Yellow
+        } else {
+            Write-Host 'lesson gate: every repeated lesson has a registered check' -ForegroundColor Green
+        }
+    }
+    if ($bad.Count -gt 0) { exit 1 }
+    exit 0
 }
 
 # Write the lessons lookup table. The script stays pure ASCII; the note values
