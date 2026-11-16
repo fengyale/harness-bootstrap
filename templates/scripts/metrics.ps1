@@ -529,6 +529,15 @@ if ($LessonGate) {
             $full = Join-Path $rootPath ($c.Path -replace '/', '\')
             if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
                 $bad += "$k points at a missing check file: $($c.Path)"
+            } else {
+                # Existence is not relevance. Requiring the id inside the check
+                # file turns "this test covers that lesson" into something a
+                # reader (human or reviewer agent) can audit, and a mis-wired
+                # path fails instead of silently pointing at an unrelated script.
+                $checkText = [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8)
+                if ($checkText -notmatch [regex]::Escape($k)) {
+                    $bad += "$k check file does not mention the lesson id: $($c.Path) (add the id as a comment, e.g. '# lesson: $k')"
+                }
             }
         }
     }

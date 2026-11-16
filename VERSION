@@ -1,7 +1,16 @@
-HARNESS-BOOTSTRAP VERSION 1.28.0
+HARNESS-BOOTSTRAP VERSION 1.28.1
 
 changelog
 ---------
+1.28.1  (断言必须能追溯到那条教训)
+- 收紧：`-LessonGate` 不只看检查文件存在，还要求文件里出现该 lesson id
+  （注释即可，如 `# lesson: dup-lesson`）。指向一个无关脚本会直接 FAIL，
+  让"这条测试覆盖那条教训"变成可审计的字符串，而不是凭口头声明
+- 说明：id 只是审计锚点，不是相关性证明；晋升前仍需评审者打开检查脚本
+  确认它会因该教训而变红（模板已写明，可用 code-reviewer /
+  consistency-verifier 智能体执行）
+- 测试：regression 增加"检查文件未提及 id → 拒绝"用例
+
 1.28.0  (教训必须变成断言 / 红线按栈判定)
 - 自进化闭环：`metrics.ps1 -LessonGate` 要求"重复 ≥2 次的教训"必须晋升为
   可失败的检查：格式 `id :: check=路径::说明`，路径必须是存在的 `.ps1/.py`

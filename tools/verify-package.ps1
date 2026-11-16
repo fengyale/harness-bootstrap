@@ -95,8 +95,19 @@ if ($parseBad -eq 0) { Add-Result 'parse' 'PASS' "$($scriptFiles.Count) .ps1 fil
 $encBad = 0
 foreach ($f in $scriptFiles) {
     $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
-    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
-    if ($hasBom) { continue }
+    # Count leading BOMs: a file written twice by a BOM-adding helper ends up with
+    # two, which parses in neither PS 5.1 nor pwsh but still "has a BOM".
+    $bomCount = 0
+    while ((($bomCount * 3) + 2) -lt $bytes.Length -and
+           $bytes[$bomCount * 3] -eq 0xEF -and
+           $bytes[($bomCount * 3) + 1] -eq 0xBB -and
+           $bytes[($bomCount * 3) + 2] -eq 0xBF) { $bomCount++ }
+    if ($bomCount -gt 1) {
+        Add-Result 'encoding' 'FAIL' "$($f.Name): $bomCount UTF-8 BOMs at the start (only one is legal)"
+        $encBad++
+        continue
+    }
+    if ($bomCount -eq 1) { continue }
     $nonAscii = 0
     foreach ($b in $bytes) { if ($b -gt 127) { $nonAscii++ } }
     if ($nonAscii -gt 0) {

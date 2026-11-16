@@ -103,24 +103,29 @@ Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
 ) -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A REPEATED LESSON WITHOUT A CHECK" -ForegroundColor Red; $script:fail++ }
-Add-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value 'dup-lesson :: check=scripts/red-line-scan.ps1::duplicate lesson blocked' -Encoding UTF8
+# Existence is not relevance: the check file must name the lesson it covers.
+Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', 'exit 0') -Encoding ASCII
+Add-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value 'dup-lesson :: check=scripts/check-dup.ps1::duplicate lesson blocked' -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "LESSON GATE REJECTED A REGISTERED CHECK" -ForegroundColor Red; $script:fail++ }
-# A promoted lesson that points at a file which does not exist is not evidence.
+# A check that never mentions the id is an unrelated script, not evidence.
 $lp = Get-Content "$proj\.harness\lessons-promoted.txt" -Raw -Encoding UTF8
-$lp = $lp -replace 'check=scripts/red-line-scan\.ps1', 'check=scripts/does-not-exist.ps1'
+$lpWrong = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/red-line-scan.ps1'
+Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lpWrong.TrimEnd() -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A CHECK THAT DOES NOT NAME THE LESSON" -ForegroundColor Red; $script:fail++ }
+# A promoted lesson that points at a file which does not exist is not evidence.
+$lp = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/does-not-exist.ps1'
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A MISSING CHECK FILE" -ForegroundColor Red; $script:fail++ }
-$lp = $lp -replace 'check=scripts/does-not-exist\.ps1', 'check=scripts/red-line-scan.ps1'
-Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
 # A doc or a directory proves nothing; only an executable check counts.
 foreach ($bad in @('.harness/lessons.md', '.harness')) {
-    $lp = $lp -replace 'check=scripts/red-line-scan\.ps1', ('check=' + $bad)
+    $lp = $lp -replace 'check=scripts/check-dup\.ps1', ('check=' + $bad)
     Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
     & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
     if ($LASTEXITCODE -eq 0) { Write-Host ("LESSON GATE ACCEPTED A NON-EXECUTABLE CHECK: " + $bad) -ForegroundColor Red; $script:fail++ }
-    $lp = $lp -replace ('check=' + [regex]::Escape($bad)), 'check=scripts/red-line-scan.ps1'
+    $lp = $lp -replace ('check=' + [regex]::Escape($bad)), 'check=scripts/check-dup.ps1'
 }
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
 
