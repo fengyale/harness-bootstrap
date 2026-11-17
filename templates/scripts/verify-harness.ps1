@@ -389,6 +389,23 @@ if ($rulesCfg -and (Test-Path -LiteralPath $stackPath)) {
         Add-Result 'red-lines' 'WARN' 'cannot read .harness/stack.json; stack-aware red-line check skipped'
     }
 }
+# Project-owned rules can lag behind the skills that reference them by section
+# number: skills upgrade, rules do not (they are project assets). A skill that
+# points at "section 1.1" of an older file leads the agent nowhere, so say it.
+foreach ($rs in @($cfg.requiredRuleSections)) {
+    if (-not $rs -or -not $rs.file) { continue }
+    $rp = Join-Path $rootPath ([string]$rs.file -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $rp)) { continue }
+    $rt = [System.IO.File]::ReadAllText($rp, [System.Text.Encoding]::UTF8)
+    $missSec = @()
+    foreach ($sec in @($rs.sections)) {
+        if (-not $sec) { continue }
+        if ($rt -notmatch ('(?m)^#{2,3}\s*' + [regex]::Escape([string]$sec) + '(\s|$)')) { $missSec += [string]$sec }
+    }
+    if ($missSec.Count -gt 0) {
+        Add-Result 'rules' 'WARN' ("$($rs.file) is older than the installed skills: missing section(s) " + ($missSec -join ', ') + '; merge the rules by hand (upgrade leaves project rules alone)')
+    }
+}
 
 # --------------------------------------------------------------------- 5 gate
 # Ask git for the EFFECTIVE hooks directory. In a linked worktree

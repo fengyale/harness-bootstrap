@@ -1,7 +1,25 @@
-HARNESS-BOOTSTRAP VERSION 1.28.1
+HARNESS-BOOTSTRAP VERSION 1.29.0
 
 changelog
 ---------
+1.29.0  (sql_review 内容门禁 / 定档口径统一)
+- 门禁：`check-summary.ps1 -Stage final` 不再只判 sql_review 非空——结论写
+  「通过 / 已改写」而四层或计划里仍有「未验证 / 未跑」时直接 FAIL；值里
+  引用的 `.harness` 证据路径必须真实存在。结论模板允许「未验证 + 待 DBA」，
+  所以规则只拦自相矛盾，不逼人造假
+- 门禁：`sql-review-gate.ps1` 在提交 SQL 时调用同一套校验（-OnlySqlReview），
+  矛盾结论进不了 index，不必等到阶段 10
+- 定档：request-analysis 的 L2/L3 判据与 开发流程规范 对齐（L2 明确无
+  SQL/DDL/迁移，L3 纳入 SQL），不再出现「单文件 SQL = L2」的漏档
+- 流程：涉及 SQL 的改动，合并前就要跑 `-Stage 10`（原来只在收尾手动跑）；
+  AGENTS.md 与开发流程规范同步这句话
+- 阶段 10：新增 HUMAN 项 checks-really-fail——晋升过的检查必须被打开确认
+  「重新引入该教训时会失败」，语义相关性由此变成要留证据的动作
+- 体检：verify-harness 新增 rules 检查，技能按节号引用规则文件而项目那份
+  缺该小节时 WARN（规则是项目资产，升级不覆盖，需要人工合并）
+- 测试：regression 覆盖「四层未验证 + 结论通过」「一致结论」「证据路径缺失」
+  三种情形
+
 1.28.1  (断言必须能追溯到那条教训)
 - 收紧：`-LessonGate` 不只看检查文件存在，还要求文件里出现该 lesson id
   （注释即可，如 `# lesson: dup-lesson`）。指向一个无关脚本会直接 FAIL，

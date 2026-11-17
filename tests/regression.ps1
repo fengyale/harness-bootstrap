@@ -129,6 +129,26 @@ foreach ($bad in @('.harness/lessons.md', '.harness')) {
 }
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
 
+Step 'sql_review: a pass verdict cannot hide unverified layers'
+$sumPath = "$proj\.harness\changes\demo\summary.md"
+$sumOrig = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+function Set-SqlReview {
+    param([string]$Value)
+    $t = $sumOrig -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', $Value
+    Set-Content -LiteralPath $sumPath -Value $t -Encoding UTF8
+}
+Set-SqlReview 'sql_review: demo.t · 语法 未验证(no sandbox) · 结构 未验证 · 绑定 未验证 · 结果 未验证 · 计划 未跑 · 结论 通过'
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "CONTRADICTORY SQL REVIEW ACCEPTED" -ForegroundColor Red; $script:fail++ }
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(fixture) · 计划 type=ref · 结论 通过'
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "CONSISTENT SQL REVIEW REJECTED" -ForegroundColor Red; $script:fail++ }
+# A cited evidence path is a claim: it must exist on disk.
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/missing.txt) · 计划 未跑 · 结论 待 DBA'
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "MISSING SQL EVIDENCE ACCEPTED" -ForegroundColor Red; $script:fail++ }
+Set-Content -LiteralPath $sumPath -Value $sumOrig -Encoding UTF8
+
 Step 'A3+ spoof must fail'
 $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
 $s2 = $s -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', ''

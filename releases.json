@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.29.0",
+    "title": "(sql_review 内容门禁 / 定档口径统一)",
+    "body": [
+      "- 门禁：check-summary -Stage final 不再只判 sql_review 非空——结论写「通过/",
+      "  已改写」而四层或计划仍写「未验证/未跑」时 FAIL；引用的 .harness 证据路径",
+      "  必须存在。允许「未验证 + 待 DBA」，只拦自相矛盾",
+      "- 门禁：sql-review-gate 在提交 SQL 时用同一套校验（-OnlySqlReview），矛盾",
+      "  结论进不了 index",
+      "- 定档：request-analysis 的 L2/L3 与开发流程规范对齐（L3 纳入 SQL）",
+      "- 流程：涉及 SQL 的改动合并前跑 -Stage 10；AGENTS.md 与规范同步",
+      "- 阶段 10：新增 HUMAN 项 checks-really-fail（打开检查确认它会因该教训失败）",
+      "- 体检：技能按节号引用规则、而项目那份缺该小节时 WARN（规则是项目资产）",
+      "- 测试：regression 覆盖矛盾结论 / 一致结论 / 证据路径缺失三种情形"
+    ]
+  },
+  {
     "version": "1.28.1",
     "title": "(断言必须能追溯到那条教训)",
     "body": [

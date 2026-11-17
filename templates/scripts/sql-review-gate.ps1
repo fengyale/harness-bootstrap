@@ -148,6 +148,18 @@ foreach ($h in ($hot | Select-Object -Unique)) {
 }
 
 if ($note) {
+    # Presence is not review. A note whose verdict is a pass while layers say
+    # "unverified" is rejected here with the same rule as stage 10, so a SQL
+    # change cannot reach the index with a self-contradicting review.
+    $cs = Join-Path $PSScriptRoot 'check-summary.ps1'
+    if (Test-Path -LiteralPath $cs) {
+        $csOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $cs -Root $root -File $noteFrom -Stage final -OnlySqlReview 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            foreach ($line in $csOut) { Write-Host $line }
+            Write-Host '[FAIL] sql_review content rejected; fix the review before committing the SQL.'
+            exit 1
+        }
+    }
     $label = Split-Path -Leaf (Split-Path -Parent $noteFrom)
     $where = if ($inCommit.ContainsKey($noteFrom)) { 'in this commit' } else { 'on disk, not in this commit' }
     Write-Host ("[PASS] sql_review ({0}, {1}): {2}" -f $label, $where, $note)

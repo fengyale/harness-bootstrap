@@ -108,6 +108,7 @@ $stageDefs = @(
         @{ Id='lessons-asserted'; Kind='AUTO';  Text='every repeated lesson is promoted into a check' },
         @{ Id='corrections-attributed'; Kind='AUTO'; Text='corrections carry a lesson_id so they can be promoted' },
         @{ Id='summary-fields-final'; Kind='AUTO'; Text='summary.md fields are complete and valid' },
+        @{ Id='checks-really-fail'; Kind='HUMAN'; Text='opened every promoted lesson check and confirmed it fails when that lesson is reintroduced' },
         @{ Id='metrics-normal';   Kind='HUMAN'; Text='no new error type left unrecorded' }
     )
 )

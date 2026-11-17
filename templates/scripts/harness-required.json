@@ -3,10 +3,28 @@
   "_sqlGate说明": "true = SQL 门禁必须启用：规则文件 + 至少一个 gate 运行时 + hook 调用 + 本机可运行；false = 项目明确关闭（同时应删除 SQL 规则与 gate 脚本）；字段缺省 = 旧项目，按「规则与 gate 必须成对」判定，不做强启用。",
   "_requiredAnyOf说明": "每组至少存在一个文件；用于「同一能力有多个运行时」的场景。扫描器的 ps1/py 只保留一个也算完整。",
   "sqlGate": true,
+  "sqlReview": {
+    "_说明": "check-summary.ps1 -Stage final 用它检查 sql_review 的结论与证据是否自相矛盾：结论写通过/已改写，但四层或计划里仍有已定义的未验证标记，就直接 FAIL；值里引用的 .harness 路径必须存在。noneMarkers 命中则视为本条不适用。",
+    "keys": {
+      "syntax": "语法",
+      "structure": "结构",
+      "binding": "绑定",
+      "result": "结果",
+      "plan": "计划",
+      "verdict": "结论"
+    },
+    "unknownMarkers": ["未验证", "未跑"],
+    "passVerdicts": ["通过", "已改写"],
+    "noneMarkers": ["no SQL change", "无 SQL 变更", "未涉及 SQL", "不涉及 SQL", "无 SQL"]
+  },
   "requiredAnyOf": [
     ["scripts/red-line-scan.ps1", "scripts/red-line-scan.py"]
   ],
   "agentsSections": ["技术栈", "必跑命令", "红线", "文件索引", "AI 编码纪律"],
+  "requiredRuleSections": [
+    { "file": ".harness/rules/开发流程规范.md", "sections": ["1.1"] }
+  ],
+  "_requiredRuleSections说明": "技能按节号引用规则文件时，项目里的那份必须含这些小节。规则是项目资产（升级不覆盖），所以缺失只报 WARN 并提示人工合并，不阻断。",
   "platformEntries": {
     "skillDirs": [".trae/skills", ".claude/skills", ".agents/skills", ".codebuddy/skills"],
     "agentDirs": [".trae/agents", ".claude/agents", ".codebuddy/agents"]

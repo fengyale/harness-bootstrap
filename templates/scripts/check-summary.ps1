@@ -34,6 +34,7 @@ param(
     [string]$File = '',
     [ValidateSet('initial', 'final')]
     [string]$Stage = 'final',
+    [switch]$OnlySqlReview,
     [switch]$Quiet
 )
 
@@ -122,6 +123,95 @@ function Test-Placeholder {
     return $false
 }
 
+# ------------------------------------------------------- sql_review content
+# Presence alone made "syntax unverified / structure unverified / ... / verdict
+# pass" a valid review: the field was non-empty, so every gate said OK. The
+# conclusion template and the rules already forbid that combination, so check it
+# here instead of trusting prose. Field names and markers live in
+# harness-required.json to keep this file pure ASCII.
+$script:sqlCfg = $null
+$cfgPath = Join-Path $PSScriptRoot 'harness-required.json'
+if (Test-Path -LiteralPath $cfgPath) {
+    try {
+        $cfgAll = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        if ($cfgAll.PSObject.Properties['sqlReview']) { $script:sqlCfg = $cfgAll.sqlReview }
+    } catch { }
+}
+
+function Get-SqlCfg {
+    param([string]$Name)
+    if (-not $script:sqlCfg) { return $null }
+    $p = $script:sqlCfg.PSObject.Properties[$Name]
+    if ($p) { return $p.Value }
+    return $null
+}
+
+function Assert-SqlReview {
+    $sql = Get-FieldRaw 'sql_review'
+    if (Test-Placeholder $sql) {
+        Add-Fail 'sql_review' 'missing (write the review, or a "no SQL change" marker)'
+        return
+    }
+    if (-not $script:sqlCfg) { return }
+
+    foreach ($m in @(Get-SqlCfg 'noneMarkers')) {
+        if ($m -and $sql.Contains([string]$m)) { return }
+    }
+
+    $keys = Get-SqlCfg 'keys'
+    $unknown = @(Get-SqlCfg 'unknownMarkers')
+    $passVerdicts = @(Get-SqlCfg 'passVerdicts')
+    if (-not $keys) { return }
+
+    # The conclusion template separates the parts with a middle dot.
+    $segs = @($sql -split '[\u00B7|]' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
+    $vals = @{}
+    foreach ($name in @('syntax', 'structure', 'binding', 'result', 'plan', 'verdict')) {
+        $word = [string]$keys.$name
+        if (-not $word) { continue }
+        foreach ($s in $segs) {
+            if ($s.StartsWith($word)) { $vals[$name] = $s.Substring($word.Length).Trim(); break }
+        }
+    }
+
+    $verdict = [string]$vals['verdict']
+    if ($verdict) {
+        $isPass = $false
+        foreach ($p in $passVerdicts) { if ($p -and $verdict.Contains([string]$p)) { $isPass = $true; break } }
+        if ($isPass) {
+            foreach ($name in @('syntax', 'structure', 'binding', 'result', 'plan')) {
+                $v = [string]$vals[$name]
+                if (-not $v) { continue }
+                foreach ($u in $unknown) {
+                    if ($u -and $v.Contains([string]$u)) {
+                        Add-Fail 'sql_review' ("verdict claims a pass but '$name' says '$v'; a layer that was not verified cannot end in a pass")
+                    }
+                }
+            }
+        }
+    }
+
+    # A referenced path is a claim: the evidence must actually be on disk.
+    $rootFull = $rootPath.TrimEnd('\')
+    foreach ($m in [regex]::Matches($sql, '\.harness[\\/][^\s\u00B7,;:()\[\]]+')) {
+        $rel = $m.Value -replace '/', '\'
+        if (-not (Test-Path -LiteralPath (Join-Path $rootFull $rel))) {
+            Add-Fail 'sql_review' ("references a missing evidence path: " + $m.Value)
+        }
+    }
+}
+
+if ($OnlySqlReview) {
+    Assert-SqlReview
+    if ($fails.Count -gt 0) {
+        foreach ($f in $fails) { Write-Host "[FAIL] $f" }
+        Write-Host "check-summary: $($fails.Count) fail(s)"
+        exit 1
+    }
+    if (-not $Quiet) { Write-Host '[OK] sql_review content valid' }
+    exit 0
+}
+
 # ---------------------------------------------------------------- required now
 $loaded = Get-FieldRaw 'loaded_skills'
 if ($null -eq $loaded) {
@@ -198,10 +288,7 @@ if ($Stage -eq 'final') {
         }
     }
 
-    $sql = Get-FieldRaw 'sql_review'
-    if (Test-Placeholder $sql) {
-        Add-Fail 'sql_review' 'missing (write the review, or "no SQL change")'
-    }
+    Assert-SqlReview
 }
 
 # --------------------------------------------------------------------- report
