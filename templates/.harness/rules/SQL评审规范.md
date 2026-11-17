@@ -31,7 +31,8 @@
 
 - 无法验证的层必须写“未验证 + 原因”，**不能写“通过”**
 - DDL、大表、批量写等高风险 SQL：没有结果或计划证据时，必须人工确认后才能合并
-- 证据落盘到 `.harness/changes/<特性>/sql-review/`，在 `sql_review:` 里引用路径
+- 证据落盘到 `.harness/changes/<特性>/sql-review/`，在 `sql_review:` 里引用路径；**引用的路径必须真实存在**（`check-summary.ps1 -Stage final` 会校验）
+- 结论里写的数据源必须出现在编译后的 `sql-review` 技能「数据源与方言」绑定里；用了绑定没列出的源，先补绑定再评审——`check-summary` 会把它判为错误
 
 ## 2. 高危写法
 

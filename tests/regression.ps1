@@ -104,7 +104,7 @@ Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A REPEATED LESSON WITHOUT A CHECK" -ForegroundColor Red; $script:fail++ }
 # Existence is not relevance: the check file must name the lesson it covers.
-Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', 'exit 0') -Encoding ASCII
+Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', '# fails-when: a summary records the same lesson id twice and this suite must exit 1', 'exit 0') -Encoding ASCII
 Add-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value 'dup-lesson :: check=scripts/check-dup.ps1::duplicate lesson blocked' -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "LESSON GATE REJECTED A REGISTERED CHECK" -ForegroundColor Red; $script:fail++ }
@@ -114,6 +114,11 @@ $lpWrong = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/red-line-
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lpWrong.TrimEnd() -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A CHECK THAT DOES NOT NAME THE LESSON" -ForegroundColor Red; $script:fail++ }
+# Naming the lesson is not enough either: the check must declare what makes it red.
+Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', 'exit 0') -Encoding ASCII
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A CHECK WITHOUT fails-when" -ForegroundColor Red; $script:fail++ }
+Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', '# fails-when: a summary records the same lesson id twice and this suite must exit 1', 'exit 0') -Encoding ASCII
 # A promoted lesson that points at a file which does not exist is not evidence.
 $lp = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/does-not-exist.ps1'
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
@@ -147,6 +152,23 @@ if ($LASTEXITCODE -ne 0) { Write-Host "CONSISTENT SQL REVIEW REJECTED" -Foregrou
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/missing.txt) · 计划 未跑 · 结论 待 DBA'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "MISSING SQL EVIDENCE ACCEPTED" -ForegroundColor Red; $script:fail++ }
+# The review may only use data sources the compiled skill declares.
+$skillDir = "$proj\.harness\skills\biz-dev\14-sql-review"
+New-Item -ItemType Directory -Force -Path $skillDir | Out-Null
+$skillText = @(
+    '---', 'name: sql-review', 'description: fixture', '---', '',
+    '# sql', '',
+    '- 数据源与方言（Oracle / MySQL）：oracle_main / his_mssql'
+) -join "`r`n"
+Set-Content -LiteralPath "$skillDir\SKILL.md" -Value $skillText -Encoding UTF8
+Set-SqlReview 'sql_review: THIRD_ORACLE.v_mz_hzcfxx · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(fixture) · 计划 未跑 · 结论 待 DBA'
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "UNDECLARED DATA SOURCE ACCEPTED" -ForegroundColor Red; $script:fail++ }
+$skillText2 = $skillText -replace 'oracle_main / his_mssql', 'oracle_main / his_mssql / THIRD_ORACLE'
+Set-Content -LiteralPath "$skillDir\SKILL.md" -Value $skillText2 -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "DECLARED DATA SOURCE REJECTED" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath $skillDir -Recurse -Force
 Set-Content -LiteralPath $sumPath -Value $sumOrig -Encoding UTF8
 
 Step 'A3+ spoof must fail'

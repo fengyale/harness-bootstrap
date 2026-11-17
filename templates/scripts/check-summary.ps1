@@ -199,6 +199,39 @@ function Assert-SqlReview {
             Add-Fail 'sql_review' ("references a missing evidence path: " + $m.Value)
         }
     }
+
+    # Every data source named by the review must be declared in the compiled
+    # sql-review binding. A binding that lists four sources while the SQL runs on
+    # a fifth is how "verified" turns into a production surprise.
+    $dsLabel = [string](Get-SqlCfg 'datasourceLabel')
+    $tokPat = [string](Get-SqlCfg 'sourceTokenPattern')
+    if ($dsLabel -and $tokPat) {
+        $sqlSkill = $null
+        $skillsRoot = Join-Path $rootPath '.harness\skills'
+        foreach ($cat in @(Get-ChildItem -LiteralPath $skillsRoot -Directory -ErrorAction SilentlyContinue)) {
+            foreach ($sk in @(Get-ChildItem -LiteralPath $cat.FullName -Directory -ErrorAction SilentlyContinue)) {
+                $f = Join-Path $sk.FullName 'SKILL.md'
+                if (-not (Test-Path -LiteralPath $f)) { continue }
+                $t = [System.IO.File]::ReadAllText($f, [System.Text.Encoding]::UTF8)
+                if ($t -match '(?m)^name:\s*sql-review\s*$') { $sqlSkill = $t; break }
+            }
+            if ($sqlSkill) { break }
+        }
+        if ($sqlSkill) {
+            $bindingLine = ''
+            foreach ($line in ($sqlSkill -split "`n")) {
+                if ($line.Contains($dsLabel)) { $bindingLine = $line; break }
+            }
+            if ($bindingLine) {
+                $head = ($sql -split '[\u00B7|]')[0]
+                foreach ($m in [regex]::Matches($head, $tokPat)) {
+                    if (-not $bindingLine.Contains($m.Value)) {
+                        Add-Fail 'sql_review' ("names data source '$($m.Value)' that the compiled sql-review binding does not list; add it to the datasource line")
+                    }
+                }
+            }
+        }
+    }
 }
 
 if ($OnlySqlReview) {

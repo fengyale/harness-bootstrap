@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.30.0",
+    "title": "(检查必须声明会因什么失败 / 数据源不许凭空出现)",
+    "body": [
+      "- 自进化：-LessonGate 要求检查文件除 # lesson: <id> 外，还要有",
+      "  # fails-when: <什么改动会让它变红>，让「覆盖」变成可复现的声明",
+      "- 门禁：check-summary -Stage final 校验 sql_review 写到的数据源必须在",
+      "  编译后的 sql-review「数据源与方言」绑定里；未登记直接 FAIL",
+      "- 文档：SQL评审规范 / AGENTS.md / lessons-promoted.txt 同步",
+      "- 测试：regression 覆盖缺 fails-when 与未登记数据源（补绑定后通过）"
+    ]
+  },
+  {
     "version": "1.29.0",
     "title": "(sql_review 内容门禁 / 定档口径统一)",
     "body": [

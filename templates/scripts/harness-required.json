@@ -15,7 +15,9 @@
     },
     "unknownMarkers": ["未验证", "未跑"],
     "passVerdicts": ["通过", "已改写"],
-    "noneMarkers": ["no SQL change", "无 SQL 变更", "未涉及 SQL", "不涉及 SQL", "无 SQL"]
+    "noneMarkers": ["no SQL change", "无 SQL 变更", "未涉及 SQL", "不涉及 SQL", "无 SQL"],
+    "datasourceLabel": "数据源",
+    "sourceTokenPattern": "[A-Z][A-Z0-9]*_[A-Z0-9_]+"
   },
   "requiredAnyOf": [
     ["scripts/red-line-scan.ps1", "scripts/red-line-scan.py"]

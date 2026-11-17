@@ -1,7 +1,19 @@
-HARNESS-BOOTSTRAP VERSION 1.29.0
+HARNESS-BOOTSTRAP VERSION 1.30.0
 
 changelog
 ---------
+1.30.0  (检查必须声明会因什么失败 / 数据源不许凭空出现)
+- 自进化：`-LessonGate` 要求检查文件除了 `# lesson: <id>`，还要有
+  `# fails-when: <什么改动会让它变红>`。语义相关性仍然靠人判断，但"这条
+  检查覆盖那条教训"从此带一个可复现的声明，评审者照着改就能验
+- 门禁：`check-summary -Stage final` 校验 sql_review 里写到的数据源必须
+  出现在编译后 `sql-review` 技能的「数据源与方言」绑定里；用了没登记的源
+  （如 sql_review 写 THIRD_ORACLE、绑定只有四个源）直接 FAIL，先把绑定补全
+- 文档：SQL评审规范、AGENTS.md、lessons-promoted.txt 同步这两条；沿用
+  1.29.0 的「只拦自相矛盾，不逼人造假」边界
+- 测试：regression 新增「检查缺 fails-when 拒绝」「未登记数据源拒绝 /
+  补上绑定后通过」两族用例
+
 1.29.0  (sql_review 内容门禁 / 定档口径统一)
 - 门禁：`check-summary.ps1 -Stage final` 不再只判 sql_review 非空——结论写
   「通过 / 已改写」而四层或计划里仍有「未验证 / 未跑」时直接 FAIL；值里

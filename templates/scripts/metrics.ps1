@@ -537,6 +537,10 @@ if ($LessonGate) {
                 $checkText = [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8)
                 if ($checkText -notmatch [regex]::Escape($k)) {
                     $bad += "$k check file does not mention the lesson id: $($c.Path) (add the id as a comment, e.g. '# lesson: $k')"
+                } elseif ($checkText -notmatch '(?m)^\s*#\s*fails-when:\s*\S') {
+                    # Naming the mutation is the cheapest auditable claim: the
+                    # reviewer can reproduce it instead of trusting a comment.
+                    $bad += "$k check file does not declare when it fails (add '# fails-when: <what makes this check red>')"
                 }
             }
         }
