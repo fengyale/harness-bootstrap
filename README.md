@@ -192,7 +192,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 - **门禁有真实拦截点**：git hook 不依赖编辑器，`pre-commit` 与 `pre-merge-commit` 都调用红线扫描；`post-commit` 记录绕过。
 - **阶段门可判定**：10 个阶段，编译与测试判据会真跑 `AGENTS.md` 里的命令；整行缺失 BLOCKED，占位行 SKIP，退出码非 0 BLOCKED。
 - **项目断言要有证据**：没有 E1/E2 的内容只能写 `TODO(待确认)`，不能进技能正文。
-- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升；晋升必须写成「带检查的规则」——`.harness/lessons-promoted.txt` 里 `id :: check=路径::说明`，被指向的脚本里要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`，否则 `metrics.ps1 -LessonGate` 拒绝，阶段 10 与 CI 都会红。索引在 `.harness/lessons.md`。
+- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升；晋升必须写成「带检查的规则」——`.harness/lessons-promoted.txt` 里 `id :: check=路径::说明`，被指向的脚本里要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`，否则 `metrics.ps1 -LessonGate` 拒绝，阶段 10 会红；若项目已把该检查接进 CI，CI 也会红（本包不自带 CI，接线属项目基础设施）。索引在 `.harness/lessons.md`。
 
 ## 证据
 

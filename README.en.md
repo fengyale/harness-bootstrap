@@ -192,7 +192,7 @@ A broken loading chain shows up in only three ways:
 - **The gate has a real interception point**: git hooks do not depend on an editor; `pre-commit` and `pre-merge-commit` both run the red-line scan, and `post-commit` records bypasses.
 - **Stage gates are decidable**: 10 stages; compile and test criteria really run the commands in `AGENTS.md`. A missing row is BLOCKED, a placeholder row is SKIP, a non-zero exit is BLOCKED.
 - **Project claims need evidence**: without E1/E2, content may only be written as `TODO(待确认)` and cannot enter a skill body.
-- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion, and a promotion must become a *rule with a check* — `.harness/lessons-promoted.txt` holds `id :: check=path::note`, the referenced script must declare `# lesson: id` and `# fails-when: what makes this check red`, otherwise `metrics.ps1 -LessonGate` rejects it and both stage 10 and CI go red. The lookup index is `.harness/lessons.md`.
+- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion, and a promotion must become a *rule with a check* — `.harness/lessons-promoted.txt` holds `id :: check=path::note`, the referenced script must declare `# lesson: id` and `# fails-when: what makes this check red`, otherwise `metrics.ps1 -LessonGate` rejects it and stage 10 goes red; if the project has wired that check into CI, CI goes red too (the package ships no CI of its own — wiring is project infrastructure). The lookup index is `.harness/lessons.md`.
 
 ## Proof
 
