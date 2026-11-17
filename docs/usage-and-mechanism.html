@@ -587,7 +587,7 @@
             <tr><td>逻辑错</td><td>编译过、测试绿，条件写反或边界漏了</td><td>验收标准先于编码；边界用例；评审清单</td></tr>
             <tr><td>环境错</td><td>开发库跑通，生产库方言 / 数据量 / 索引不同，上线报错</td><td>四层正确性 + 执行计划 + 只读沙箱</td></tr>
             <tr><td>集成错</td><td>单模块都对，接口字段 / 协议 / 跨服务事务接缝断了</td><td>影响面分析 + 接口协议 + 一致性技能</td></tr>
-            <tr><td>记忆错</td><td>这次纠正，下次换个模块又犯</td><td><code>lesson_id</code> 计数 → 晋升为规则 / 门禁 / 技能</td></tr>
+            <tr><td>记忆错</td><td>这次纠正，下次换个模块又犯</td><td><code>lesson_id</code> 计数 → 晋升为<strong>带检查的规则</strong>：<code>lessons-promoted.txt</code> 里带 <code>check=</code>，被指向的脚本要写 <code># lesson: id</code> 与 <code># fails-when:</code>，否则 <code>-LessonGate</code> 拒绝</td></tr>
             <tr><td>证据错</td><td>说完成但没编译，或贴想象中的输出</td><td>阶段门真跑命令 + 字段校验 + E1/E2</td></tr>
             <tr><td>运维错</td><td>能跑但不敢上：无回滚、无冒烟、不可观测</td><td>迁移回滚成对 + 部署验证 + 发布检查</td></tr>
           </tbody>
@@ -800,7 +800,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         </div>
         <div class="card card--plum" style="--i:3">
           <h3>收尾</h3>
-          <p>阶段 10 校验收尾字段：<code>lesson_id</code>（同一条教训复用同一个 id）与 <code>sql_review</code>（有 SQL 必评审）。缺字段或留占位符 = 任务未完成。</p>
+          <p>阶段 10 不只查字段是否存在：<code>lesson_id</code>（同一条教训复用同一个 id）、<code>sql_review</code>（有 SQL 必评审，结论写「通过」时四层不得留「未验证」，证据路径必须存在、数据源必须在编译后的绑定里）。晋升的教训要能真的变红，由人工项确认；缺字段、留占位符、内容自相矛盾 = 任务未完成。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 10 -Feature &lt;name&gt;</code></pre>
         </div>
@@ -826,7 +826,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
             <tr><td><code>loaded_skills</code> / <code>load_skip_reason</code></td><td>必填</td><td>保留</td></tr>
             <tr><td><code>flow</code> / <code>corrections</code> / <code>impl_corrections</code> / <code>touched_modules</code></td><td>必填</td><td>保留</td></tr>
             <tr><td><code>lesson_id</code></td><td>不查（WIP 提交不骚扰）</td><td>必填；<code>corrections ≥ 1</code> 时必须是真实 kebab-case id，无教训写 <code>-</code></td></tr>
-            <tr><td><code>sql_review</code></td><td>不查</td><td>必填；无 SQL 写「无 SQL 变更」</td></tr>
+            <tr><td><code>sql_review</code></td><td>staged diff 含 SQL 时查结论（结论与四层是否矛盾）</td><td>必填；无 SQL 写「无 SQL 变更」；结论「通过」时四层不得有未验证项，引用的证据路径必须存在，数据源必须在编译后的绑定里</td></tr>
           </tbody>
         </table>
       </div>

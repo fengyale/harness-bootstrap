@@ -20,7 +20,7 @@ AI writes code fast; **delivery** is slow. The bottleneck is rarely "it cannot w
 | **It compiles, the logic is wrong**: an inverted condition, a missing boundary, a state machine missing one path — and the tests are green | Coding starts before acceptance criteria exist; tests only cover the happy path | `summary.md` states acceptance criteria first; the unit-test skill requires boundaries; review walks a checklist |
 | **It works locally, fails in production**: SQL is fine on the dev database, but the production dialect / data volume / indexes differ | The dev schema is treated as production; no plan was ever run | SQL correctness in four layers (syntax / structure / binding / result) + `EXPLAIN` + a read-only sandbox; environment facts live in the wiki and a mismatch fails the gate |
 | **Each feature is right, the chain is not**: API fields disagree with the frontend, upstream/downstream protocols are misaligned, a transaction breaks across services | Work stays inside one module; nobody owns the seams | Impact analysis (module card + API protocol + data model); transaction / consistency skills; integration boundaries in the review checklist |
-| **Fixed this time, wrong somewhere else next time**: the same trap survives on human memory | Corrections stay in the conversation and never become mechanism | `lesson_id` counting: the second occurrence must become a rule, a gate or a skill |
+| **Fixed this time, wrong somewhere else next time**: the same trap survives on human memory | Corrections stay in the conversation and never become mechanism | `lesson_id` counting: the second occurrence must become a rule *with a check*; the check declares `fails-when`, otherwise `-LessonGate` rejects it |
 | **"Done" without verification**: no compile, no tests, output imagined rather than pasted | Completion is self-reported; there is no exit check | Stage gates really run the commands in `AGENTS.md`; `summary.md` fields are validated; E1/E2 evidence grading rejects invented output |
 | **It runs, but nobody dares ship it**: no rollback for the migration, no smoke test, no way to diagnose an incident | Nobody walked the release path end to end | Migration and rollback in pairs, a deploy-verify skill, and pre-release metric/rollback checks |
 
@@ -144,7 +144,7 @@ AGENTS.md                    the only resident file (<=150 lines): stack, comman
   changes/_small.md          rolling L1 small-change rows (one per task)
   changes/<feature>/         L2/L3 summary.md, migration and rollback scripts
   lessons.md                 shared lesson index (check before writing lesson_id)
-  lessons-promoted.txt       shared promoted-lesson list
+  lessons-promoted.txt       promoted lessons (one per line, each must carry check + fails-when)
   metrics/                   gate.jsonl (local gate log)
 .trae/                       platform discovery entries: skill links, agents, hooks
 scripts/                     probe, scan, stage gate, field checks, metrics, uninstall
@@ -164,9 +164,9 @@ Example: "add a status filter to the order list query".
 
 1. The index in `AGENTS.md` says "load `request-analysis` on a new requirement" → it produces `summary.md` (requirement / acceptance / impact / split)
 2. `coding-skill` matches "start writing code" → its body points to `编码规范.md` and the order module card, and only then are those read
-3. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`
+3. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`; a "pass" verdict cannot leave any layer unverified, every cited evidence path must exist, and every data source must appear in the compiled bindings
 4. `expert-reviewer` matches before merging → review verdict and "missing capability" go back into `summary.md`
-5. On commit, `pre-commit` checks the base summary fields and the SQL verdict; stage 10 checks `lesson_id` / `sql_review`
+5. On commit, `pre-commit` checks the base summary fields and the SQL verdict (including "pass while a layer is unverified"); stage 10 checks the content of `lesson_id` / `sql_review` and requires a human to confirm a promoted check really turns red for that lesson
 
 Three things keep this from degenerating into luck:
 
@@ -192,7 +192,7 @@ A broken loading chain shows up in only three ways:
 - **The gate has a real interception point**: git hooks do not depend on an editor; `pre-commit` and `pre-merge-commit` both run the red-line scan, and `post-commit` records bypasses.
 - **Stage gates are decidable**: 10 stages; compile and test criteria really run the commands in `AGENTS.md`. A missing row is BLOCKED, a placeholder row is SKIP, a non-zero exit is BLOCKED.
 - **Project claims need evidence**: without E1/E2, content may only be written as `TODO(待确认)` and cannot enter a skill body.
-- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion and records it in `.harness/lessons-promoted.txt`; the lookup index is `.harness/lessons.md`.
+- **Lessons persist**: on the 2nd occurrence of a `lesson_id`, the script prompts promotion, and a promotion must become a *rule with a check* — `.harness/lessons-promoted.txt` holds `id :: check=path::note`, the referenced script must declare `# lesson: id` and `# fails-when: what makes this check red`, otherwise `metrics.ps1 -LessonGate` rejects it and both stage 10 and CI go red. The lookup index is `.harness/lessons.md`.
 
 ## Proof
 

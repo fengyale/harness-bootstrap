@@ -20,7 +20,7 @@ AI 写代码很快，**交付**才慢。慢的地方通常不是"不会写"，�
 | **编译过了，逻辑不对**：条件写反、边界漏一档、状态机少一条路径，测试却是绿的 | 没写验收标准就开写；测试只覆盖 happy path | `summary.md` 先写验收标准；单测技能要求覆盖边界；评审按清单逐条过 |
 | **本地跑通，一上线就错**：SQL 在开发库没事，生产库方言 / 数据量 / 索引都不一样 | 把开发库结构当成生产结构；没跑过执行计划 | SQL 正确性四层（语法 / 结构 / 绑定 / 结果）+ `EXPLAIN` + 只读沙箱；环境事实进 wiki，写错直接 FAIL |
 | **单个功能都对，链路不通**：接口字段和前端对不上、上下游协议没对齐、事务跨服务断了 | 只在单个模块里看，没人负责"接缝" | 影响面分析（模块卡 + 接口协议 + 数据模型）；事务 / 一致性技能；集成边界写进评审清单 |
-| **这次改对了，下次换个地方又错**：同一个坑靠人记着 | 纠正只留在对话里，没有落成机制 | `lesson_id` 计数：第 2 次出现就要求晋升成规则、门禁或技能 |
+| **这次改对了，下次换个地方又错**：同一个坑靠人记着 | 纠正只留在对话里，没有落成机制 | `lesson_id` 计数：第 2 次出现就必须晋升成「带检查的规则」——检查里要写 `fails-when`，否则 `-LessonGate` 拒绝 |
 | **说"完成了"，其实没验**：没编译、没跑测试、贴的是想象中的输出 | 完成与否靠自述，没有出口校验 | 阶段门真跑 `AGENTS.md` 里的命令；`summary.md` 字段校验；E1/E2 证据分级，编造会被打回 |
 | **能跑，但不敢上**：迁移没回滚、没有冒烟、出事定位不了 | 发布路径没人完整走一遍 | 迁移与回滚成对、部署验证技能、上线前的指标与回滚方案检查 |
 
@@ -144,7 +144,7 @@ AGENTS.md                    唯一常驻文件（≤150 行）：技术栈、�
   changes/_small.md          L1 小改滚动记录（一行一次）
   changes/<feature>/         L2/L3 summary.md、迁移脚本、回滚脚本
   lessons.md                 教训索引（团队共享，写 lesson_id 前先查）
-  lessons-promoted.txt       已晋升教训清单（团队共享）
+  lessons-promoted.txt       已晋升教训清单（团队共享；每条必须带 check + fails-when）
   metrics/                   gate.jsonl（本机门禁日志）
 .trae/                       平台发现入口：skills 链接、agents、hooks
 scripts/                     探测、扫描、阶段门、字段校验、度量、卸载
@@ -164,9 +164,9 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 1. `AGENTS.md` 的索引写着"收到需求先加载 `request-analysis`" → 产出 `summary.md`（需求 / 验收 / 影响面 / 任务拆分）
 2. 动代码时 `coding-skill` 命中"开始写代码" → 正文指向 `编码规范.md` 和订单模块卡，这时才读这两份
-3. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`
+3. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`；结论写「通过」时四层不得留「未验证」，引用的证据路径必须存在、数据源必须在编译后的绑定里
 4. 合并前 `expert-reviewer` 命中 → 评审结论与「待补短板」写回 `summary.md`
-5. 提交时 `pre-commit` 校验 summary 基础字段与 SQL 结论；阶段 10 校验 `lesson_id` / `sql_review`
+5. 提交时 `pre-commit` 校验 summary 基础字段与 SQL 结论（含"结论通过但四层未验证"的矛盾）；阶段 10 校验 `lesson_id` / `sql_review` 内容，并要求人工确认晋升的检查真的会因该教训变红
 
 保证它不退化成"看运气"的是三件事：
 
@@ -192,7 +192,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 - **门禁有真实拦截点**：git hook 不依赖编辑器，`pre-commit` 与 `pre-merge-commit` 都调用红线扫描；`post-commit` 记录绕过。
 - **阶段门可判定**：10 个阶段，编译与测试判据会真跑 `AGENTS.md` 里的命令；整行缺失 BLOCKED，占位行 SKIP，退出码非 0 BLOCKED。
 - **项目断言要有证据**：没有 E1/E2 的内容只能写 `TODO(待确认)`，不能进技能正文。
-- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升，写进 `.harness/lessons-promoted.txt`；索引在 `.harness/lessons.md`。
+- **教训会沉淀**：`lesson_id` 第 2 次出现时脚本提示晋升；晋升必须写成「带检查的规则」——`.harness/lessons-promoted.txt` 里 `id :: check=路径::说明`，被指向的脚本里要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`，否则 `metrics.ps1 -LessonGate` 拒绝，阶段 10 与 CI 都会红。索引在 `.harness/lessons.md`。
 
 ## 证据
 
