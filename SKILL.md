@@ -18,7 +18,7 @@ description: AI 编码 Harness 化元技能：搭框架、沉淀、技能体检�
 
 ## 第零部分：基调
 
-> **基调**（我们在做什么、为什么现在不行）见 `references\核心论述.md`「基调」。一句话：把 AI 编码从「看运气」变成「看流程」。
+> **基调**（我们在做什么、为什么现在不行）见 `references/核心论述.md`「基调」。一句话：把 AI 编码从「看运气」变成「看流程」。
 
 ### 0.1 我们在做的是什么
 
@@ -75,7 +75,7 @@ Harness 就是把"看运气"变成"看流程"。
 
 ### 1.2 为什么现在不行（病根）
 
-> 病根分析见 `references\核心论述.md`「为什么现在不行」。
+> 病根分析见 `references/核心论述.md`「为什么现在不行」。
 
 ### 1.3 达成标志（**验收标准，必须逐条自问**）
 
@@ -103,7 +103,7 @@ Harness 就是把"看运气"变成"看流程"。
 
 ### 1.4 四条不可动摇的核心思想
 
-> 四条核心思想的完整论述见 `references\核心论述.md`「四条核心思想」。
+> 四条核心思想的完整论述见 `references/核心论述.md`「四条核心思想」。
 
 ### 1.5 你（智能体）的角色定位
 
@@ -115,7 +115,7 @@ Harness 就是把"看运气"变成"看流程"。
 - 项目的技术栈、目录、术语、红线**只能来自真实代码**，不能来自模板
 ### 1.6 守约定 vs 补短板（**A3 和 A3+ 的分界，最容易走偏**）
 
-> 守约定 vs 补短板的完整判据见 `references\核心论述.md`「守约定 vs 补短板」。
+> 守约定 vs 补短板的完整判据见 `references/核心论述.md`「守约定 vs 补短板」。
 
 ## 第二部分：怎么做
 
@@ -317,7 +317,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 | 平台能力 | 做法 |
 | --- | --- |
 | 有自动发现目录（TRAE / Claude Code / Codex / CodeBuddy） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills`、Codex `-Dest .agents\skills`、CodeBuddy `-Dest .codebuddy\skills` |
-| 没有自动发现（未知平台） | 用 `templates\adapters\generic\HARNESS-INDEX.md` 生成 `.harness\skills\INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
+| 没有自动发现（未知平台） | 用 `templates/adapters/generic/HARNESS-INDEX.md` 生成 `.harness/skills/INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
 
 ```powershell
 # 有自动发现目录时
@@ -383,7 +383,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 ### 2.3 自成长机制（**框架不是装完就结束，它必须自己长**）
 
-> 自成长节律见 `references\维护与体检.md`（沉淀 / 体检 / 调优）与 `references\两周复盘.md`。
+> 自成长节律见 `references/维护与体检.md`（沉淀 / 体检 / 调优）与 `references/两周复盘.md`。
 
 ### 2.4 升级已有项目（**不是重装**）
 
@@ -434,11 +434,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 ### 3.2 冲突与合并策略
 
-> 冲突与合并策略见 `references\核心论述.md`「冲突与合并策略」。
+> 冲突与合并策略见 `references/核心论述.md`「冲突与合并策略」。
 
 ### 3.3 本机环境坑（都是实测踩出来的）
 
-> 本机环境坑见 `references\核心论述.md`「本机环境坑」。
+> 本机环境坑见 `references/核心论述.md`「本机环境坑」。
 
 ## 第四部分：去哪找细节
 

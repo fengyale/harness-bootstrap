@@ -9,11 +9,15 @@
     This script keeps the include set in one place.
 
   WHAT GOES IN
-    Every top-level item except:
-      .git .idea .screenshots dist   local / IDE state, never shipped
-      .trae                          the meta-skill's own audit agent
-      .trae-html-share-packages      local share cache
-      TODO-*.md                      internal notes
+    An allowlist, because a package is what another project installs, not a
+    copy of this repository:
+      SKILL.md, VERSION, LICENSE   the entry skill, its version, the license
+      references/                  documents SKILL.md points at
+      templates/                   scripts / rules / wiki / skills / agents
+    Everything else stays in the repo: docs/ (site + 3.4 MB mermaid vendor),
+    tests/ and tools/ (maintainer-only), .github/, README*, CONTRIBUTING.md,
+    releases.json, the root .gitignore and the "why" essay. Humans who want
+    those use the GitHub source archive.
     The zip root is harness-bootstrap\ and entry names use / (not \), so the
     archive unpacks correctly on non-Windows machines too.
 
@@ -41,11 +45,8 @@ if ($versionLine -notmatch '(\d+\.\d+\.\d+)') {
 }
 $version = $matches[1]
 
-$skipDirs = @('.git', '.idea', '.screenshots', 'dist', '.trae', '.trae-html-share-packages')
-# Root AGENTS.md is the maintainer's own copy; the product one is
-# templates\AGENTS.md. Shipping both would install a stale duplicate.
-$skipFiles = @('AGENTS.md')
-$skipFilePattern = 'TODO-*.md'
+$includeFiles = @('SKILL.md', 'VERSION', 'LICENSE')
+$includeDirs = @('references', 'templates')
 
 if (-not $OutDir) { $OutDir = Join-Path $root 'dist' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -56,11 +57,30 @@ $dst = Join-Path $stage 'harness-bootstrap'
 
 try {
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
-    foreach ($item in @(Get-ChildItem -LiteralPath $root -Force)) {
-        if ($item.PSIsContainer -and ($skipDirs -contains $item.Name)) { continue }
-        if (-not $item.PSIsContainer -and ($skipFiles -contains $item.Name)) { continue }
-        if (-not $item.PSIsContainer -and $item.Name -like $skipFilePattern) { continue }
-        Copy-Item -LiteralPath $item.FullName -Destination $dst -Recurse -Force
+    foreach ($f in $includeFiles) {
+        $src = Join-Path $root $f
+        if (-not (Test-Path -LiteralPath $src -PathType Leaf)) {
+            Write-Host "package input missing: $src" -ForegroundColor Red
+            exit 1
+        }
+        Copy-Item -LiteralPath $src -Destination (Join-Path $dst $f)
+    }
+    foreach ($d in $includeDirs) {
+        $src = Join-Path $root $d
+        if (-not (Test-Path -LiteralPath $src -PathType Container)) {
+            Write-Host "package input missing: $src" -ForegroundColor Red
+            exit 1
+        }
+        Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
+    }
+
+    # Fail closed: a renamed SKILL.md or an accidental new top-level folder must
+    # break the build here, not surface as a package that installs nothing.
+    $allowed = @($includeFiles + $includeDirs)
+    $extra = @(Get-ChildItem -LiteralPath $dst -Force | Where-Object { $allowed -notcontains $_.Name })
+    if ($extra.Count -gt 0) {
+        Write-Host ("unexpected top-level item in the package: " + (($extra | ForEach-Object { $_.Name }) -join ', ')) -ForegroundColor Red
+        exit 1
     }
 
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
@@ -90,7 +110,7 @@ try {
     Write-Host "version:  $version"
     Write-Host "files:    $($files.Count)"
     Write-Host "size:     $size bytes"
-    Write-Host ("excluded: " + (($skipDirs + $skipFiles) -join ', ') + ', ' + $skipFilePattern)
+    Write-Host ("included: " + (($includeFiles + ($includeDirs | ForEach-Object { $_ + '/' })) -join ', '))
 } finally {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 }
