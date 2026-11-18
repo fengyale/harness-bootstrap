@@ -2,7 +2,7 @@
 
 给 AI 编程项目安装一套可执行的约束系统：规则、门禁、证据、度量与复盘。
 
-它不是提示词合集，也不是模板包。安装时会探测项目事实，按证据生成 `AGENTS.md`、规则、技能和 wiki；装完之后，项目的约定由脚本和 git hook 执行，而不是靠人每轮提醒。
+安装时会探测项目事实，按证据生成 `AGENTS.md`、规则、技能和 wiki。装完之后，约定由脚本和 git hook 执行，不需要每轮提醒。
 
 [![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
 [![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
@@ -13,7 +13,7 @@
 
 ## 它解决什么问题
 
-AI 写代码很快，**交付**才慢。慢的地方通常不是"不会写"，而是下面六类失败——每一类都不是靠"更小心"能解决的：
+AI 写代码很快，交付慢。慢的地方大多不在"不会写"，而在下面六类失败，靠"更小心"解决不了：
 
 | 失败长什么样 | 为什么反复发生 | 这套东西怎么让它可判定 |
 | --- | --- | --- |
@@ -24,13 +24,13 @@ AI 写代码很快，**交付**才慢。慢的地方通常不是"不会写"，�
 | **说"完成了"，其实没验**：没编译、没跑测试、贴的是想象中的输出 | 完成与否靠自述，没有出口校验 | 阶段门真跑 `AGENTS.md` 里的命令；`summary.md` 字段校验；E1/E2 证据分级，编造会被打回 |
 | **能跑，但不敢上**：迁移没回滚、没有冒烟、出事定位不了 | 发布路径没人完整走一遍 | 迁移与回滚成对、部署验证技能、上线前的指标与回滚方案检查 |
 
-这些失败的共同点是：**都能在交付前被判定**，只是过去没人把它写成判定条件。这套东西做的就是这件事——`AGENTS.md` 给索引，技能给做法，git hook 与阶段门做出口校验，`metrics` 给趋势。
+这六类都能在交付前判定，只是过去没人把判定条件写下来。`AGENTS.md` 给索引，技能给做法，git hook 与阶段门做出口校验，`metrics` 给趋势。
 
 > 更细的病根分析见 `references/核心论述.md`；每类失败对应的技能与门禁见 `docs/usage-and-mechanism.html` 第 3 节。
 
 ## 快速开始
 
-不用先装进项目，先看它能不能自证：
+装之前先让它自证一次：
 
 ```powershell
 git clone https://github.com/fengyale/harness-bootstrap.git
@@ -54,7 +54,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 package gate: OPEN
 ```
 
-62 条契约检查的是一件事：同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这个类目最常见的失败方式，是改一处、漂五处。
+62 条契约只查一件事，同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这类改动最常见的失手方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 | CodeBuddy | `.codebuddy/skills/harness-bootstrap/`（子代理在 `.codebuddy/agents/*.md`，可直接复用） |
 | 其它 / 不确定 | 按索引模式引用 `SKILL.md` |
 
-`tools/` 只用于本包自检，安装时不会复制进项目。
+`tools/` 只用于本包自检，不进安装包。
 
 ### 2. 让智能体执行 `SKILL.md` 第 0 步
 
@@ -126,7 +126,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 升级默认**重装 git hook**（旧 hook 备份为 `.bak-harness`），能把早于 summary-order guard 的 gate 行修好；`-SkipHooks` 保留旧 hook，此时 `verify-harness` 的 gate 行会继续失败。
 
-替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`。`AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键（`-NoMergeKnown` 退回只打印差异）；红线汇总只替换 R5/R6 的脚本检查格。旧 L1 summary 目录移到升级备份并随验证删除（`-KeepL1` 保留），L2/L3 历史不动。已装技能正文默认只提示差异；`-MergeSkills` 以新模板为骨架、只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加；定位不到或仍有 slot 标 PENDING，超过 120 行标 MANUAL，均不写盘）；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖（但它会把技能重置为含 slot 的骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤建议配合 `-SkipVerify`），技能索引与 `_template` 的处理也各自按项目资产/包资产区分。升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`：
+
+- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异
+- 红线汇总只替换 R5/R6 的脚本检查格
+- 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动
+- 技能正文默认只提示差异；`-MergeSkills` 只换回项目自己的 `harness:project` 区块，定位不到或仍有 slot 标 `PENDING`，超过 120 行标 `MANUAL`，都不写盘
+- `-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖，但覆盖后是含 slot 的骨架，要重新编译再跑 `verify-harness.ps1`（重置那一步可配 `-SkipVerify`）
+- 技能索引与 `_template` 分开对待：前者是项目资产，后者是包资产
+
+升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
 升级后第一次跑 `verify-harness.ps1` 可能报 `skills-registry`：老项目里存在、但从未登记或建入口的技能会被点名。它们此前一直不可达，不是升级弄坏的——按提示补 `.harness\skills\README.md` 登记与平台入口，或删除不再使用的技能目录。若升级本身失败，输出里会带上从备份恢复的完整 `Copy-Item` 命令。
 
@@ -152,7 +161,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 ## 一次任务是怎么被引导的
 
-装完之后，每个任务都走同一条加载链，而不是把所有规范一次性塞进上下文：
+装完之后，每个任务走同一条加载链，不会把所有规范一次性塞进上下文：
 
 | 层 | 在哪里 | 什么时候进上下文 |
 | --- | --- | --- |
@@ -196,7 +205,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 ## 证据
 
-下面是在真实 git 仓库里装上门禁后跑出来的输出，不是模拟：
+下面的输出来自一个装好门禁的真实 git 仓库。
 
 **违规被拦下（退出码 1，精确到行号）**
 
@@ -210,17 +219,13 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 ![门禁通过提交](docs/gate-passed.png)
 
-真实落地案例：一个 12 模块的 Java 系统，182 处存量违规，2 个测试文件。
-
-> 从“门禁永远 BLOCKED”走到“门禁真的在拦人”，以及第一个教训闭环怎么发生。
+真实案例是一个 12 模块的 Java 系统，182 处存量违规，2 个测试文件。门禁怎么从"永远 BLOCKED"变成真的在拦人，第一个教训闭环怎么发生，都写在里面。
 
 → [案例全文（中/英）与脱敏附件](docs/case-study/README.md)
 
 ## 和模板包的区别
 
-- 模板包假设你已经知道自己要什么；这个技能先从项目里取证，再决定该有什么。
-- 模板包交付的是一组文件；这里交付的是可执行的门禁、字段校验和度量。
-- 模板包不检查自己；这个仓库有自己的 pre-commit、62 条跨文件契约和行为测试。
+模板包假设你知道自己要什么，交给你一组文件。这里先从项目取证再决定该有什么，交付的是能拦人的门禁、字段校验和度量。模板包不检查自己，这个仓库有自己的 pre-commit、62 条跨文件契约和行为测试。
 
 ## 平台与限制
 

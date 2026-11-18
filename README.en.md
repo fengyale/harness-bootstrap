@@ -2,7 +2,7 @@
 
 Installs an executable constraint system into an AI coding project: rules, gates, evidence, metrics and review.
 
-It is not a prompt collection and not a template pack. It probes the project, then generates `AGENTS.md`, rules, skills and wiki pages from evidence. After installation, the project's conventions are enforced by scripts and git hooks rather than by reminders.
+It probes the project and generates `AGENTS.md`, rules, skills and wiki pages from evidence. After that, the conventions are enforced by scripts and git hooks, not by reminders.
 
 [![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
 [![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
@@ -13,7 +13,7 @@ It is not a prompt collection and not a template pack. It probes the project, th
 
 ## What it solves
 
-AI writes code fast; **delivery** is slow. The bottleneck is rarely "it cannot write code" but six failure modes — none of which "being more careful" fixes:
+AI writes code fast; delivery is slow. The bottleneck is rarely "it cannot write code", it is the six failure modes below, and "being more careful" does not fix any of them:
 
 | What the failure looks like | Why it keeps happening | How this makes it decidable |
 | --- | --- | --- |
@@ -24,13 +24,13 @@ AI writes code fast; **delivery** is slow. The bottleneck is rarely "it cannot w
 | **"Done" without verification**: no compile, no tests, output imagined rather than pasted | Completion is self-reported; there is no exit check | Stage gates really run the commands in `AGENTS.md`; `summary.md` fields are validated; E1/E2 evidence grading rejects invented output |
 | **It runs, but nobody dares ship it**: no rollback for the migration, no smoke test, no way to diagnose an incident | Nobody walked the release path end to end | Migration and rollback in pairs, a deploy-verify skill, and pre-release metric/rollback checks |
 
-What these share: **all of them are decidable before delivery** — nobody had written the decision down. That is what this does: `AGENTS.md` is the index, skills carry the how, git hooks and stage gates are the exit check, and `metrics` shows the trend.
+All six can be decided before delivery. Nobody had written the decision down. `AGENTS.md` is the index, skills carry the how, git hooks and stage gates are the exit check, and `metrics` shows the trend.
 
 > Deeper root-cause analysis: `references/核心论述.md`; the skill and gate behind each failure mode: `docs/usage-and-mechanism.html` section 3.
 
 ## Quick start
 
-Inspect it before installing anything:
+Let it prove itself before installing anything:
 
 ```powershell
 git clone https://github.com/fengyale/harness-bootstrap.git
@@ -54,7 +54,7 @@ Output:
 package gate: OPEN
 ```
 
-The 62 contracts check one thing: the same rule is worded identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is the most common failure in this category.
+The 62 contracts check one thing, whether the same rule reads identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is how this category usually breaks.
 
 Run the behavioural tests:
 
@@ -126,7 +126,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.bak-harness`), which repairs gate rows older than the summary-order guard; `-SkipHooks` keeps the old hooks, and those `verify-harness` gate rows keep failing.
 
-`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept. `AGENTS.md` and `harness-required.json` only merge known framework lines/keys (`-NoMergeKnown` prints the difference instead); the red-line summary only replaces the R5/R6 checked cell. Old L1 summary directories move to the upgrade backup and are deleted after verification (`-KeepL1` keeps them); L2/L3 history is never touched. Installed skill bodies only report a difference by default; `-MergeSkills` uses the new template as the skeleton and swaps back only the `harness:project` blocks compiled on disk (frontmatter kept, project-only blocks appended; an unmatched block or a remaining slot is PENDING, more than 120 lines is MANUAL, and neither writes the file); `-UpdateSkills` replaces only uncompiled copies that still contain `slot:` markers; `-ForceSkills` overrides, but it resets skills to slot-bearing skeletons: recompile them and run `verify-harness.ps1` again, and use `-SkipVerify` for the reset step. The skill index and `_template` are treated as project-owned and package-owned respectively. After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+`scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept:
+
+- `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead
+- The red-line summary replaces just the R5/R6 checked cell
+- Old L1 summary directories move to the upgrade backup and are deleted after verification; `-KeepL1` keeps them, and L2/L3 history is never touched
+- Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, and `MANUAL` above 120 lines, writing neither
+- `-UpdateSkills` replaces only uncompiled copies that still contain `slot:`; `-ForceSkills` overrides, but leaves slot-bearing skeletons, so recompile them and run `verify-harness.ps1` again (`-SkipVerify` for the reset step)
+- The skill index and `_template` are treated separately, one as a project asset and the other as a package asset
+
+After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
 
 The first `verify-harness.ps1` after an upgrade may report `skills-registry`: skills that exist in the project but were never indexed or given an entry are now named. They were already unreachable before the upgrade — add them to `.harness\skills\README.md` with a platform entry, or delete the ones no longer in use. If the upgrade itself fails, the output now includes the full `Copy-Item` command that restores the backup.
 
@@ -152,7 +161,7 @@ scripts/                     probe, scan, stage gate, field checks, metrics, uni
 
 ## How a single task is guided
 
-After installation every task follows the same loading chain instead of dumping every rule into context:
+After installation every task follows the same loading chain, and no rule gets dumped into context up front:
 
 | Layer | Where | When it enters context |
 | --- | --- | --- |
@@ -168,7 +177,7 @@ Example: "add a status filter to the order list query".
 4. `expert-reviewer` matches before merging → review verdict and "missing capability" go back into `summary.md`
 5. On commit, `pre-commit` checks the base summary fields and the SQL verdict (including "pass while a layer is unverified"); stage 10 checks the content of `lesson_id` / `sql_review` and requires a human to confirm a promoted check really turns red for that lesson
 
-Three things keep this from degenerating into luck:
+Three things keep it from turning into luck.
 
 - **The index is explicit**: the file index and mandatory-skill list in `AGENTS.md` pin down which document a task type must read
 - **Triggering is platform-native**: skill bodies are not resident; only a matching `description` loads them, which is why descriptions must use the user's own words and must not overlap
@@ -176,7 +185,7 @@ Three things keep this from degenerating into luck:
 
 On platforms without auto-discovery, this degrades to `.harness/skills/README.md` as the index plus a mandatory-reading list in the resident file: reliability comes from writing it down, not from platform matching.
 
-A broken loading chain shows up in only three ways:
+A broken loading chain shows up in three ways:
 
 | Symptom | Check first | How |
 | --- | --- | --- |
@@ -196,7 +205,7 @@ A broken loading chain shows up in only three ways:
 
 ## Proof
 
-These are outputs from a real git repository with the gate installed, not mock-ups:
+These outputs come from a real git repository with the gate installed.
 
 **A violation is blocked (exit 1, with line numbers)**
 
@@ -210,17 +219,13 @@ These are outputs from a real git repository with the gate installed, not mock-u
 
 ![gate passes the commit](docs/gate-passed.png)
 
-Real case: a 12-module Java system with 182 legacy violations and 2 test files.
-
-> From "the gate is always BLOCKED" to "the gate actually blocks", and how the first lesson closed the loop.
+The case is a 12-module Java system with 182 legacy violations and 2 test files. How the gate went from "always BLOCKED" to actually blocking, and how the first lesson closed the loop, is all in there.
 
 → [Full case study (Chinese and English) with desensitised excerpts](docs/case-study/README.en.md)
 
 ## Difference from template packs
 
-- A template pack assumes you already know what you need; this skill gathers evidence first and then decides.
-- A template pack ships a set of files; this ships executable gates, field checks and metrics.
-- A template pack does not check itself; this repository has its own pre-commit, 62 cross-file contracts and behavioural tests.
+A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 62 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

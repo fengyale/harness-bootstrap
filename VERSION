@@ -1,7 +1,15 @@
-HARNESS-BOOTSTRAP VERSION 1.30.1
+HARNESS-BOOTSTRAP VERSION 1.30.2
 
 changelog
 ---------
+1.30.2  (文档去 AI 味 / 升级段落拆条)
+- README / README.en：开头不再用"不是A，也不是B"的否定排比；六类失败、契约说明、
+  证据、和模板包的区别等段落改成直述；"模板包的区别"三条对仗合并成一段
+- 升级边界的超长段落拆成六条要点，删掉与上一段重复的 `-MergeSkills` 解释
+- SKILL.md 开头改成"先看清项目，再从零设计"，去掉模板化的断言句
+- 说明页：交付物卡片与教训提示不再用"不是…而是…"；接地协议、落地策略的口径同步
+- 只动措辞，机制、契约、命令与数字不变
+
 1.30.1  (包布局 templates → assets / references 只嵌一层)
 - 布局：仓库与发布包的产品目录由 `templates/` 改为 `assets/`；SKILL.md 安装
   步骤、update-harness、package-zip、verify-package、契约文件与测试同步

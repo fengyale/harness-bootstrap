@@ -5,8 +5,7 @@ description: AI 编码 Harness 化元技能：搭框架、沉淀、技能体检�
 
 # Harness Bootstrap —— 元技能
 
-> **你不是在复制一套模板。你是在为一个具体项目，从零设计它自己的 AI 编码框架。**
-> `assets/` 是**参考样本**，不是要铺进去的东西。多数情况下应该改写、裁剪、重建。
+> **先看清项目，再从零设计它自己的 AI 编码框架。** `assets/` 只是参考样本，多数情况下要改写、裁剪、重建。
 >
 > **运行时 vs 包源**：安装后日常任务只读项目 `AGENTS.md`、`.harness/wiki`、`.harness/rules`、
 > `.harness/modules`、`.harness/skills`、`.harness/project-brief.md`；`assets/` 只在安装、升级、
