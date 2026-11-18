@@ -18,38 +18,38 @@
     "tests/test-update.ps1",
     "tests/test-audit-order.ps1",
     "tests/test-skills-registry.ps1",
-    "templates/AGENTS.md",
-    "templates/.gitignore",
-    "templates/.harness/changes/_small.md",
-    "templates/.harness/lessons-promoted.txt",
-    "templates/scripts/stage-gate.ps1",
-    "templates/scripts/stage-gate-rules.json",
-    "templates/scripts/check-summary.ps1",
-    "templates/scripts/install-git-hooks.ps1",
-    "templates/scripts/uninstall-harness.ps1",
-    "templates/scripts/verify-harness.ps1",
-    "templates/scripts/verify-grounding.ps1",
-    "templates/scripts/metrics.ps1",
-    "templates/scripts/probe-project.ps1",
+    "assets/AGENTS.md",
+    "assets/.gitignore",
+    "assets/.harness/changes/_small.md",
+    "assets/.harness/lessons-promoted.txt",
+    "assets/scripts/stage-gate.ps1",
+    "assets/scripts/stage-gate-rules.json",
+    "assets/scripts/check-summary.ps1",
+    "assets/scripts/install-git-hooks.ps1",
+    "assets/scripts/uninstall-harness.ps1",
+    "assets/scripts/verify-harness.ps1",
+    "assets/scripts/verify-grounding.ps1",
+    "assets/scripts/metrics.ps1",
+    "assets/scripts/probe-project.ps1",
     "references/接地协议.md",
     "references/新项目初始化.md",
     "references/平台适配.md"
   ],
 
   "mustNotExist": [
-    "templates/.trae/agents/harness-auditor.md"
+    "assets/.trae/agents/harness-auditor.md"
   ],
 
   "contracts": [
     {
       "id": "skip-markers-exist",
-      "file": "templates/scripts/stage-gate-rules.json",
+      "file": "assets/scripts/stage-gate-rules.json",
       "pattern": "\"commandSkipMarkers\"",
       "why": "三态判据的「占位行」标记必须外置在 JSON 里，脚本才能保持纯 ASCII。"
     },
     {
       "id": "tri-state-in-code",
-      "file": "templates/scripts/stage-gate.ps1",
+      "file": "assets/scripts/stage-gate.ps1",
       "pattern": "placeholder row -> SKIP, missing row -> BLOCKED",
       "why": "编译/测试判据必须在代码里写明：占位行 SKIP，整行缺失 BLOCKED。"
     },
@@ -61,43 +61,43 @@
     },
     {
       "id": "tri-state-in-flow-rules",
-      "file": "templates/.harness/rules/开发流程规范.md",
+      "file": "assets/.harness/rules/开发流程规范.md",
       "patterns": ["整行缺失", "BLOCKED"],
       "why": "项目内的流程规范必须与门禁脚本同一口径，否则 agent 按文档操作会被门禁拦。"
     },
     {
       "id": "merge-hook-in-gate",
-      "file": "templates/scripts/stage-gate.ps1",
+      "file": "assets/scripts/stage-gate.ps1",
       "pattern": "pre-merge-commit",
       "why": "合并提交不触发 pre-commit；阶段 4/7 的 gate-proven 必须同时证明合并 hook 存在。"
     },
     {
       "id": "merge-hook-in-verify",
-      "file": "templates/scripts/verify-harness.ps1",
+      "file": "assets/scripts/verify-harness.ps1",
       "pattern": "pre-merge-commit",
       "why": "体检脚本必须与阶段门检查同一批 hook，否则安装漏掉合并 hook 也报 PASS。"
     },
     {
       "id": "precommit-checks-initial-only",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "-Stage initial",
       "why": "pre-commit 只查基础字段；收尾字段由 stage-gate 阶段 10 查，避免 WIP 提交被逼用 --no-verify。"
     },
     {
       "id": "hooks-path-override-warned",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "core.hooksPath",
       "why": "core.hooksPath 会让写入 .git/hooks 的门禁静默不生效，安装时必须告警。"
     },
     {
       "id": "summary-stage-param",
-      "file": "templates/scripts/check-summary.ps1",
+      "file": "assets/scripts/check-summary.ps1",
       "pattern": "ValidateSet\\('initial', 'final'\\)",
       "why": "initial / final 两档是 pre-commit 与阶段 10 分工的唯一实现点。"
     },
     {
       "id": "agents-field-split",
-      "file": "templates/AGENTS.md",
+      "file": "assets/AGENTS.md",
       "pattern": "pre-commit 只查基础字段",
       "why": "常驻文件是 agent 每轮读的入口，字段分工必须写在这里。"
     },
@@ -109,49 +109,49 @@
     },
     {
       "id": "gitignore-metrics",
-      "file": "templates/.gitignore",
+      "file": "assets/.gitignore",
       "pattern": "\\.harness/metrics/",
       "why": "门禁日志每次提交都追加；不忽略会让工作区恒 dirty，反过来诱发绕过门禁。"
     },
     {
       "id": "no-stale-skip-phrase",
-      "file": "templates/scripts/stage-gate.ps1",
+      "file": "assets/scripts/stage-gate.ps1",
       "forbid": "no command -> SKIP",
       "why": "旧口径「没有命令就 SKIP」会把「没声明」伪装成「不适用」，已改为整行缺失 BLOCKED。"
     },
     {
       "id": "agents-command-section",
-      "file": "templates/scripts/stage-gate-rules.json",
+      "file": "assets/scripts/stage-gate-rules.json",
       "pattern": "\"agentsCommandSection\"",
       "why": "命令行只在「必跑命令」章节内解析；不限章节会把红线表里含「编译」的行当命令执行。"
     },
     {
       "id": "skip-exact-markers",
-      "file": "templates/scripts/stage-gate-rules.json",
+      "file": "assets/scripts/stage-gate-rules.json",
       "pattern": "\"commandSkipExact\"",
       "why": "none / n/a / - 这类裸词必须整格相等才算占位；子串匹配会误伤真实命令。"
     },
     {
       "id": "hooks-path-install",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "--git-path hooks",
       "why": "linked worktree 下 --absolute-git-dir 的 hooks/ 永远不执行；必须问 git 要生效目录。"
     },
     {
       "id": "hooks-path-uninstall",
-      "file": "templates/scripts/uninstall-harness.ps1",
+      "file": "assets/scripts/uninstall-harness.ps1",
       "pattern": "--git-path hooks",
       "why": "卸载必须与安装看同一个生效目录，否则 worktree 下三个 hook 会全部漏删。"
     },
     {
       "id": "hooks-path-verify",
-      "file": "templates/scripts/verify-harness.ps1",
+      "file": "assets/scripts/verify-harness.ps1",
       "pattern": "--git-path hooks",
       "why": "体检与安装同一目录口径，否则门禁失效也会报 PASS。"
     },
     {
       "id": "hooks-path-stage",
-      "file": "templates/scripts/stage-gate.ps1",
+      "file": "assets/scripts/stage-gate.ps1",
       "pattern": "--git-path hooks",
       "why": "阶段 4/7 的 gate-proven 必须指向 git 真正执行的 hook 目录。"
     },
@@ -163,19 +163,19 @@
     },
     {
       "id": "gate-marker",
-      "file": "templates/scripts/stage-gate.ps1",
+      "file": "assets/scripts/stage-gate.ps1",
       "pattern": "harness pre-commit gate",
       "why": "只查 red-line-scan 字符串会把「注释里提了一句」当成门禁；必须同时校验安装标记。"
     },
     {
       "id": "summary-flow-placeholder",
-      "file": "templates/.harness/changes/_template/summary.md",
+      "file": "assets/.harness/changes/_template/summary.md",
       "pattern": "flow: <L2",
       "why": "L2/L3 summary 的 flow 必须是占位符；L1 不建本文件，写死 L2 会让未定档的任务直接通过校验。"
     },
     {
       "id": "summary-lesson-rule",
-      "file": "templates/.harness/changes/_template/summary.md",
+      "file": "assets/.harness/changes/_template/summary.md",
       "pattern": "corrections ≥ 1",
       "forbid": "corrections 为 0 时才填",
       "why": "check-summary 的规则是 corrections>0 时 lesson_id 必填；模板写反会让人漏填到阶段 10 才失败。"
@@ -218,103 +218,103 @@
     },
     {
       "id": "skills-registry-check",
-      "file": "templates/scripts/verify-harness.ps1",
+      "file": "assets/scripts/verify-harness.ps1",
       "patterns": ["skills-registry", "not listed in .harness/skills/README.md"],
       "why": "技能只有目录、没登记或没入口就是死文件；缺这项检查，新增技能会静默失效，metrics 还会把「没接上线」误判成「没人用」。"
     },
     {
       "id": "sqlGate-data",
-      "file": "templates/scripts/harness-required.json",
+      "file": "assets/scripts/harness-required.json",
       "pattern": "\"sqlGate\"",
       "why": "sqlGate 是 SQL 门禁的显式启用/关闭开关，必须存在于项目配置模板里。"
     },
     {
       "id": "sqlGate-hook-index",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "patterns": ["SQL_POLICY", "git cat-file -e :scripts/harness-required.json"],
       "why": "hook 必须按 index 里的 sqlGate 判定，不能被工作区未暂存改动关掉。"
     },
     {
       "id": "sqlGate-hook-pair",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "SQL_RULE=1",
       "why": "规则与 gate 必须成对校验，删一侧时 hook 要 fail-closed。"
     },
     {
       "id": "sqlGate-verify-probe",
-      "file": "templates/scripts/verify-harness.ps1",
+      "file": "assets/scripts/verify-harness.ps1",
       "patterns": ["sqlGate", "Invoke-SqlGateProbe"],
       "why": "自检必须同时覆盖 sqlGate 三态和正向探针，不能只检查脚本是否存在。"
     },
     {
       "id": "small-record",
-      "file": "templates/.harness/changes/_small.md",
+      "file": "assets/.harness/changes/_small.md",
       "patterns": ["L1", "lesson"],
       "why": "L1 轻量路径必须有一个固定的滚动记录文件，否则小改又会建 summary 目录。"
     },
     {
       "id": "lesson-index",
-      "file": "templates/scripts/metrics.ps1",
+      "file": "assets/scripts/metrics.ps1",
       "patterns": ["Get-SmallTasks", "lessons.md", ".harness\\\\lessons.md", ".harness\\\\lessons-promoted.txt"],
       "why": "metrics 必须解析 _small.md 并在 tracked 的 .harness/lessons.md 生成索引，团队才能共享。"
     },
     {
       "id": "upgrade-cleanup",
-      "file": "templates/scripts/update-harness.ps1",
+      "file": "assets/scripts/update-harness.ps1",
       "patterns": ["KeepBackup", "PruneBackups"],
       "why": "升级验证后默认删除备份，同时保留显式保留与旧备份清理开关。"
     },
     {
       "id": "upgrade-known-merge",
-      "file": "templates/scripts/update-harness.ps1",
+      "file": "assets/scripts/update-harness.ps1",
       "patterns": ["Merge-AgentsKnown", "Merge-RequiredJson", "Merge-RedlineRows", "NoMergeKnown", "KeepL1"],
       "why": "升级只自动合并已知框架行/键和 R5/R6 检查格；项目内容与 L2/L3 历史保留，L1 可显式保留。"
     },
     {
       "id": "summary-order-gate",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "LATE_SUMMARY",
       "why": "「先编码后补 summary」只能靠提交顺序判定：新增 summary 与 .harness/ 之外的改动同提交必须被拒。"
     },
     {
       "id": "summary-order-verified",
-      "file": "templates/scripts/verify-harness.ps1",
+      "file": "assets/scripts/verify-harness.ps1",
       "pattern": "summary-order guard",
       "why": "升级默认会重装 hook；但 -SkipHooks、手工替换或未升级的项目会留下旧 hook，体检必须能指出，否则机制静默失效。"
     },
     {
       "id": "summary-template-two-stage",
-      "file": "templates/.harness/changes/_template/summary.md",
+      "file": "assets/.harness/changes/_template/summary.md",
       "patterns": ["第一阶段：先落盘", "第二阶段：收尾"],
       "why": "模板按 initial / final 分段，才不会诱导一次成稿；两段必须与 check-summary 的两档一致。"
     },
     {
       "id": "summary-order-in-flow",
-      "file": "templates/.harness/rules/开发流程规范.md",
+      "file": "assets/.harness/rules/开发流程规范.md",
       "pattern": "初始 summary 必须单独提交一次",
       "why": "流程规范必须与 pre-commit 的顺序门禁同一口径，否则 agent 按文档操作会被门禁拦。"
     },
     {
       "id": "record-association-gate",
-      "file": "templates/scripts/install-git-hooks.ps1",
+      "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "ASSOC_MISS",
       "why": "只拦「同提交混排」仍会放过完全没有记录的源码提交；源码变更必须能归因到 summary / _small.md。"
     },
     {
       "id": "record-association-in-flow",
-      "file": "templates/.harness/rules/开发流程规范.md",
+      "file": "assets/.harness/rules/开发流程规范.md",
       "pattern": "源码提交必须能归因到记录",
       "why": "流程规范必须写明 feature 分支 / HARNESS_TASK 的归因方式与逃生口，否则 agent 被拦后不知道怎么办。"
     },
     {
       "id": "upgrade-skill-slot-guard",
-      "file": "templates/scripts/update-harness.ps1",
+      "file": "assets/scripts/update-harness.ps1",
       "patterns": ["ForceSkills", "no slot markers"],
       "why": "编译后的技能没有 slot 标记；-UpdateSkills 整份覆盖会丢项目事实并使 verify-grounding 失败，必须按 slot 判定并降级 MANUAL。"
     },
     {
       "id": "upgrade-skill-merge",
-      "file": "templates/scripts/update-harness.ps1",
+      "file": "assets/scripts/update-harness.ps1",
       "patterns": ["Merge-SkillBlocks", "harness:project:", "hard limit 120"],
       "why": "已编译技能升级只能替换 package 区块、保留 project 区块；定位不到或超行数时不写盘，否则会把项目绑定覆盖掉。"
     },
@@ -326,85 +326,85 @@
     },
     {
       "id": "upgrade-template-update",
-      "file": "templates/scripts/update-harness.ps1",
+      "file": "assets/scripts/update-harness.ps1",
       "pattern": "change template replaced",
       "why": "summary 模板是包资产、不含项目事实；只缺失才加会让老项目永远停在旧模板，与新门禁口径不一致。"
     },
     {
       "id": "audit-order-script",
-      "file": "templates/scripts/audit-order.ps1",
+      "file": "assets/scripts/audit-order.ps1",
       "patterns": ["source commit", "no summary for feature"],
       "why": "反序提交本地不可判定；CI 端脚本缺失或规则被弱化后，这条绕过面会重新变成不可观测。"
     },
     {
       "id": "audit-order-in-flow",
-      "file": "templates/.harness/rules/开发流程规范.md",
+      "file": "assets/.harness/rules/开发流程规范.md",
       "pattern": "CI 提交区间审计",
       "why": "流程规范必须写明 CI 审计入口与 [L0] 豁免，否则项目不知道如何补上本地看不到的反序场景。"
     },
     {
       "id": "core-skill-stop-conditions",
-      "file": "templates/.harness/skills/main-dev/request-analysis/SKILL.md",
+      "file": "assets/.harness/skills/main-dev/request-analysis/SKILL.md",
       "patterns": ["### 定档判据", "### 什么时候必须停下来问"],
       "why": "需求分析的价值在开工前定档并问清影响面；只有步骤没有停止条件，agent 仍会边写边猜。"
     },
     {
       "id": "core-skill-minimal-change",
-      "file": "templates/.harness/skills/main-dev/coding-skill/SKILL.md",
+      "file": "assets/.harness/skills/main-dev/coding-skill/SKILL.md",
       "patterns": ["### 三类改动怎么下手", "同一错误最多修 2 轮"],
       "why": "编码技能必须给出改动类型的分支与失败处理上限，否则会顺手重构或无限重试。"
     },
     {
       "id": "core-skill-severity-scope",
-      "file": "templates/.harness/skills/main-dev/expert-reviewer/SKILL.md",
+      "file": "assets/.harness/skills/main-dev/expert-reviewer/SKILL.md",
       "patterns": ["## 评审范围", "## 分级标准"],
       "why": "评审没有范围声明会审到未改动代码；没有分级判据会把建议写成阻断。"
     },
     {
       "id": "sql-rule-explain-criteria",
-      "file": "templates/.harness/rules/SQL评审规范.md",
+      "file": "assets/.harness/rules/SQL评审规范.md",
       "patterns": ["Using filesort", "最左前缀"],
       "why": "SQL 规范必须给出执行计划与索引判据，否则「看执行计划」只是一句口号。"
     },
     {
       "id": "sql-review-correctness-skill",
-      "file": "templates/.harness/skills/biz-dev/14-sql-review/SKILL.md",
+      "file": "assets/.harness/skills/biz-dev/14-sql-review/SKILL.md",
       "patterns": ["正确性校验", "语法 / 方言"],
       "why": "SQL 评审不能只评性能；语法、结构、绑定、结果四层是正确性下限，技能必须固定判据与停止条件。"
     },
     {
       "id": "sql-review-correctness-rule",
-      "file": "templates/.harness/rules/SQL评审规范.md",
+      "file": "assets/.harness/rules/SQL评审规范.md",
       "patterns": ["正确性校验", "语法 / 方言"],
       "why": "规范与技能必须同口径；只改技能会让按规范办事的人漏掉正确性四层。"
     },
     {
       "id": "rules-cache-order",
-      "file": "templates/.harness/rules/缓存与一致性.md",
+      "file": "assets/.harness/rules/缓存与一致性.md",
       "patterns": ["先更新库，再删除缓存", "缓存异常必须降级"],
       "why": "更新顺序与降级是缓存最容易写反的两条边界，必须固定在规则里。"
     },
     {
       "id": "rules-mq-idempotent",
-      "file": "templates/.harness/rules/消息与异步.md",
+      "file": "assets/.harness/rules/消息与异步.md",
       "patterns": ["必须幂等", "死信"],
       "why": "消息的第一性问题是重复投递；不写幂等与死信，重试就会写重或丢消息。"
     },
     {
       "id": "rules-migration-pair",
-      "file": "templates/.harness/rules/数据迁移与回滚.md",
+      "file": "assets/.harness/rules/数据迁移与回滚.md",
       "patterns": ["扩展 → 迁移 → 收缩", "回滚脚本与迁移脚本同目录"],
       "why": "迁移的风险在不可回退；必须固定三阶段与成对脚本。"
     },
     {
       "id": "agents-horizontal-rules-index",
-      "file": "templates/AGENTS.md",
+      "file": "assets/AGENTS.md",
       "patterns": ["缓存与一致性.md", "消息与异步.md", "数据迁移与回滚.md"],
       "why": "新增规则文件必须登记到常驻索引；不登记等于没装。"
     },
     {
       "id": "platform-skill-dirs",
-      "file": "templates/scripts/harness-required.json",
+      "file": "assets/scripts/harness-required.json",
       "patterns": [".agents/skills", ".codebuddy/skills"],
       "why": "Codex 从 .agents/skills 发现技能、CodeBuddy 从 .codebuddy/skills 发现；配置里漏掉会让 verify-harness 误判为没有发现入口。"
     },

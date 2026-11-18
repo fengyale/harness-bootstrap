@@ -6,12 +6,12 @@ description: AI 编码 Harness 化元技能：搭框架、沉淀、技能体检�
 # Harness Bootstrap —— 元技能
 
 > **你不是在复制一套模板。你是在为一个具体项目，从零设计它自己的 AI 编码框架。**
-> `templates/` 是**参考样本**，不是要铺进去的东西。多数情况下应该改写、裁剪、重建。
+> `assets/` 是**参考样本**，不是要铺进去的东西。多数情况下应该改写、裁剪、重建。
 >
 > **运行时 vs 包源**：安装后日常任务只读项目 `AGENTS.md`、`.harness/wiki`、`.harness/rules`、
-> `.harness/modules`、`.harness/skills`、`.harness/project-brief.md`；`templates/` 只在安装、升级、
+> `.harness/modules`、`.harness/skills`、`.harness/project-brief.md`；`assets/` 只在安装、升级、
 > 自建技能/模块/适配器时读，**不能当项目事实**。默认**项目级安装**（每个项目独立，不跨项目串文件）；
-> 日常任务不读 `templates/`；`probe-stack` / `red-line-scan` 已排除 `.trae`。
+> 日常任务不读 `assets/`；`probe-stack` / `red-line-scan` 已排除 `.trae`。
 > `.harness/upgrade/` 只用于升级回滚；验证通过后默认删除，日常任务不读。
 
 ---
@@ -109,7 +109,7 @@ Harness 就是把"看运气"变成"看流程"。
 
 **你是给这个项目做"AI 编码框架设计"的人，不是来复制文件的。**
 
-- `templates/` 里的每一个文件，你都要问：**"这个项目需要它吗？需要的话，应该长什么样？"**
+- `assets/` 里的每一个文件，你都要问：**"这个项目需要它吗？需要的话，应该长什么样？"**
 - 凑巧适用（比如 `03-redis-cache` 的结构、`verify-harness` 的检查项）→ 直接用或小改
 - 不适用（多数情况）→ **按这个项目重建**，参考它的**结构**，但内容必须是这个项目的
 - 项目的技术栈、目录、术语、红线**只能来自真实代码**，不能来自模板
@@ -178,16 +178,16 @@ function Copy-Missing([string]$Src, [string]$DstDir) {
     }
 }
 
-Copy-Missing "$PKG\templates\scripts"          "<项目根>\scripts"
-Copy-Missing "$PKG\templates\.harness\rules"   "<项目根>\.harness\rules"
-Copy-Missing "$PKG\templates\.harness\wiki"    "<项目根>\.harness\wiki"
-Copy-Missing "$PKG\templates\.harness\modules" "<项目根>\.harness\modules"
-Copy-Missing "$PKG\templates\.harness\changes" "<项目根>\.harness\changes"
+Copy-Missing "$PKG\assets\scripts"          "<项目根>\scripts"
+Copy-Missing "$PKG\assets\.harness\rules"   "<项目根>\.harness\rules"
+Copy-Missing "$PKG\assets\.harness\wiki"    "<项目根>\.harness\wiki"
+Copy-Missing "$PKG\assets\.harness\modules" "<项目根>\.harness\modules"
+Copy-Missing "$PKG\assets\.harness\changes" "<项目根>\.harness\changes"
 
 # 已晋升清单是单个 tracked 文件，Copy-Missing 只接目录，这里单独补。
 $promotedFile = "<项目根>\.harness\lessons-promoted.txt"
 if (-not (Test-Path -LiteralPath $promotedFile)) {
-    Copy-Item "$PKG\templates\.harness\lessons-promoted.txt" $promotedFile
+    Copy-Item "$PKG\assets\.harness\lessons-promoted.txt" $promotedFile
 }
 
 # 技能只落索引；25 个技能模板带 <!-- slot: --> 未填，整目录复制会让
@@ -196,7 +196,7 @@ $skillsReadme = "<项目根>\.harness\skills\README.md"
 if (Test-Path -LiteralPath $skillsReadme) { Write-Host "[SKIP] conflict: $skillsReadme" }
 else {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillsReadme) | Out-Null
-    Copy-Item "$PKG\templates\.harness\skills\README.md" $skillsReadme
+    Copy-Item "$PKG\assets\.harness\skills\README.md" $skillsReadme
 }
 
 # 平台子智能体定义（评审 / 一致性校验 / 红线审计）：有 agents 目录的平台才装。
@@ -206,14 +206,14 @@ else {
 #   CodeBuddy    -> $AgentDir = "<项目根>\.codebuddy\agents"（Markdown agents 兼容）
 #   Codex        -> 不执行本行：它用 .codex\agents\*.toml，需要按 TOML 重写
 #   未知         -> 不执行本行（走清单模式，别假装子智能体存在）
-if ($AgentDir) { Copy-Missing "$PKG\templates\.trae\agents" $AgentDir }
+if ($AgentDir) { Copy-Missing "$PKG\assets\.trae\agents" $AgentDir }
 else { Write-Host "[SKIP] no agents directory for this platform; review by checklist instead" }
 
 # .gitignore：模板里有 .harness/metrics/（门禁日志每次提交都追加，不忽略会让工作区恒 dirty）
 # 项目已有 .gitignore 时不要覆盖，把缺的那几行读后手工补上，并列进冲突清单
 $ignore = "<项目根>\.gitignore"
-if (Test-Path -LiteralPath $ignore) { Write-Host "[SKIP] conflict: $ignore (merge the lines listed in templates\.gitignore by hand)" }
-else { Copy-Item "$PKG\templates\.gitignore" $ignore }
+if (Test-Path -LiteralPath $ignore) { Write-Host "[SKIP] conflict: $ignore (merge the lines listed in assets\.gitignore by hand)" }
+else { Copy-Item "$PKG\assets\.gitignore" $ignore }
 
 # 版本标记：升级脚本靠它判断当前装的是哪一版。首次安装就写入，别等升级时再补。
 $marker = "<项目根>\.harness\.installed-version"
@@ -235,7 +235,7 @@ if (-not (Test-Path -LiteralPath $marker)) {
 - **agents 目录同理**：`.trae\agents` 已存在就 SKIP 并读后合并；Claude 项目拷到 `.claude\agents`，CodeBuddy 拷到 `.codebuddy\agents`（Markdown 兼容）；
   Codex 用 `.codex\agents\*.toml`，需按 TOML 重写；未知平台不装，按清单模式手工评审（不要假装子智能体存在）
 - **技能模板不进项目**：`.harness\skills\<分类>\<技能>\` 在第 2 步由启用集编译生成；
-  第 0 步只复制 `skills\README.md` 索引。需要骨架时从 `$PKG\templates\.harness\skills\<分类>\<技能>\SKILL.md` 读取后改写
+  第 0 步只复制 `skills\README.md` 索引。需要骨架时从 `$PKG\assets\.harness\skills\<分类>\<技能>\SKILL.md` 读取后改写
 - 后面所有命令都假设 `scripts\` 在项目根；跳过这一步，下一步会直接失败
 
 #### 第 0.5 步 · 先看这个项目是什么样（**只读，不许动任何文件**）
@@ -317,7 +317,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 | 平台能力 | 做法 |
 | --- | --- |
 | 有自动发现目录（TRAE / Claude Code / Codex / CodeBuddy） | 在平台目录建链接：TRAE `-Dest .trae\skills`（默认）、Claude `-Dest .claude\skills`、Codex `-Dest .agents\skills`、CodeBuddy `-Dest .codebuddy\skills` |
-| 没有自动发现（未知平台） | 用 `templates/adapters/generic/HARNESS-INDEX.md` 生成 `.harness/skills/INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
+| 没有自动发现（未知平台） | 用 `assets/adapters/generic/HARNESS-INDEX.md` 生成 `.harness/skills/INDEX.md`，并把"某类任务必须先读哪个技能"写进常驻文件 |
 
 ```powershell
 # 有自动发现目录时
@@ -399,6 +399,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
   -PackagePath <新包根目录> -Apply
 ```
 
+> **从 1.30.0 及更早升级一次**：包布局已从 `templates/` 改为 `assets/`，旧项目里的 `scripts\update-harness.ps1` 只认旧名。第一次请直接运行**新包内**的脚本：`assets\scripts\update-harness.ps1 -Root <项目根> -PackagePath <新包根目录>`；执行成功后项目内脚本就是新版，之后照常走上面的命令。新版脚本同时兼容旧布局（读 `templates/` 并提示一次），所以不会两头卡住。
+
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
@@ -442,6 +444,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 ## 第四部分：去哪找细节
 
+> 约定：`references/` 内部不写文件间跳转，只写《主题》。看到《X》时回到本表，按表里对应的文件读——所有深入阅读都从这一层进入，不会出现"A 指向 B、B 指向 C"的链条。
+
 | 你要做的事 | 读哪份 |
 | --- | --- |
 | **理解立场与方法论**（基调、为什么现在不行、四条核心思想、自成长） | `references/核心论述.md` |
@@ -459,16 +463,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 | 解释"为什么分两处放""三层约束力" | `references/架构与职责.md` |
 | 平台入口怎么建、技能怎么被发现（TRAE / Claude / 通用索引） | `references/平台适配.md` |
 | 遇到平台行为不符预期 | `references/踩坑清单.md` |
-| **文件来源** | `templates/` ——**参考样本，按启用集取用并改写，不要全量复制** |
+| **文件来源** | `assets/` ——**参考样本，按启用集取用并改写，不要全量复制** |
 
 > ### ⚠️ 最重要的一句
-> **当 `templates/` 里的东西跟这个项目对不上时（多数情况），不要硬套——去读 `references/自建指南.md`。**
+> **当 `assets/` 里的东西跟这个项目对不上时（多数情况），不要硬套——去读 `references/自建指南.md`。**
 > 那里讲了：怎么从"用户纠正过什么"倒推该有哪些技能、怎么判断哪些该进红线、
 > 事实从代码哪里挖、门禁怎么设计才挡得住、设计完怎么自检。
 > **照抄模板 = 交作业；按指南自建 = 真的搭起来。**
 
-> `templates/` 的位置 = 本技能所在目录（项目级：`.trae/skills/harness-bootstrap/templates/`；
-> 全局：`~/.trae-cn/skills/harness-bootstrap/templates/`）。
+> `assets/` 的位置 = 本技能所在目录（项目级：`.trae/skills/harness-bootstrap/assets/`；
+> 全局：`~/.trae-cn/skills/harness-bootstrap/assets/`）。
 
 ---
 

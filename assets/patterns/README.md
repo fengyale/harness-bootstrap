@@ -1,7 +1,7 @@
 # patterns（跨项目模式库）
 
 > 这里只存**技术中立的模式**，来源是 ≥2 个独立项目的同一指纹（见 `references/回灌协议.md`）。
-> 与 `templates/.harness/skills/` 的分工：技能是"怎么干活"，patterns 是"为什么这么干"。
+> 与 `assets/.harness/skills/` 的分工：技能是"怎么干活"，patterns 是"为什么这么干"。
 
 ## 收录条件
 

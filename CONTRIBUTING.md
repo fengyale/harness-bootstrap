@@ -18,7 +18,7 @@ automatically; do not bypass it with `--no-verify`.
 
 - Fixes to gate behaviour, field validation, hook installation, metrics.
 - New platform adapters that do not break the existing ones.
-- Documentation that removes a contradiction between SKILL, references and templates.
+- Documentation that removes a contradiction between SKILL, references and the assets.
 - New project-path or grounding-rule improvements with a machine-checkable consequence.
 
 What does not belong here:
@@ -39,10 +39,10 @@ What does not belong here:
 
 ## Changing a gate rule
 
-1. Change the behaviour in `templates/scripts/`.
+1. Change the behaviour in `assets/scripts/`.
 2. Update the JSON that carries the match strings (scripts must stay ASCII).
-3. Update the doc that describes the rule: `SKILL.md`, `templates/AGENTS.md`,
-   `templates/.harness/rules/开发流程规范.md`, or `references/`.
+3. Update the doc that describes the rule: `SKILL.md`, `assets/AGENTS.md`,
+   `assets/.harness/rules/开发流程规范.md`, or `references/`.
 4. Add or update a contract in `tools/package-contract.json`.
 5. Add a behavioural test in `tests/` when the change is about blocking/skipping.
 6. Run the full gate and the tests.

@@ -1,5 +1,20 @@
 [
   {
+    "version": "1.30.1",
+    "title": "(包布局 templates → assets / references 只嵌一层)",
+    "body": [
+      "- 布局：仓库与发布包的产品目录由 templates/ 改为 assets/；SKILL.md、",
+      "  update-harness、package-zip、verify-package、契约文件与测试同步",
+      "- 兼容：新版 update-harness 仍认旧的 templates/ 布局并提示一次；从 1.30.0",
+      "  及更早升级的首跳需直接运行新包内的脚本（见 SKILL.md 2.4）",
+      "- 引用：references/ 内部去掉 13 处文件间跳转，统一写成《主题》，一律回到",
+      "  SKILL.md 第四部分的路由表读取，不再出现 A → B → C 的链",
+      "- 发布包：白名单化，只收 SKILL.md / VERSION / LICENSE / references / assets；",
+      "  docs、tests、tools、.github、README、releases.json 不再分发（1.69 MB → 317 KB）",
+      "- 测试：test-update 新增「旧 templates/ 布局仍可升级」用例"
+    ]
+  },
+  {
     "version": "1.30.0",
     "title": "(检查必须声明会因什么失败 / 数据源不许凭空出现)",
     "body": [

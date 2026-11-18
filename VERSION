@@ -1,7 +1,20 @@
-HARNESS-BOOTSTRAP VERSION 1.30.0
+HARNESS-BOOTSTRAP VERSION 1.30.1
 
 changelog
 ---------
+1.30.1  (包布局 templates → assets / references 只嵌一层)
+- 布局：仓库与发布包的产品目录由 `templates/` 改为 `assets/`；SKILL.md 安装
+  步骤、update-harness、package-zip、verify-package、契约文件与测试同步
+- 兼容：新版 `update-harness.ps1` 仍认旧的 `templates/` 布局并提示一次，避免
+  已装 1.30.0 及更早的项目在第一次升级时卡住；从旧版升级的首跳需直接运行新包
+  内的脚本，这一点写进 SKILL.md 2.4
+- 引用：`references/` 内部去掉 13 处文件间跳转，统一写成《主题》，一律回到
+  SKILL.md 第四部分的路由表读取，不再出现 A 指向 B、B 指向 C 的链
+- 发布包：白名单化，只收 SKILL.md / VERSION / LICENSE / references / assets；
+  docs（含 3.4 MB mermaid vendor）、tests、tools、.github、README、releases.json
+  不再随安装包分发，产物 146 文件 1.69 MB → 96 文件 317 KB
+- 测试：test-update 新增「旧 templates/ 布局仍可升级」用例
+
 1.30.0  (检查必须声明会因什么失败 / 数据源不许凭空出现)
 - 自进化：`-LessonGate` 要求检查文件除了 `# lesson: <id>`，还要有
   `# fails-when: <什么改动会让它变红>`。语义相关性仍然靠人判断，但"这条

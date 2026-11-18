@@ -7,7 +7,7 @@ function Step([string]$Name) { Write-Host ""; Write-Host "=== $Name ===" -Foregr
 
 if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
-Copy-Item "$pkg\templates\scripts" "$proj\scripts" -Recurse
+Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
 
 # --- AGENTS.md: stages 3/5/7/8 execute the declared commands for real, and a
 # missing row is BLOCKED (only a placeholder row is SKIP), so the fixture must
@@ -41,7 +41,7 @@ Add-Content -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Value ('{"event":"
 
 # --- fill the real template exactly as an agent would
 Step 'fill summary from template'
-$tpl = Get-Content "$pkg\templates\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
+$tpl = Get-Content "$pkg\assets\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
 $tpl = $tpl -replace 'YYYY-MM-DD', (Get-Date -Format 'yyyy-MM-dd')
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])impl_corrections:[^\r\n]*', 'impl_corrections: 0'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', 'corrections: 1'

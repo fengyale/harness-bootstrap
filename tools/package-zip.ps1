@@ -5,7 +5,7 @@
     The release zip is the artifact another project consumes. Building it by hand
     let local-only folders in, and the meta-skill's own .trae\agents
     (harness-auditor) shipped with the package, where it looks like a fourth
-    package-owned agent. Only templates\.trae\agents is installed into a project.
+    package-owned agent. Only assets\.trae\agents is installed into a project.
     This script keeps the include set in one place.
 
   WHAT GOES IN
@@ -13,7 +13,7 @@
     copy of this repository:
       SKILL.md, VERSION, LICENSE   the entry skill, its version, the license
       references/                  documents SKILL.md points at
-      templates/                   scripts / rules / wiki / skills / agents
+      assets/                   scripts / rules / wiki / skills / agents
     Everything else stays in the repo: docs/ (site + 3.4 MB mermaid vendor),
     tests/ and tools/ (maintainer-only), .github/, README*, CONTRIBUTING.md,
     releases.json, the root .gitignore and the "why" essay. Humans who want
@@ -46,7 +46,7 @@ if ($versionLine -notmatch '(\d+\.\d+\.\d+)') {
 $version = $matches[1]
 
 $includeFiles = @('SKILL.md', 'VERSION', 'LICENSE')
-$includeDirs = @('references', 'templates')
+$includeDirs = @('references', 'assets')
 
 if (-not $OutDir) { $OutDir = Join-Path $root 'dist' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

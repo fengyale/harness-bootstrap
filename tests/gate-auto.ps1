@@ -12,7 +12,7 @@ function Expect([string]$Label, [int]$Code, [int]$Want) {
 if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\rules" | Out-Null
-Copy-Item "$pkg\templates\scripts" "$proj\scripts" -Recurse
+Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
 # The template harness-required.json ships sqlGate=true. The hook is fail-closed
 # when the rule is missing, so the fixture must carry a rule for the normal
 # summary commits below to pass.
@@ -25,7 +25,7 @@ Set-Content -LiteralPath "$proj\.harness\rules\SQL-review.md" -Value @(
 ) -Encoding UTF8
 
 Step 'flow value with a trailing note'
-$tpl = Get-Content "$pkg\templates\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
+$tpl = Get-Content "$pkg\assets\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
 $tpl = $tpl -replace 'YYYY-MM-DD', (Get-Date -Format 'yyyy-MM-dd')
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])impl_corrections:[^\r\n]*', 'impl_corrections: 0'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', 'corrections: 0'

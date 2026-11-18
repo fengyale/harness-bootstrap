@@ -19,11 +19,11 @@ This project keeps one rule in several places on purpose. Tick what you changed.
 If you changed one of them, the package contract may need a new entry.
 -->
 
-- [ ] `templates/scripts/` — behaviour
-- [ ] `templates/scripts/*.json` — the strings the scripts match on
+- [ ] `assets/scripts/` — behaviour
+- [ ] `assets/scripts/*.json` — the strings the scripts match on
 - [ ] `SKILL.md` — the installer's only entry point
-- [ ] `templates/AGENTS.md` — the always-resident file
-- [ ] `templates/.harness/rules/` — the rule documents
+- [ ] `assets/AGENTS.md` — the always-resident file
+- [ ] `assets/.harness/rules/` — the rule documents
 - [ ] `references/` — the method documents
 - [ ] `tools/package-contract.json` — the assertions that keep the above in sync
 - [ ] `tests/` — behavioural coverage

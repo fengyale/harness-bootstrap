@@ -49,7 +49,7 @@ function New-Entry([string]$EntryName, [string]$SourceDir) {
 }
 
 if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
-Copy-Item "$pkg\templates\scripts" "$proj\scripts" -Recurse
+Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
 
 $demoDir  = New-Skill 'main-dev' 'demo-skill' 'demo-skill'
 $extraDir = New-Skill 'biz-dev' '99-extra-helper' 'extra-helper'
@@ -108,7 +108,7 @@ foreach ($p in @($demoDir, $orphanDir)) {
     [System.IO.File]::SetCreationTime($f, (Get-Date).AddDays(-40))
     [System.IO.File]::SetLastWriteTime($f, (Get-Date).AddDays(-40))
 }
-$tpl = [System.IO.File]::ReadAllText("$pkg\templates\.harness\changes\_template\summary.md", [System.Text.Encoding]::UTF8)
+$tpl = [System.IO.File]::ReadAllText("$pkg\assets\.harness\changes\_template\summary.md", [System.Text.Encoding]::UTF8)
 $tpl = $tpl -replace 'YYYY-MM-DD', (Get-Date -Format 'yyyy-MM-dd')
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])impl_corrections:[^\r\n]*', 'impl_corrections: 0'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', 'corrections: 0'

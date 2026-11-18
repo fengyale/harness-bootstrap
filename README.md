@@ -236,7 +236,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
-# 打发布包：只收 SKILL.md / VERSION / LICENSE / references / templates（可安装资产）
+# 打发布包：只收 SKILL.md / VERSION / LICENSE / references / assets（可安装资产）
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-zip.ps1
 ```
 

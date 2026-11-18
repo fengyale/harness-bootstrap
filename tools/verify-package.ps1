@@ -8,7 +8,7 @@
     the self-hosting counterpart: the package obeys the rule it sells.
 
   CHECKS
-    1. parse      every .ps1 under templates/scripts and tools parses (PS 5.1 parser)
+    1. parse      every .ps1 under assets/scripts and tools parses (PS 5.1 parser)
     2. encoding   each .ps1 is pure ASCII, or carries a UTF-8 BOM (PS 5.1 rule)
     3. json       every JSON config parses as JSON
     3b. version  VERSION and releases.json agree on the top version
@@ -69,7 +69,7 @@ if (-not (Test-Path -LiteralPath $contractPath)) {
 
 # ---------------------------------------------------------------- 1 parse
 $scriptFiles = @()
-foreach ($dir in @('templates\scripts', 'tools', 'tests')) {
+foreach ($dir in @('assets\scripts', 'tools', 'tests')) {
     $dp = Join-Path $packageRoot $dir
     if (-not (Test-Path -LiteralPath $dp)) { continue }
     $scriptFiles += @(Get-ChildItem -LiteralPath $dp -Filter *.ps1 -File -Force)
@@ -119,7 +119,7 @@ if ($encBad -eq 0) { Add-Result 'encoding' 'PASS' 'ASCII without BOM, or UTF-8 w
 
 # ----------------------------------------------------------------- 3 json
 $jsonFiles = @()
-foreach ($dir in @('templates\scripts', 'tools')) {
+foreach ($dir in @('assets\scripts', 'tools')) {
     $dp = Join-Path $packageRoot $dir
     if (-not (Test-Path -LiteralPath $dp)) { continue }
     $jsonFiles += @(Get-ChildItem -LiteralPath $dp -Filter *.json -File -Force)
@@ -188,7 +188,7 @@ if ($contract) {
 # silently leaks one project's bindings into the next install.
 $markerBad = 0
 $markerCount = 0
-$tplSkills = Join-Path $packageRoot 'templates\.harness\skills'
+$tplSkills = Join-Path $packageRoot 'assets\.harness\skills'
 if (Test-Path -LiteralPath $tplSkills) {
     foreach ($sf in @(Get-ChildItem -LiteralPath $tplSkills -Recurse -Filter 'SKILL.md' -File -Force)) {
         $text = [System.IO.File]::ReadAllText($sf.FullName, [System.Text.Encoding]::UTF8)
@@ -370,7 +370,7 @@ $qgName = (-join ([char]0x8D28, [char]0x91CF, [char]0x5206, [char]0x7EA7)) + '.m
 $qgPath = Join-Path (Join-Path $repoRoot 'references') $qgName
 if (Test-Path -LiteralPath $qgPath) {
     $qgText = Get-Content -LiteralPath $qgPath -Raw -Encoding UTF8
-    $skillFiles = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'templates\.harness\skills') -Recurse -Filter 'SKILL.md' -File -Force)
+    $skillFiles = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'assets\.harness\skills') -Recurse -Filter 'SKILL.md' -File -Force)
     $skillLines = 0
     foreach ($sf in $skillFiles) { $skillLines += ([System.IO.File]::ReadAllLines($sf.FullName)).Count }
     $ge = [string][char]0x4E2A
@@ -382,7 +382,7 @@ if (Test-Path -LiteralPath $qgPath) {
         Add-Result 'docs' 'FAIL' "references\$qgName quotes stale skill totals; expected '$expect'"
         $docsBad++
     }
-    foreach ($sf in @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'templates\scripts') -File -Force)) {
+    foreach ($sf in @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'assets\scripts') -File -Force)) {
         if ($sf.Extension -notin @('.ps1', '.py')) { continue }
         $base = [System.IO.Path]::GetFileNameWithoutExtension($sf.Name)
         if ($qgText -notmatch [regex]::Escape('`scripts/' + $base)) {
@@ -443,7 +443,7 @@ if (-not $Fast) {
     $smokeBad = 0
     try {
         New-Item -ItemType Directory -Path $tmp -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $packageRoot 'templates\scripts') -Destination (Join-Path $tmp 'scripts') -Recurse
+        Copy-Item -LiteralPath (Join-Path $packageRoot 'assets\scripts') -Destination (Join-Path $tmp 'scripts') -Recurse
         New-Item -ItemType Directory -Force -Path (Join-Path $tmp '.harness\metrics') | Out-Null
         $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         $line = '{"event":"scan","ts":"' + $ts + '","blocked":0,"files":1,"hunks":1}'
@@ -473,7 +473,7 @@ if (-not $Fast) {
         # still pass the package gate.
         if ($smokeBad -eq 0) {
             New-Item -ItemType Directory -Force -Path (Join-Path $tmp '.harness\changes\demo') | Out-Null
-            Copy-Item -LiteralPath (Join-Path $packageRoot 'templates\.harness\changes\_template\summary.md') -Destination (Join-Path $tmp '.harness\changes\demo\summary.md')
+            Copy-Item -LiteralPath (Join-Path $packageRoot 'assets\.harness\changes\_template\summary.md') -Destination (Join-Path $tmp '.harness\changes\demo\summary.md')
             & $PS -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'scripts\check-summary.ps1') -Root $tmp -Feature demo -Stage initial | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Add-Result 'smoke' 'FAIL' 'check-summary accepted the unfilled summary template'

@@ -1,5 +1,5 @@
 <#
-  test-audit-order.ps1 -- behaviour of templates\scripts\audit-order.ps1
+  test-audit-order.ps1 -- behaviour of assets\scripts\audit-order.ps1
 
   Builds a throw-away git repository and asserts the CI-side order audit:
   reverse order is caught, summary-first passes, a bundled new summary fails,
@@ -10,7 +10,7 @@
 #>
 $ErrorActionPreference = 'Stop'
 
-$script = Join-Path (Split-Path $PSScriptRoot -Parent) 'templates\scripts\audit-order.ps1'
+$script = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\audit-order.ps1'
 $proj = Join-Path $env:TEMP ('hb-audit-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $fail = 0
 

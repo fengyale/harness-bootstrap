@@ -110,5 +110,5 @@ if ($rejected -gt 0) {
     Write-Host "$rejected candidate(s) rejected; fix fields or wait for the second project." -ForegroundColor Yellow
     exit 1
 }
-Write-Host "All candidates are package-ready. Review outbox/, then copy into templates/patterns/." -ForegroundColor Green
+Write-Host "All candidates are package-ready. Review outbox/, then copy into assets/patterns/." -ForegroundColor Green
 exit 0

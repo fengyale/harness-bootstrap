@@ -89,7 +89,17 @@ $MergeKnown = -not $NoMergeKnown
 
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $pkgPath = (Resolve-Path -LiteralPath $PackagePath).Path
-$templates = Join-Path $pkgPath 'templates'
+$assets = Join-Path $pkgPath 'assets'
+# 1.30.0 and earlier shipped the same payload under templates/. Accept that name
+# so a new script can still read an old package, and tell the operator when it
+# happened instead of failing with "not a harness package".
+if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\stage-gate.ps1'))) {
+    $legacy = Join-Path $pkgPath 'templates'
+    if (Test-Path -LiteralPath (Join-Path $legacy 'scripts\stage-gate.ps1')) {
+        Write-Host '[INFO] legacy package layout (templates/); reading it as assets/' -ForegroundColor Yellow
+        $assets = $legacy
+    }
+}
 
 # ---------------------------------------------------------------- validate
 $versionFile = Join-Path $pkgPath 'VERSION'
@@ -97,14 +107,14 @@ if (-not (Test-Path -LiteralPath $versionFile)) {
     Write-Host "not a harness package (VERSION missing): $pkgPath" -ForegroundColor Red
     exit 1
 }
-if (-not (Test-Path -LiteralPath (Join-Path $templates 'scripts\stage-gate.ps1'))) {
-    Write-Host "not a harness package (templates\scripts missing): $pkgPath" -ForegroundColor Red
+if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\stage-gate.ps1'))) {
+    Write-Host "not a harness package (assets\scripts missing; legacy name is templates\scripts): $pkgPath" -ForegroundColor Red
     exit 1
 }
 # The checker itself must be in the package. A truncated package used to result
 # in "verification skipped" and UPDATE OK; fail before touching the project.
-if (-not (Test-Path -LiteralPath (Join-Path $templates 'scripts\verify-harness.ps1'))) {
-    Write-Host "package is incomplete: templates\scripts\verify-harness.ps1 missing" -ForegroundColor Red
+if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\verify-harness.ps1'))) {
+    Write-Host "package is incomplete: assets\scripts\verify-harness.ps1 missing" -ForegroundColor Red
     exit 1
 }
 # A project-level skill install places the package source under .trae/skills.
@@ -112,7 +122,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $templates 'scripts\verify-harness.p
 # directory the user may have committed deliberately.
 $projectSkill = Join-Path $rootPath '.trae\skills\harness-bootstrap'
 if (Test-Path -LiteralPath $projectSkill) {
-    Write-Host '[INFO] project-level harness skill found; templates are package source, not project facts (scans exclude .trae).' -ForegroundColor Yellow
+    Write-Host '[INFO] project-level harness skill found; the assets folder is package source, not project facts (scans exclude .trae).' -ForegroundColor Yellow
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $rootPath '.harness'))) {
@@ -369,7 +379,7 @@ function Merge-RequiredJson {
 # ------------------------------------------------------- scripts: machinery
 # .ps1 is package-owned: replace it. *.json is project configuration (red
 # lines, stage thresholds, required files), so it is never overwritten.
-$srcScripts = Join-Path $templates 'scripts'
+$srcScripts = Join-Path $assets 'scripts'
 foreach ($src in Get-ChildItem -LiteralPath $srcScripts -File -Force) {
     $rel = 'scripts\' + $src.Name
     $dst = Join-Path $rootPath $rel
@@ -395,7 +405,7 @@ foreach ($src in Get-ChildItem -LiteralPath $srcScripts -File -Force) {
 
 # ------------------------------------------------- project assets: add only
 foreach ($sub in @('rules', 'wiki', 'modules')) {
-    $srcDir = Join-Path $templates ('.harness\' + $sub)
+    $srcDir = Join-Path $assets ('.harness\' + $sub)
     if (-not (Test-Path -LiteralPath $srcDir)) { continue }
     # -Name returns paths relative to $srcDir. Building the relative path with
     # Substring(FullName, Length) breaks when the two forms use different short
@@ -619,7 +629,7 @@ function Merge-SkillBlocks {
 # The install deliberately keeps 3-5 skills, so a missing template skill is
 # NOT added here. Only files the project already has are compared; with
 # -UpdateSkills they are replaced (old copies go to .harness/upgrade).
-$srcSkills = Join-Path $templates '.harness\skills'
+$srcSkills = Join-Path $assets '.harness\skills'
 if (Test-Path -LiteralPath $srcSkills) {
     # A compiled skill can live under a directory the project chose
     # (04-sql-review instead of 14-sql-review). Matching on the declared
@@ -734,7 +744,7 @@ if (Test-Path -LiteralPath $srcSkills) {
 
 # The change template is package-owned: it carries no project facts, so a newer
 # template replaces the old one. Real change records are never touched.
-$srcTpl = Join-Path $templates '.harness\changes\_template'
+$srcTpl = Join-Path $assets '.harness\changes\_template'
 if (Test-Path -LiteralPath $srcTpl) {
     foreach ($relPath in Get-ChildItem -LiteralPath $srcTpl -Recurse -File -Force -Name) {
         $src = Join-Path $srcTpl $relPath
@@ -751,7 +761,7 @@ if (Test-Path -LiteralPath $srcTpl) {
 }
 # L1 rolling record: add the template only when the project has none; never
 # touch an existing _small.md (it contains real records).
-$srcSmall = Join-Path $templates '.harness\changes\_small.md'
+$srcSmall = Join-Path $assets '.harness\changes\_small.md'
 if (Test-Path -LiteralPath $srcSmall) {
     $rel = '.harness\changes\_small.md'
     $dst = Join-Path $rootPath $rel
@@ -801,7 +811,7 @@ foreach ($m in $migrations) {
     }
 }
 # A project with no old metrics copy still needs the tracked promoted list.
-$srcPromoted = Join-Path $templates '.harness\lessons-promoted.txt'
+$srcPromoted = Join-Path $assets '.harness\lessons-promoted.txt'
 $newPromoted = Join-Path $rootPath '.harness\lessons-promoted.txt'
 $oldPromoted = Join-Path $rootPath '.harness\metrics\promoted.txt'
 if ((Test-Path -LiteralPath $srcPromoted) -and
@@ -811,7 +821,7 @@ if ((Test-Path -LiteralPath $srcPromoted) -and
 }
 
 # ------------------------------------------------------------- AGENTS.md
-$srcAgents = Join-Path $templates 'AGENTS.md'
+$srcAgents = Join-Path $assets 'AGENTS.md'
 $dstAgents = Join-Path $rootPath 'AGENTS.md'
 if (Test-Path -LiteralPath $srcAgents) {
     if (-not (Test-Path -LiteralPath $dstAgents)) {
@@ -831,7 +841,7 @@ elseif (Test-Path -LiteralPath (Join-Path $rootPath '.claude')) { $agentRel = '.
 # CodeBuddy reuses Markdown agents, so an upgrade must refresh them too; leaving
 # it out sent every CodeBuddy project to the MANUAL branch.
 elseif (Test-Path -LiteralPath (Join-Path $rootPath '.codebuddy')) { $agentRel = '.codebuddy\agents' }
-$srcAgentsDir = Join-Path $templates '.trae\agents'
+$srcAgentsDir = Join-Path $assets '.trae\agents'
 if (Test-Path -LiteralPath $srcAgentsDir) {
     if ($null -eq $agentRel) {
         Add-Plan 'MANUAL' '.trae/agents' $srcAgentsDir 'no platform dir found; copy agents by hand if needed'
@@ -852,7 +862,7 @@ if (Test-Path -LiteralPath $srcAgentsDir) {
 
 # ------------------------------------------------------------- .gitignore
 $dstIgnore = Join-Path $rootPath '.gitignore'
-$srcIgnore = Join-Path $templates '.gitignore'
+$srcIgnore = Join-Path $assets '.gitignore'
 if (-not (Test-Path -LiteralPath $dstIgnore)) {
     if (Test-Path -LiteralPath $srcIgnore) { Add-Plan 'ADD' '.gitignore' $srcIgnore 'missing file' }
 } else {

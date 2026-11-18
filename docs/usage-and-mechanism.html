@@ -551,7 +551,7 @@
   <div class="main">
 
     <header class="hero">
-      <div class="eyebrow">harness-bootstrap · v1.30.0</div>
+      <div class="eyebrow">harness-bootstrap · v1.30.1</div>
       <h1>把 AI 编码的约定<br>变成可执行的约束</h1>
       <p class="lede">
         Harness Bootstrap 是一个元技能。它读取一个真实项目，按证据生成
@@ -677,7 +677,7 @@
           <div>
             <h3>放到技能目录</h3>
             <p>TRAE 用 <code>.trae/skills/harness-bootstrap/</code>；Claude Code 用 <code>.claude/skills/harness-bootstrap/</code>；Codex 用 <code>.agents/skills/harness-bootstrap/</code>（子代理在 <code>.codex/agents/*.toml</code>）；CodeBuddy 用 <code>.codebuddy/skills/harness-bootstrap/</code>（子代理在 <code>.codebuddy/agents/*.md</code>）；其它平台按索引模式引用 <code>SKILL.md</code>。同一台设备有多个平台时，只建当前平台，其余给 <code>setup-links.ps1 -Dest</code> 命令，不代建。</p>
-            <pre><code># 包内只有 templates/ 会被复制进项目
+            <pre><code># 包内只有 assets/ 会被复制进项目
 # tools/ 是本包自检用，不随安装分发</code></pre>
           </div>
         </div>
@@ -750,7 +750,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         <code>.harness/skills/README.md</code> 索引 + 常驻文件里的必读清单。
       </p>
 
-      <section class="diagram-shell">
+      <section class="diagram-shell" data-initial-zoom="0.85">
         <p class="diagram-shell__hint">十个阶段；标 AUTO 的判据由脚本判定，HUMAN 只提示不阻断。</p>
         <div class="mermaid-wrap">
           <div class="zoom-controls">
@@ -1050,13 +1050,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
 
 cd D:\your-project
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\templates\scripts\update-harness.ps1 `
+  -File D:\tools\harness-bootstrap\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
   -PackagePath D:\tools\harness-bootstrap -MergeSkills
 
 # 看完计划再执行
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\templates\scripts\update-harness.ps1 `
+  -File D:\tools\harness-bootstrap\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
   -PackagePath D:\tools\harness-bootstrap -Apply -MergeSkills</code></pre>
 
@@ -1187,7 +1187,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
       </div>
 
       <div class="footer">
-        本页基于仓库当前代码（v1.30.0）整理。原始说明见
+        本页基于仓库当前代码（v1.30.1）整理。原始说明见
         <a href="../README.md">README</a>、
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；
@@ -1262,6 +1262,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
     let zoom = 1, fitMode = 'contain', panX = 0, panY = 0, svgW = 0, svgH = 0;
     let sx = 0, sy = 0, spx = 0, spy = 0, touchDist = 0, touchCx = 0, touchCy = 0;
+    const initialZoom = parseFloat(shell.dataset.initialZoom || '0');
 
     function constrainPan() {
       const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
@@ -1297,7 +1298,9 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
         if (chartR >= vpR) { z = aW / svgW; mode = 'width-priority'; }
         else { z = aH / svgH; mode = 'height-priority'; }
       }
-      return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
+      const cap = initialZoom > 0 ? initialZoom : config.maxInitialZoom;
+      if (z > cap) { z = cap; if (initialZoom > 0) mode = 'default'; }
+      return { zoom: clamp(z, config.minZoom, cap), mode };
     }
 
     function fitDiagram() {

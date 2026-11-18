@@ -56,4 +56,4 @@ jobs:
         # it documents the CI wiring installed projects should copy.
         if: github.event_name == 'pull_request'
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File templates\scripts\audit-order.ps1 -Root . -Base "${{ github.event.pull_request.base.sha }}"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File assets\scripts\audit-order.ps1 -Root . -Base "${{ github.event.pull_request.base.sha }}"

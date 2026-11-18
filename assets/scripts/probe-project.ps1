@@ -319,7 +319,7 @@ $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine('')
 foreach ($s in $recSkills) { [void]$md.AppendLine("- ``$s``") }
 [void]$md.AppendLine('')
-[void]$md.AppendLine('> Everything else in templates/skills can stay unbuilt until a real task needs it.')
+[void]$md.AppendLine('> Everything else in assets/skills can stay unbuilt until a real task needs it.')
 [void]$md.AppendLine('> Same correction appearing twice = the signal to add one more skill.')
 [void]$md.AppendLine('')
 [void]$md.AppendLine('### Suggested red-line candidates')

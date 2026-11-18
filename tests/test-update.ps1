@@ -7,7 +7,7 @@
     project config and history are kept, and the version marker is updated.
 
   FIXTURE
-    A throw-away project built from templates/, plus a fake new package whose
+    A throw-away project built from assets/, plus a fake new package whose
     stage-gate.ps1 differs and adds one new script. Nothing is written into
     this repository.
 
@@ -36,15 +36,15 @@ function Check {
 
 if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$proj\.harness" | Out-Null
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\scripts" | Out-Null
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\scripts" | Out-Null
 
 # ------------------------------------------------------------ old install
-Copy-Item -LiteralPath "$pkg\templates\scripts" -Destination "$proj\scripts" -Recurse
+Copy-Item -LiteralPath "$pkg\assets\scripts" -Destination "$proj\scripts" -Recurse
 foreach ($sub in @('rules', 'wiki', 'modules', 'changes')) {
-    Copy-Item -LiteralPath "$pkg\templates\.harness\$sub" -Destination "$proj\.harness\$sub" -Recurse
+    Copy-Item -LiteralPath "$pkg\assets\.harness\$sub" -Destination "$proj\.harness\$sub" -Recurse
 }
-Copy-Item -LiteralPath "$pkg\templates\AGENTS.md" -Destination "$proj\AGENTS.md"
-Copy-Item -LiteralPath "$pkg\templates\.gitignore" -Destination "$proj\.gitignore"
+Copy-Item -LiteralPath "$pkg\assets\AGENTS.md" -Destination "$proj\AGENTS.md"
+Copy-Item -LiteralPath "$pkg\assets\.gitignore" -Destination "$proj\.gitignore"
 Set-Content -LiteralPath "$proj\.harness\.installed-version" -Value '1.0.0' -Encoding ASCII
 New-Item -ItemType Directory -Force -Path "$proj\.harness\metrics" | Out-Null
 Set-Content -LiteralPath "$proj\.harness\metrics\lessons.md" -Value @('# old lessons index', '| old-lesson | 1 |') -Encoding UTF8
@@ -224,30 +224,30 @@ Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value '{"_note":
 Set-Content -LiteralPath "$newPkg\VERSION" -Value 'HARNESS-BOOTSTRAP VERSION 9.9.9' -Encoding ASCII
 # update-harness fails early when the package's checker is missing, so the fake
 # package must carry it even though this test runs with -SkipVerify.
-Copy-Item -LiteralPath "$pkg\templates\scripts\verify-harness.ps1" -Destination "$newPkg\templates\scripts\verify-harness.ps1"
-Copy-Item -LiteralPath "$pkg\templates\scripts\stage-gate.ps1" -Destination "$newPkg\templates\scripts\stage-gate.ps1"
-Add-Content -LiteralPath "$newPkg\templates\scripts\stage-gate.ps1" -Value '# upgrade-test-marker' -Encoding ASCII
-Set-Content -LiteralPath "$newPkg\templates\scripts\new-tool.ps1" -Value '# new tool' -Encoding ASCII
+Copy-Item -LiteralPath "$pkg\assets\scripts\verify-harness.ps1" -Destination "$newPkg\assets\scripts\verify-harness.ps1"
+Copy-Item -LiteralPath "$pkg\assets\scripts\stage-gate.ps1" -Destination "$newPkg\assets\scripts\stage-gate.ps1"
+Add-Content -LiteralPath "$newPkg\assets\scripts\stage-gate.ps1" -Value '# upgrade-test-marker' -Encoding ASCII
+Set-Content -LiteralPath "$newPkg\assets\scripts\new-tool.ps1" -Value '# new tool' -Encoding ASCII
 # The new package must carry the config for the MANUAL branch to be exercised.
-Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-rules.json" -Destination "$newPkg\templates\scripts\red-line-rules.json"
-Copy-Item -LiteralPath "$pkg\templates\scripts\harness-required.json" -Destination "$newPkg\templates\scripts\harness-required.json"
+Copy-Item -LiteralPath "$pkg\assets\scripts\red-line-rules.json" -Destination "$newPkg\assets\scripts\red-line-rules.json"
+Copy-Item -LiteralPath "$pkg\assets\scripts\harness-required.json" -Destination "$newPkg\assets\scripts\harness-required.json"
 # Python scanners are package-owned machinery: they must be UPDATE, not MANUAL.
-Copy-Item -LiteralPath "$pkg\templates\scripts\red-line-scan.py" -Destination "$newPkg\templates\scripts\red-line-scan.py"
-Add-Content -LiteralPath "$newPkg\templates\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
+Copy-Item -LiteralPath "$pkg\assets\scripts\red-line-scan.py" -Destination "$newPkg\assets\scripts\red-line-scan.py"
+Add-Content -LiteralPath "$newPkg\assets\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
 # An installed skill that differs must be MANUAL unless -UpdateSkills is given.
 # The uncompiled fixture keeps a slot marker; the compiled one has none.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills" | Out-Null
-Copy-Item -LiteralPath "$pkg\templates\.harness\skills\README.md" -Destination "$newPkg\templates\.harness\skills\README.md"
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\coding-skill" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md" `
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills" | Out-Null
+Copy-Item -LiteralPath "$pkg\assets\.harness\skills\README.md" -Destination "$newPkg\assets\.harness\skills\README.md"
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\coding-skill" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\coding-skill\SKILL.md" `
     -Value @('# installed skill', '', 'body', '<!-- upgraded-skill -->') -Encoding UTF8
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\compiled-skill" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\compiled-skill\SKILL.md" `
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\compiled-skill" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\compiled-skill\SKILL.md" `
     -Value @('# compiled skill', '', '<!-- slot:data.access -->', 'body', '<!-- upgraded-compiled -->') -Encoding UTF8
 # Marker-based template: the package block changed, the project block still has
 # a slot in the template (the installed copy supplies the compiled body).
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-skill" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-skill\SKILL.md" -Value @(
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-skill" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-skill\SKILL.md" -Value @(
     '---',
     'name: merge-skill',
     'description: template description',
@@ -266,8 +266,8 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-skill
     '<!-- harness:project:end -->'
 ) -Encoding UTF8
 # Legacy template: the installed copy has no markers, so adoption is by heading.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-legacy" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-legacy\SKILL.md" -Value @(
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-legacy" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-legacy\SKILL.md" -Value @(
     '---',
     'name: merge-legacy',
     'description: template description',
@@ -286,8 +286,8 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-legac
     '<!-- harness:project:end -->'
 ) -Encoding UTF8
 # Pending template: the sandbox block has no counterpart on disk.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-pending" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-pending\SKILL.md" -Value @(
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-pending" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-pending\SKILL.md" -Value @(
     '---',
     'name: merge-pending',
     'description: template description',
@@ -308,15 +308,15 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\main-dev\merge-pendi
     '<!-- harness:project:end -->'
 ) -Encoding UTF8
 # Over-budget template: 130 filler lines plus a package block.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\main-dev\merge-big" | Out-Null
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-big" | Out-Null
 $bigLines = @('---', 'name: merge-big', 'description: template description', '---', '', '# big skill', '<!-- harness:package:begin mode -->')
 for ($i = 1; $i -le 130; $i++) { $bigLines += "filler-$i" }
 $bigLines += '<!-- harness:package:end -->'
-[System.IO.File]::WriteAllLines("$newPkg\templates\.harness\skills\main-dev\merge-big\SKILL.md", $bigLines, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllLines("$newPkg\assets\.harness\skills\main-dev\merge-big\SKILL.md", $bigLines, (New-Object System.Text.UTF8Encoding($false)))
 
 # Same skill in the template under the canonical directory name.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\skills\biz-dev\14-renamed-probe" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.harness\skills\biz-dev\14-renamed-probe\SKILL.md" -Value @(
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\biz-dev\14-renamed-probe" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\biz-dev\14-renamed-probe\SKILL.md" -Value @(
     '---',
     'name: renamed-probe',
     'description: template description',
@@ -334,19 +334,19 @@ Set-Content -LiteralPath "$newPkg\templates\.harness\skills\biz-dev\14-renamed-p
     '<!-- harness:project:end -->'
 ) -Encoding UTF8
 # The change template is package-owned: a newer one must reach the project.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness\changes\_template" | Out-Null
-Copy-Item -LiteralPath "$pkg\templates\.harness\changes\_template\summary.md" `
-    -Destination "$newPkg\templates\.harness\changes\_template\summary.md"
-Add-Content -LiteralPath "$newPkg\templates\.harness\changes\_template\summary.md" `
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\changes\_template" | Out-Null
+Copy-Item -LiteralPath "$pkg\assets\.harness\changes\_template\summary.md" `
+    -Destination "$newPkg\assets\.harness\changes\_template\summary.md"
+Add-Content -LiteralPath "$newPkg\assets\.harness\changes\_template\summary.md" `
     -Value '<!-- template-upgrade-marker -->' -Encoding UTF8
-Copy-Item -LiteralPath "$pkg\templates\AGENTS.md" -Destination "$newPkg\templates\AGENTS.md"
-Add-Content -LiteralPath "$newPkg\templates\AGENTS.md" -Value '<!-- new template line -->' -Encoding UTF8
+Copy-Item -LiteralPath "$pkg\assets\AGENTS.md" -Destination "$newPkg\assets\AGENTS.md"
+Add-Content -LiteralPath "$newPkg\assets\AGENTS.md" -Value '<!-- new template line -->' -Encoding UTF8
 # The package ships the red-line summary; its R5/R6 check cells are the source
 # of truth for the known-row merge.
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.harness" | Out-Null
-Copy-Item -LiteralPath "$pkg\templates\.harness\rules" -Destination "$newPkg\templates\.harness\rules" -Recurse
-New-Item -ItemType Directory -Force -Path "$newPkg\templates\.trae\agents" | Out-Null
-Set-Content -LiteralPath "$newPkg\templates\.trae\agents\new-agent.md" -Value '# agent' -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness" | Out-Null
+Copy-Item -LiteralPath "$pkg\assets\.harness\rules" -Destination "$newPkg\assets\.harness\rules" -Recurse
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.trae\agents" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.trae\agents\new-agent.md" -Value '# agent' -Encoding UTF8
 
 # ------------------------------------------------------------------ dry run
 Write-Host ''
@@ -356,7 +356,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'DRY RUN FAILED' -ForegroundColor Red; $fa
 Write-Host $dry
 
 Check 'fixture skill exists' (Test-Path -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md")
-Check 'new package skill exists' (Test-Path -LiteralPath "$newPkg\templates\.harness\skills\main-dev\coding-skill\SKILL.md")
+Check 'new package skill exists' (Test-Path -LiteralPath "$newPkg\assets\.harness\skills\main-dev\coding-skill\SKILL.md")
 Check 'dry-run plans stage-gate UPDATE' ($dry -match '\[UPDATE\]\s+scripts\\stage-gate\.ps1')
 Check 'dry-run plans new-tool ADD'         ($dry -match '\[ADD\s*\]\s+scripts\\new-tool\.ps1')
 Check 'dry-run marks AGENTS.md MERGE'      ($dry -match '\[MERGE\s*\]\s+AGENTS\.md')
@@ -451,7 +451,7 @@ Check 'change template replaced' ((Get-Content -LiteralPath "$proj\.harness\chan
 Check 'project rule untouched' ((Get-Content -LiteralPath $otherRule.FullName -Raw -Encoding UTF8) -match 'project-only-rule-line')
 
 # Known-row merge: only the R5/R6 check cell is framework-owned.
-$srcR5 = @([System.IO.File]::ReadAllLines((Join-Path $newPkg ('templates\' + $redlineRel)), [System.Text.Encoding]::UTF8) |
+$srcR5 = @([System.IO.File]::ReadAllLines((Join-Path $newPkg ('assets\' + $redlineRel)), [System.Text.Encoding]::UTF8) |
     Where-Object { $_ -match '^\| R5 ' })[0]
 $redlineAfter = [System.IO.File]::ReadAllLines($redline, [System.Text.Encoding]::UTF8)
 $dstR5 = @($redlineAfter | Where-Object { $_ -match '^\| R5 ' })[0]
@@ -574,7 +574,7 @@ Write-Host ''
 Write-Host '=== apply with verification deletes the backup ===' -ForegroundColor Cyan
 # A no-op verifier lets this fixture exercise the delete-after-verify branch
 # without needing a full installed harness.
-Set-Content -LiteralPath "$newPkg\templates\scripts\verify-harness.ps1" -Value 'exit 0' -Encoding ASCII
+Set-Content -LiteralPath "$newPkg\assets\scripts\verify-harness.ps1" -Value 'exit 0' -Encoding ASCII
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -SkipHooks -PruneBackups 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'VERIFIED APPLY FAILED' -ForegroundColor Red; $fail++ }
 $upgradeDirs = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Directory -Force -ErrorAction SilentlyContinue)
@@ -585,7 +585,7 @@ Check 'audit records backup deletion' ($marker -match 'backup: deleted after ver
 Write-Host ''
 Write-Host '=== install layout: real sql-review template ===' -ForegroundColor Cyan
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$realSkillPath = Join-Path $repoRoot 'templates\.harness\skills\biz-dev\14-sql-review\SKILL.md'
+$realSkillPath = Join-Path $repoRoot 'assets\.harness\skills\biz-dev\14-sql-review\SKILL.md'
 $realSkill = [System.IO.File]::ReadAllText($realSkillPath, [System.Text.Encoding]::UTF8)
 Check 'install: template carries package and project markers' (($realSkill -match 'harness:package:begin') -and ($realSkill -match 'harness:project:begin'))
 # A slot-only compile: every slot is replaced, nothing else changes.
@@ -605,7 +605,7 @@ Check 'install: no slot outside a project block' ($outsidePrj -notmatch '<!--\s*
 # Every shipped template must be structurally mergeable, not only sql-review.
 # A template with no project block can never be compiled for a real project, and
 # a slot outside a project block would be replaced by the next -MergeSkills.
-$tplRoot = Join-Path $repoRoot 'templates\.harness\skills'
+$tplRoot = Join-Path $repoRoot 'assets\.harness\skills'
 $tplFiles = @(Get-ChildItem -LiteralPath $tplRoot -Recurse -Filter 'SKILL.md' -File)
 $noPrj = 0
 $slotOut = 0
@@ -617,6 +617,19 @@ foreach ($tf in $tplFiles) {
 }
 Check ("all {0} templates declare a project block" -f $tplFiles.Count) ($noPrj -eq 0)
 Check 'no template leaves a slot outside a project block' ($slotOut -eq 0)
+
+Write-Host ''
+Write-Host '=== legacy package layout is still readable ===' -ForegroundColor Cyan
+# 1.30.0 and earlier shipped the payload under templates/. The new script must
+# read it instead of failing with "not a harness package", otherwise the first
+# upgrade after the rename would need a hand-written command.
+$legacyPkg = Join-Path $base 'legacypkg'
+if (Test-Path -LiteralPath $legacyPkg) { Remove-Item -LiteralPath $legacyPkg -Recurse -Force }
+Copy-Item -LiteralPath $newPkg -Destination $legacyPkg -Recurse
+Rename-Item -LiteralPath (Join-Path $legacyPkg 'assets') -NewName 'templates'
+$outLegacy = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $legacyPkg -Root $proj 2>&1 | Out-String
+Check 'legacy templates/ layout accepted' ($LASTEXITCODE -eq 0)
+Check 'legacy layout is reported' ($outLegacy -match 'legacy package layout')
 
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'UPDATE TEST OK' -ForegroundColor Green; exit 0 }

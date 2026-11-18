@@ -236,7 +236,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Before changing anything:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
-# release zip: SKILL.md, VERSION, LICENSE, references/ and templates/ only
+# release zip: SKILL.md, VERSION, LICENSE, references/ and assets/ only
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-zip.ps1
 ```
 

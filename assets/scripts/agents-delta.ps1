@@ -1,4 +1,4 @@
-<#
+﻿<#
   agents-delta.ps1 -- read-only delta report for the resident file (AGENTS.md)
 
   WHY
