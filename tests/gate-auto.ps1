@@ -136,6 +136,17 @@ git -C $proj add .harness/changes/demo/summary.md
 git -C $proj commit -q -m 'docs: initial summary'
 Expect 'commit of an initial summary (record only)' $LASTEXITCODE 0
 
+# Regression: the hook must resolve the task from the record tree, not the
+# branch. On the default branch with exactly one record the association check
+# has to RUN; it used to be skipped because the branch was called main.
+Set-Content -LiteralPath "$proj\MainCode.java" -Value 'public class MainCode {}' -Encoding UTF8
+git -C $proj add MainCode.java
+git -C $proj commit -q -m 'code on the default branch'
+Expect 'default branch + single record passes' $LASTEXITCODE 0
+$gateLog = Join-Path $proj '.harness\metrics\gate.jsonl'
+$skipHits = @(Select-String -LiteralPath $gateLog -Pattern 'assoc_skip' -SimpleMatch -ErrorAction SilentlyContinue).Count
+Expect 'single record on the default branch is not skipped' $skipHits 0
+
 Step 'a new summary cannot be committed together with code'
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo2" | Out-Null
 Set-Content -LiteralPath "$proj\.harness\changes\demo2\summary.md" -Value $s -Encoding UTF8
@@ -192,10 +203,13 @@ Remove-Item -LiteralPath "$proj\.harness\changes\demo3" -Recurse -Force -ErrorAc
 Step 'record association: source commits need a summary or _small.md'
 $mainBranch = (& git -C $proj rev-parse --abbrev-ref HEAD).Trim()
 git -C $proj checkout -q -b feature/assoc
+# The hook no longer reads the branch name, so declare the task the way a real
+# multi-record project must: HARNESS_TASK.
+$env:HARNESS_TASK = 'assoc'
 Set-Content -LiteralPath "$proj\AssocCode.java" -Value 'public class AssocCode {}' -Encoding UTF8
 git -C $proj add AssocCode.java
 git -C $proj commit -q -m 'code without a record'
-Expect 'feature branch code without any record' $LASTEXITCODE 1
+Expect 'code without any record' $LASTEXITCODE 1
 
 # keep the code out of the record commit, otherwise the order guard blocks it
 git -C $proj reset -q HEAD -- AssocCode.java
@@ -206,7 +220,7 @@ git -C $proj commit -q -m 'docs: assoc summary'
 Expect 'record committed before the code' $LASTEXITCODE 0
 git -C $proj add AssocCode.java
 git -C $proj commit -q -m 'code after record'
-Expect 'code after its record on a feature branch' $LASTEXITCODE 0
+Expect 'code after its record passes' $LASTEXITCODE 0
 
 # L1 path: a _small.md row in the same commit replaces the summary
 Set-Content -LiteralPath "$proj\AssocL1.java" -Value 'public class AssocL1 {}' -Encoding UTF8
@@ -224,6 +238,7 @@ $assocEscape = $LASTEXITCODE
 Remove-Item Env:HARNESS_ALLOW_NO_RECORD -ErrorAction SilentlyContinue
 Expect 'HARNESS_ALLOW_NO_RECORD escape' $assocEscape 0
 
+Remove-Item Env:HARNESS_TASK -ErrorAction SilentlyContinue
 git -C $proj checkout -q $mainBranch
 
 Step 'order guard: merge and squash are exempt'

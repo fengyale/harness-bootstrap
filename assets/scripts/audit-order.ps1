@@ -20,9 +20,12 @@
     - Merge commits are skipped: replaying a branch is not "code before doc".
     - Repositories without .harness/changes at the base commit are skipped
       (first harness adoption / legacy import).
-    - The feature pointer comes from -Feature, HARNESS_TASK, GITHUB_HEAD_REF,
-      or a feature|fix|hotfix|bugfix branch (last path segment). Without a
-      pointer the audit cannot attribute code and skips with a clear message.
+    - The feature pointer comes from -Feature or HARNESS_TASK, then from a
+      "Harness-Task: <name>" trailer in each commit, then from the record tree
+      (exactly one record added by the range, or exactly one record at HEAD).
+      The branch name is NOT used: a branch is only a label, and main/dev carry
+      no task identity. A commit whose pointer cannot be resolved is reported
+      as unattributed instead of being silently skipped.
 
   USAGE
     powershell -File scripts\audit-order.ps1 -Root . -Base <merge-base-sha>
@@ -79,21 +82,22 @@ if (-not $Base) {
     exit 2
 }
 
+# Feature pointer resolution. The branch name is deliberately NOT consulted: a
+# branch is only a label, and main/dev carry no task identity. The record tree
+# already holds the answer, so the pointer comes from explicit input or from it.
 if (-not $Feature) { $Feature = $env:HARNESS_TASK }
-if (-not $Feature -and $env:GITHUB_HEAD_REF) {
-    if ($env:GITHUB_HEAD_REF -match '^(feature|fix|hotfix|bugfix)/(.+)$') {
-        $Feature = ($Matches[2] -split '/')[-1]
-    }
-}
 if (-not $Feature) {
-    $branch = FirstLine -GitArgs @('rev-parse', '--abbrev-ref', 'HEAD')
-    if ($branch -match '^(feature|fix|hotfix|bugfix)/(.+)$') {
-        $Feature = ($Matches[2] -split '/')[-1]
+    # Local pointer written by check-summary.ps1 when a task starts. A CI runner
+    # has a fresh .git, so this normally resolves only for local runs.
+    $ptrRel = FirstLine -GitArgs @('rev-parse', '--git-path', 'harness-current-task')
+    if ($ptrRel) {
+        $ptr = if ([System.IO.Path]::IsPathRooted($ptrRel)) { $ptrRel } else { Join-Path $top $ptrRel }
+        if (Test-Path -LiteralPath $ptr) {
+            $line = @([System.IO.File]::ReadAllLines($ptr, [System.Text.Encoding]::UTF8)) |
+                    Where-Object { $_.Trim() } | Select-Object -First 1
+            if ($line) { $Feature = ([string]$line).Trim() }
+        }
     }
-}
-if (-not $Feature) {
-    Write-Host '[SKIP] no feature pointer (use -Feature, HARNESS_TASK, GITHUB_HEAD_REF or a feature/fix branch)' -ForegroundColor Yellow
-    exit 0
 }
 
 # First harness adoption: nothing to attribute against.
@@ -109,8 +113,22 @@ if (-not $baseTree) {
 $sourceRe = '\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less|json|yml|yaml|properties|toml|ini)$'
 $excludeRe = '^(\.harness|\.trae|\.claude|scripts|docs|node_modules|dist|build|target)/'
 
+# Records that exist at HEAD, and records first added inside the audited range.
+# Both are repo facts; neither depends on a branch name. When the range adds
+# exactly one record it names itself; otherwise a lone record at HEAD does.
+$recordDirs = @(GitCmd -GitArgs @('ls-tree', '-d', '--name-only', "${Head}:.harness/changes") |
+                Where-Object { $_ -and $_ -ne '_template' })
+$addedRecords = @(GitCmd -GitArgs @('diff', '--name-only', '--diff-filter=A', $Base, $Head, '--', '.harness/changes') |
+                  Where-Object { $_ -match '^\.harness/changes/[^/]+/summary\.md$' } |
+                  ForEach-Object { ($_ -split '/')[2] } | Select-Object -Unique)
+
+$autoFeature = $Feature
+if (-not $autoFeature -and $addedRecords.Count -eq 1) { $autoFeature = $addedRecords[0] }
+if (-not $autoFeature -and $recordDirs.Count -eq 1)   { $autoFeature = $recordDirs[0] }
+
 $commits = @(GitCmd -GitArgs @('rev-list', '--reverse', '--no-merges', "$Base..$Head") | Where-Object { $_ })
 $violations = @()
+$unattributed = @()
 $audited = 0
 
 foreach ($sha in $commits) {
@@ -122,22 +140,32 @@ foreach ($sha in $commits) {
     if ($source.Count -eq 0) { continue }
     $audited++
 
+    # A per-commit trailer beats the range-wide pointer, so several tasks inside
+    # one range stay separable without renaming the branch.
+    $commitFeature = $autoFeature
+    if (-not $commitFeature) {
+        $t = [regex]::Match($message, '(?im)^[ \t]*harness-task[ \t]*:[ \t]*(\S[^\r\n]*?)[ \t]*$')
+        if ($t.Success) { $commitFeature = $t.Groups[1].Value.Trim() }
+    }
+    if (-not $commitFeature) { $unattributed += $sha; continue }
+
     $addsSummary = @($files | Where-Object {
         $_ -match '^\.harness/changes/[^/]+/summary\.md$' -and $_ -notmatch '^\.harness/changes/_template/'
     }).Count -gt 0
     $touchesSmall = @($files | Where-Object { $_ -eq '.harness/changes/_small.md' }).Count -gt 0
 
-    $hasSummary = (FirstLine -GitArgs @('rev-parse', '--verify', '--quiet', "${sha}:.harness/changes/$Feature/summary.md")).Length -gt 0
+    $hasSummary = (FirstLine -GitArgs @('rev-parse', '--verify', '--quiet', "${sha}:.harness/changes/$commitFeature/summary.md")).Length -gt 0
 
     $reason = $null
     if ($addsSummary) {
         $reason = 'a new summary is bundled with source changes in one commit'
     } elseif (-not ($touchesSmall -or $hasSummary)) {
-        $reason = "no summary for feature '$Feature' exists before this source commit"
+        $reason = "no summary for feature '$commitFeature' exists before this source commit"
     }
     if ($reason) {
         $violations += [pscustomobject]@{
             sha     = $sha.Substring(0, [Math]::Min(7, $sha.Length))
+            feature = $commitFeature
             reason  = $reason
             sources = $source.Count
             message = (($message -split "`n")[0]).Trim()
@@ -145,24 +173,33 @@ foreach ($sha in $commits) {
     }
 }
 
+$featureLabel = if ($autoFeature) { $autoFeature } else { 'per-commit trailer' }
+
 if ($Json) {
     [pscustomobject]@{
-        feature    = $Feature
-        base       = $Base
-        head       = $Head
-        audited    = $audited
-        violations = @($violations)
+        feature      = $autoFeature
+        base         = $Base
+        head         = $Head
+        audited      = $audited
+        unattributed = @($unattributed)
+        violations   = @($violations)
     } | ConvertTo-Json -Depth 4
     if ($violations.Count -gt 0) { exit 1 }
     exit 0
 }
 
 if ($violations.Count -eq 0) {
-    Write-Host "[PASS] $audited source commit(s) audited for feature '$Feature': no order violation" -ForegroundColor Green
+    if ($unattributed.Count -gt 0) {
+        Write-Host "[SKIP] $($unattributed.Count) of $audited source commit(s) could not be attributed:" -ForegroundColor Yellow
+        Write-Host "       no -Feature / HARNESS_TASK / 'Harness-Task:' trailer, and $($recordDirs.Count) record(s) exist at HEAD." -ForegroundColor Yellow
+        Write-Host '       pass -Feature NAME, or add a "Harness-Task: NAME" trailer to the commit.' -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host ("[PASS] {0} source commit(s) audited for {1}: no order violation" -f $audited, $featureLabel) -ForegroundColor Green
     exit 0
 }
 
-Write-Host "[FAIL] summary-order violations for feature '$Feature':" -ForegroundColor Red
+Write-Host ("[FAIL] summary-order violations ({0}):" -f $featureLabel) -ForegroundColor Red
 foreach ($v in $violations) {
     Write-Host ("  {0}  {1}  ({2} source file(s))  {3}" -f $v.sha, $v.reason, $v.sources, $v.message) -ForegroundColor Red
 }

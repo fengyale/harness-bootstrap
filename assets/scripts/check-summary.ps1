@@ -443,4 +443,19 @@ if ($fails.Count -gt 0) {
 }
 
 if (-not $Quiet) { Write-Host '[OK] summary fields valid' }
+
+# Remember the task locally, but only after the summary validated: a typo in
+# -Feature must not become the pointer the hook later trusts. The file lives in
+# the git dir (never committed, no merge conflicts, no .gitignore entry), and it
+# is what lets the pre-commit hook attribute code without reading a branch name.
+if ($Feature -and -not $File) {
+    try {
+        $ptrRel = (& git -C $rootPath rev-parse --git-path harness-current-task 2>$null | Select-Object -First 1)
+        if ($ptrRel) {
+            $ptrPath = ([string]$ptrRel).Trim()
+            if (-not [System.IO.Path]::IsPathRooted($ptrPath)) { $ptrPath = Join-Path $rootPath $ptrPath }
+            [System.IO.File]::WriteAllText($ptrPath, $Feature + "`n", (New-Object System.Text.UTF8Encoding($false)))
+        }
+    } catch { }
+}
 exit 0

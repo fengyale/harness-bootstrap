@@ -135,5 +135,5 @@
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查——它们做完才知道。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**
-- **源码提交必须能归因到记录**：在 `feature/` 或 `fix/` 前缀的分支下（分支名即特性名），或设置 `HARNESS_TASK` 环境变量指向特性名；HEAD 需已有该特性的 `summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
+- **源码提交必须能归因到记录**：特性名按 `HARNESS_TASK=特性名` → `check-summary -Feature 特性名` 自动写入的 `.git/harness-current-task` → `.harness/changes/` 下唯一目录 的顺序解析，**与分支名无关**；HEAD 需已有该特性的 `summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
 - **提交信息用中文**：格式为 `type(scope): 中文说明`，type 取 feat / fix / refactor / test / docs / chore；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子

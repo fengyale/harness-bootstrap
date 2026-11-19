@@ -1,7 +1,18 @@
-HARNESS-BOOTSTRAP VERSION 1.31.0
+HARNESS-BOOTSTRAP VERSION 1.31.1
 
 changelog
 ---------
+1.31.1  (归因不再依赖 git 分支名)
+- 门禁：源码归因删除对分支名的依赖。之前只认 feature/fix/hotfix/bugfix 前缀，
+  main / dev 上整条检查静默跳过，等于从未执行。现在按 -Feature -> HARNESS_TASK ->
+  .git/harness-current-task（check-summary 通过后自动写入）-> 提交信息里的
+  Harness-Task: trailer -> 记录树（区间内新增的唯一记录 / 唯一变更目录）解析
+- 门禁：无法归因不再静默。hook 写 gate.jsonl 的 assoc_skip 事件；CI 输出
+  [SKIP] N of M source commit(s) could not be attributed，并给出两种修法
+- 测试：audit-order 覆盖「默认分支 + 单记录必须被审计」与 trailer 归属；
+  gate-auto 断言默认分支下不产生 assoc_skip
+- 文档：AGENTS.md / 开发流程规范 / changes/README 统一为「分支命名自由，
+  门禁不读分支名」；CI 审计的 -Feature 说明同步
 1.31.0  (编码前验内容 / L1 声明按真实 diff 核对)
 - 门禁：`check-summary -Stage initial` 不再只查字段名——验收标准、业务影响、
   任务拆分三节必须是真的内容，留模板占位符直接 FAIL。这一条对应「字段填满、

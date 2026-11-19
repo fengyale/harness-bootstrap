@@ -327,11 +327,13 @@ fi
 # Record association. "Write the summary first" only helps when a code commit
 # can be traced back to a record. A source change is accepted when one of these
 # holds: HEAD already has .harness/changes/<feature>/summary.md, this commit
-# stages a summary, or it stages a _small.md row (L1). The feature name comes
-# from HARNESS_TASK, else from a feature/fix/hotfix/bugfix branch (last segment,
-# matching the "directory name = branch name" rule in changes/README.md).
-# On main/develop there is no feature pointer, so the check is skipped: the gate
-# cannot attribute the code, and blocking every commit there would be unusable.
+# stages a summary, or it stages a _small.md row (L1).
+#
+# The feature name comes from HARNESS_TASK, then from .git/harness-current-task
+# (written by check-summary.ps1 when a task starts), then from the record tree
+# when exactly one change directory exists. The branch name is NOT used: a
+# branch is only a label, and main/dev carry no task identity. A commit that
+# cannot be attributed is recorded in gate.jsonl instead of vanishing.
 # HARNESS_ALLOW_NO_RECORD=1 is the explicit exception for L0 / one-off imports.
 ASSOC_MISS=0
 SRC_EXT_RE='\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less|json|yml|yaml|properties|toml|ini)$'
@@ -341,10 +343,16 @@ if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW
   if git cat-file -e HEAD:.harness/changes 2>/dev/null; then
     TASK_NAME="${HARNESS_TASK:-}"
     if [ -z "$TASK_NAME" ]; then
-      BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-      case "$BRANCH" in
-        feature/*|fix/*|hotfix/*|bugfix/*) TASK_NAME=${BRANCH#*/}; TASK_NAME=${TASK_NAME##*/} ;;
-      esac
+      PTR=$(git rev-parse --git-path harness-current-task 2>/dev/null | head -n 1)
+      if [ -n "$PTR" ] && [ -f "$PTR" ]; then
+        TASK_NAME=$(head -n 1 "$PTR" 2>/dev/null | tr -d '\r' | sed 's/[[:space:]]*$//')
+      fi
+    fi
+    SLOT_N=0
+    if [ -z "$TASK_NAME" ]; then
+      SLOTS=$(git ls-tree -d --name-only HEAD:.harness/changes 2>/dev/null | grep -v '^_template$' || true)
+      SLOT_N=$(printf '%s\n' "$SLOTS" | grep -c . || true)
+      if [ "${SLOT_N:-0}" -eq 1 ]; then TASK_NAME=$(printf '%s\n' "$SLOTS" | head -n 1); fi
     fi
     if [ -n "$TASK_NAME" ]; then
       HAS_RECORD=0
@@ -360,6 +368,11 @@ if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW
         echo "         3) declare the right feature: HARNESS_TASK=<name>; L0 / one-off: HARNESS_ALLOW_NO_RECORD=1" >&2
         ASSOC_MISS=1
       fi
+    else
+      # No pointer and more than one record: the gate cannot prove which record
+      # this code belongs to. Passing silently is what hid the gap before, so
+      # leave an event metrics.ps1 can count.
+      printf '{"event":"assoc_skip","ts":"%s","reason":"no-pointer","records":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SLOT_N:-0}" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
     fi
   fi
 fi
