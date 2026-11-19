@@ -112,11 +112,18 @@ a backport.
 1. Branch from `main`: `chore/release-<x.y.z>`.
 2. Add the entry to `VERSION` (top of the changelog).
 3. Regenerate the release metadata: `py tools\parse-changelog.py`
-4. Run `tools\verify-package.ps1` and `tests\run-all.ps1`.
+4. Run `tools\verify-package.ps1`, `tests\run-all.ps1` and `tools\package-zip.ps1`
+   (the zip must hold only `SKILL.md`, `VERSION`, `LICENSE`, `references/`, `assets/`).
 5. Commit, push the branch, open a PR; merge only after `verify` is green.
-6. From the updated `main`, publish the GitHub Release:
-   `GITHUB_TOKEN=... py tools\publish-releases.py`
-   (it creates the `v<x.y.z>` tag and the release; existing tags are skipped).
+6. From the updated `main`, tag the release commit and publish the release:
+   ```powershell
+   git tag v<x.y.z>
+   git push origin v<x.y.z>
+   GITHUB_TOKEN=... py tools\publish-releases.py --from <x.y.z>
+   ```
+   The script creates the GitHub Release only: it does not create the tag and it
+   does not upload the zip. `--from` means "this version and older"; existing
+   releases are skipped, so the command is safe to re-run.
 
 ## Reporting bugs
 

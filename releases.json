@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.31.2",
+    "title": "(文档对齐 1.31 行为 / 发版流程写实)",
+    "body": [
+      "- 质量分级：check-summary 写明 initial 查三节内容、final 查收尾计数；",
+      "  install-git-hooks 补 L1 声明核对；audit-order 改为按显式声明 /",
+      "  harness-current-task / trailer / 唯一记录解析，删掉会过期的场景计数",
+      "- CONTRIBUTING：发布流程补 package-zip 与 zip 内容核对；写明 tag 需单独推送，",
+      "  publish-releases.py 只建 Release、不建 tag、不传 zip，--from 可安全重跑",
+      "- 案例页：中英文版本标记补到 1.31.2（1.31.1 漏改）"
+    ]
+  },
+  {
     "version": "1.31.1",
     "title": "(归因不再依赖 git 分支名)",
     "body": [

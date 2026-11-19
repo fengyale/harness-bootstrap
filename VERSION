@@ -1,7 +1,17 @@
-HARNESS-BOOTSTRAP VERSION 1.31.1
+HARNESS-BOOTSTRAP VERSION 1.31.2
 
 changelog
 ---------
+1.31.2  (文档对齐 1.31 行为 / 发版流程写实)
+- 质量分级：check-summary 写明 initial 查三节内容、final 查收尾计数；install-git-hooks
+  补 L1 声明核对；audit-order 改为按显式声明 / harness-current-task / trailer /
+  唯一记录解析，并删掉会过期的"7 个场景"计数
+- CONTRIBUTING 发布流程：补 package-zip 与 zip 内容核对；写明 tag 要单独推，
+  publish-releases.py 只建 Release、不建 tag、不传 zip，--from 可安全重跑
+- 案例页：中英文那句"包本身已迭代到"补到 1.31.2（1.31.1 漏改，仍是 1.31.0）
+- 维护者本地文档（不入库）同步：发布清单加 tag / Release 两步，常见红补"技能
+  总行数 / 契约 pattern / 批量写丢 BOM"三类，已知坑补并发写覆盖与归因顺序
+
 1.31.1  (归因不再依赖 git 分支名)
 - 门禁：源码归因删除对分支名的依赖。之前只认 feature/fix/hotfix/bugfix 前缀，
   main / dev 上整条检查静默跳过，等于从未执行。现在按 -Feature -> HARNESS_TASK ->
