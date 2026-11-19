@@ -551,7 +551,7 @@
   <div class="main">
 
     <header class="hero">
-      <div class="eyebrow">harness-bootstrap · v1.30.2</div>
+      <div class="eyebrow">harness-bootstrap · v1.31.0</div>
       <h1>把 AI 编码的约定<br>变成可执行的约束</h1>
       <p class="lede">
         Harness Bootstrap 是一个元技能。它读取一个真实项目，按证据生成
@@ -608,7 +608,7 @@
           <h3><span class="dot" style="background:var(--green)"></span>交付物是机制</h3>
           <p>交付的东西主要是能拦人的 hook、能判定字段的脚本、能看趋势的度量，md 只是索引和说明。</p>
           <ul>
-            <li><code>pre-commit</code>：红线 + SQL 评审 + summary 基础字段</li>
+            <li><code>pre-commit</code>：红线 + SQL 评审 + summary 字段与三节内容 + L1 声明核对</li>
             <li><code>stage-gate</code>：10 个阶段，AUTO 真跑命令</li>
             <li><code>metrics</code>：纠正次数、拦截数、绕过率、技能加载率</li>
           </ul>
@@ -767,7 +767,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         </div>
         <script type="text/plain" class="diagram-source">
           flowchart TD
-            S1["1 需求分析<br/>summary.md + 基础字段"] --> S2["2 方案设计<br/>影响面 / 风险 / 任务拆分"]
+            S1["1 需求分析<br/>summary.md + 验收标准 / 影响面 / 任务拆分"] --> S2["2 方案设计<br/>影响面 / 风险 / 任务拆分"]
             S2 --> S3["3 编码<br/>AUTO: 编译命令真跑"]
             S3 --> S4["4 静态检查<br/>pre-commit: 红线 + SQL + 字段"]
             S4 --> S5["5 测试<br/>AUTO: 测试命令真跑"]
@@ -823,8 +823,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         <table>
           <thead><tr><th>字段</th><th>阶段 1 / pre-commit</th><th>阶段 10</th></tr></thead>
           <tbody>
-            <tr><td><code>loaded_skills</code> / <code>load_skip_reason</code></td><td>必填</td><td>保留</td></tr>
-            <tr><td><code>flow</code> / <code>corrections</code> / <code>impl_corrections</code> / <code>touched_modules</code></td><td>必填</td><td>保留</td></tr>
+            <tr><td><code>flow</code> / <code>touched_modules</code> / <code>loaded_skills</code> / <code>load_skip_reason</code></td><td>必填</td><td>保留</td></tr>
+            <tr><td>验收标准 / 业务影响 / 任务拆分（三节内容）</td><td><strong>必填，占位符即拒</strong></td><td>保留</td></tr>
+            <tr><td><code>corrections</code> / <code>impl_corrections</code></td><td>不查（做完才知道，先写只能是假数）</td><td>必填；<code>impl_corrections</code> 不得大于 <code>corrections</code></td></tr>
             <tr><td><code>lesson_id</code></td><td>不查（WIP 提交不骚扰）</td><td>必填；<code>corrections ≥ 1</code> 时必须是真实 kebab-case id，无教训写 <code>-</code></td></tr>
             <tr><td><code>sql_review</code></td><td>staged diff 含 SQL 时查结论（结论与四层是否矛盾）</td><td>必填；无 SQL 写「无 SQL 变更」；结论「通过」时四层不得有未验证项，引用的证据路径必须存在，数据源必须在编译后的绑定里</td></tr>
           </tbody>
@@ -890,7 +891,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
             <li>只读 <code>git diff --cached</code>（staged diff）</li>
             <li>红线扫描只覆盖新增行，存量违规不阻塞</li>
             <li>有 SQL 规则时，staged diff 含 SQL 就必须带 <code>sql_review</code> 结论</li>
-            <li>summary 只查基础字段；<code>-Stage initial</code></li>
+            <li>summary 查字段与三节内容（验收标准 / 影响面 / 任务拆分）；<code>-Stage initial</code></li>
+            <li>声明 L1 的提交按真实 diff 核对：&gt;1 文件或 &gt;30 行直接拒绝</li>
             <li>扫描器 / 运行时 / diff 生成失败 → fail-closed</li>
           </ul>
         </div>
@@ -1187,7 +1189,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
       </div>
 
       <div class="footer">
-        本页基于仓库当前代码（v1.30.2）整理。原始说明见
+        本页基于仓库当前代码（v1.31.0）整理。原始说明见
         <a href="../README.md">README</a>、
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；

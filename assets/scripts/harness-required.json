@@ -19,6 +19,12 @@
     "datasourceLabel": "数据源",
     "sourceTokenPattern": "[A-Z][A-Z0-9]*_[A-Z0-9_]+"
   },
+  "summaryContent": {
+    "_说明": "check-summary.ps1 用它校验「编码前必须存在」的三节内容：功能点与验收标准、业务影响 / 技术变更清单、任务拆分。每节至少要有一行真实内容（不是占位符，不是表头）。只写字段名不写内容，等于没做需求分析。中文节名放在这里，脚本保持纯 ASCII。",
+    "acceptance": ["功能点与验收标准"],
+    "impact": ["业务影响", "技术变更清单"],
+    "tasks": ["任务拆分"]
+  },
   "requiredAnyOf": [
     ["scripts/red-line-scan.ps1", "scripts/red-line-scan.py"]
   ],

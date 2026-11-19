@@ -81,7 +81,7 @@
       "id": "precommit-checks-initial-only",
       "file": "assets/scripts/install-git-hooks.ps1",
       "pattern": "-Stage initial",
-      "why": "pre-commit 只查基础字段；收尾字段由 stage-gate 阶段 10 查，避免 WIP 提交被逼用 --no-verify。"
+      "why": "pre-commit 只查 initial 档（字段 + 内容节）；收尾字段由 stage-gate 阶段 10 查，避免 WIP 提交被逼用 --no-verify。"
     },
     {
       "id": "hooks-path-override-warned",
@@ -98,8 +98,8 @@
     {
       "id": "agents-field-split",
       "file": "assets/AGENTS.md",
-      "pattern": "pre-commit 只查基础字段",
-      "why": "常驻文件是 agent 每轮读的入口，字段分工必须写在这里。"
+      "pattern": "pre-commit 查档位 / 加载技能 / 触及模块",
+      "why": "常驻文件是 agent 每轮读的入口，字段与内容分工必须写在这里。"
     },
     {
       "id": "grounding-anchor-example",

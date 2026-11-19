@@ -1,5 +1,22 @@
 [
   {
+    "version": "1.31.0",
+    "title": "(编码前验内容 / L1 声明按真实 diff 核对)",
+    "body": [
+      "- 门禁：check-summary -Stage initial 不再只查字段名——验收标准、业务影响、",
+      "  任务拆分三节必须是真的内容，留模板占位符直接 FAIL",
+      "- 分工：corrections / impl_corrections 移到 -Stage final；开工时不可能知道，",
+      "  先填只能是假数，改为收尾一次填对并校验 impl <= corr",
+      "- 门禁：pre-commit 新增 L1 声明核对。暂存 _small.md 即视为声明 L1，按真实",
+      "  numstat 比对：超过 1 个源文件或 30 行直接拒绝，并提示改走 summary",
+      "- 技能：coding-skill 第 1 步换成 stage-gate -Stage 3 一条命令，定档公式写死",
+      "  「1 文件 + <=30 行 + 不碰公共层/DB/配置/接口 = L1」",
+      "- 文档与契约：AGENTS.md、开发流程规范、hooks 说明、README、说明页同步",
+      "- 测试：regression 覆盖占位内容被拒 / 缺收尾计数时 initial 通过 final 拒绝；",
+      "  gate-auto 覆盖两文件标 L1 被拒 / 单文件 40 行标 L1 被拒"
+    ]
+  },
+  {
     "version": "1.30.2",
     "title": "(文档去 AI 味 / 升级段落拆条)",
     "body": [

@@ -1,7 +1,24 @@
-HARNESS-BOOTSTRAP VERSION 1.30.2
+HARNESS-BOOTSTRAP VERSION 1.31.0
 
 changelog
 ---------
+1.31.0  (编码前验内容 / L1 声明按真实 diff 核对)
+- 门禁：`check-summary -Stage initial` 不再只查字段名——验收标准、业务影响、
+  任务拆分三节必须是真的内容，留模板占位符直接 FAIL。这一条对应「字段填满、
+  内容还是模板」仍能开工的漏项
+- 分工：`corrections` / `impl_corrections` 移到 `-Stage final`。它们在开工时
+  不可能知道，先填只能是假数；现在改为收尾一次填对，`impl ≤ corr` 同时校验
+- 门禁：pre-commit 新增 L1 声明核对。暂存 `_small.md` 即视为声明 L1，脚本按
+  真实 `--numstat` 比对：超过 1 个源文件或 30 行直接拒绝，并提示改走 summary。
+  事前不可能知道真实大小，所以校验点放在提交时，不给小改增加负担
+- 技能：`coding-skill` 第 1 步换成一条可失败的命令（`stage-gate -Stage 3`），
+  定档公式写死「1 文件 + ≤30 行 + 不碰公共层/DB/配置/接口 = L1」；
+  `request-analysis` 同步要求三节内容
+- 文档：AGENTS.md、开发流程规范、hooks 说明、README、README.en、说明页同步；
+  contract `agents-field-split` 的匹配串随之更新
+- 测试：regression 新增「占位内容被拒」「缺收尾计数时 initial 通过、final 拒绝」；
+  gate-auto 新增「两文件标 L1 被拒」「单文件 40 行标 L1 被拒」
+
 1.30.2  (文档去 AI 味 / 升级段落拆条)
 - README / README.en：开头不再用"不是A，也不是B"的否定排比；六类失败、契约说明、
   证据、和模板包的区别等段落改成直述；"模板包的区别"三条对仗合并成一段

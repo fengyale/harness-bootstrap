@@ -36,8 +36,8 @@ description: 需求分析与拆解：把一句话需求转成可验证的任务�
 1. 复述需求，写成**一句可验证的验收描述**（模板见下）
 2. 定位模块，列出受影响的接口、表、前端页面、定时任务、消息
 3. 与项目硬约束比对，冲突先报，不自行取舍
-4. 按档位落盘：L0 不建记录；L1 在 `.harness/changes/_small.md` 追加一行（字段按表头填齐）；L2/L3 **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md` 再填
-5. L2/L3 填完骨架先跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码。通过后**单独提交一次**（只含 `.harness/` 下文件），再进入编码。L1 的 `_small.md` 行由 `metrics.ps1` 解析
+4. 按档位落盘：L0 不建记录；L1 在 `.harness/changes/_small.md` 追加一行（字段按表头填齐）；L2/L3 **复制** `.harness/changes/_template/summary.md` 到 `.harness/changes/<特性>/summary.md`，**功能点与验收标准 / 业务影响 / 任务拆分三节必须写成真内容**，留模板占位符等于没做
+5. L2/L3 跑 `check-summary.ps1 -Feature <特性> -Stage initial`；不通过不得开始编码（它现在校验的就是上面三节内容，不是只查字段名）。通过后**单独提交一次**（只含 `.harness/` 下文件），再进入编码。L1 的 `_small.md` 行由 `metrics.ps1` 解析，提交时 pre-commit 会核对 diff 是否真的没超过 1 文件 / 30 行
 6. 无法确认的标 `TODO(待确认)`，**开工前只问一次**
 
 ### 验收描述模板

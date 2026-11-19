@@ -54,6 +54,13 @@ $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', 'sql_review: 
 # A3+ needs a conclusion: fill the shortfall section (none markers are legal)
 $tpl = $tpl -replace '(?m)^- 本次暴露的短板：[^\r\n]*', '- 本次暴露的短板：无'
 $tpl = $tpl -replace '(?m)^- 已补的能力：[^\r\n]*', '- 已补的能力：无'
+# initial checks the three content sections: a filled field block alone is not
+# an analysis, so the fixture must fill them like a real one would.
+$tpl = $tpl -replace '(?m)^\| F1 \|.*$', '| F1 | demo feature | returns 200 | no retries |'
+$tpl = $tpl -replace '(?m)^- 受影响模块：.*$', '- 受影响模块：demo'
+$tpl = $tpl -replace '(?m)^- 用户影响范围：.*$', '- 用户影响范围：none'
+$tpl = $tpl -replace '(?m)^- 与已有特性的关系：.*$', '- 与已有特性的关系：none'
+$tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
 Step 'check-summary initial / final'
@@ -61,6 +68,35 @@ Step 'check-summary initial / final'
 if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL FAILED" -ForegroundColor Red; $script:fail++ }
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final
 if ($LASTEXITCODE -ne 0) { Write-Host "FINAL FAILED" -ForegroundColor Red; $script:fail++ }
+
+Step 'initial validates content, not the close-out counts'
+# The failure this guards: every field filled, the three content sections still
+# templates. That summary used to pass and let coding start with no acceptance
+# criteria at all.
+$badDir = Join-Path $proj '.harness\changes\bad-content'
+New-Item -ItemType Directory -Force -Path $badDir | Out-Null
+$bad = Get-Content "$pkg\assets\.harness\changes\_template\summary.md" -Raw -Encoding UTF8
+$bad = $bad -replace 'YYYY-MM-DD', (Get-Date -Format 'yyyy-MM-dd')
+$bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: request-analysis'
+$bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: demo'
+$bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2'
+Set-Content -LiteralPath (Join-Path $badDir 'summary.md') -Value $bad -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $badDir 'summary.md') -Stage initial | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "INITIAL ACCEPTED A SUMMARY WITH PLACEHOLDER CONTENT" -ForegroundColor Red; $script:fail++ }
+
+# Corrections are only knowable at close-out, so their absence must not block
+# the initial stage (it did before, which forced a fake "corrections: 0").
+$noCounts = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', '' -replace '(?m)(?<![A-Za-z0-9_\-])impl_corrections:[^\r\n]*', ''
+$countDir = Join-Path $proj '.harness\changes\no-counts'
+New-Item -ItemType Directory -Force -Path $countDir | Out-Null
+Set-Content -LiteralPath (Join-Path $countDir 'summary.md') -Value $noCounts -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $countDir 'summary.md') -Stage initial | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL REJECTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $countDir 'summary.md') -Stage final | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
+# These two fixtures are probes, not tasks: leaving them in .harness/changes
+# would add demo-lesson to the lesson counter and break stage 10 below.
+Remove-Item -LiteralPath $badDir, $countDir -Recurse -Force
 
 Step 'stage-gate -All'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -All -Feature demo

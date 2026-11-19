@@ -119,7 +119,7 @@
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
 | `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-MergeSkills` 用新版通用段并保留项目绑定（推荐）；`-UpdateSkills` 只替换未编译技能；`-ForceSkills` 强制覆盖 |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
-| `scripts/check-summary.ps1` | `summary.md` 字段校验：pre-commit 只查基础字段，stage-gate 阶段 10 查收尾字段 |
+| `scripts/check-summary.ps1` | `summary.md` 校验：pre-commit 查档位 / 技能 / 模块 + 验收标准、影响面、任务拆分三节内容；阶段 10 查收尾字段 |
 | `scripts/audit-order.ps1` | CI 提交区间审计：源码提交前是否已有 summary；`[L0]` 豁免，合并提交跳过 |
 
 > 非 TRAE 平台把 `.trae/agents/` 换成探测到的目录（Claude 为 `.claude/agents/`）；两者都没有时按清单模式手工评审，不要假装子智能体存在。
@@ -130,10 +130,10 @@
 - **加载范围**：默认只读「本任务涉及的模块卡 + 直接相关的 1–2 份 wiki / 规则」；**技能与模块卡不占此额度**，按流程必上。
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。
-- **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/` 下的特性目录（目录名即特性名），运行 `check-summary.ps1 -Feature 特性名 -Stage initial` 通过后**单独提交一次**（只含 `.harness/` 下文件），再改代码——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交，因为 git 只能看提交顺序、看不到编辑顺序。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
+- **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行，**提交时 pre-commit 按实际 diff 核对，超过 1 文件或 30 行会被拒绝**；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/` 下的特性目录（目录名即特性名），运行 `check-summary.ps1 -Feature 特性名 -Stage initial` 通过后**单独提交一次**（只含 `.harness/` 下文件），再改代码——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交，因为 git 只能看提交顺序、看不到编辑顺序。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
 - **必上技能**：收到需求先加载 `request-analysis`；动代码先加载 `coding-skill`；合并前加载 `expert-reviewer`
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
-- **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed。分工：**pre-commit 只查 summary 基础字段**，`lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查。**缺字段或留占位符 = 任务未完成**
+- **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查——它们做完才知道。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**
 - **源码提交必须能归因到记录**：在 `feature/` 或 `fix/` 前缀的分支下（分支名即特性名），或设置 `HARNESS_TASK` 环境变量指向特性名；HEAD 需已有该特性的 `summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
 - **提交信息用中文**：格式为 `type(scope): 中文说明`，type 取 feat / fix / refactor / test / docs / chore；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子

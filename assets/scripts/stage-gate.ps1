@@ -58,7 +58,7 @@ $stageDefs = @(
     New-Stage '1' 'requirement analysis' @(
         @{ Id='summary-exists';       Kind='AUTO';  Text='summary.md exists under .harness/changes/<feature>/' },
         @{ Id='summary-sections';     Kind='AUTO';  Text='summary.md has what / why sections' },
-        @{ Id='summary-fields-initial'; Kind='AUTO'; Text='summary.md records loaded_skills / flow / corrections / impl_corrections' },
+        @{ Id='summary-fields-initial'; Kind='AUTO'; Text='summary.md records flow / loaded_skills / touched_modules and real acceptance, impact and task content' },
         @{ Id='acceptance-checkable'; Kind='HUMAN'; Text='every acceptance criterion is verifiable' }
     )
     New-Stage '2' 'solution design' @(

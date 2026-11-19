@@ -62,7 +62,7 @@ Run the behavioural tests:
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-Five suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking base fields only, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, the commit-range summary-order audit, and the skill registration check (unindexed / no entry).
+Five suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking summary fields plus the three content sections (a placeholder table fails), the L1 claim checked against the real diff, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, the commit-range summary-order audit, and the skill registration check (unindexed / no entry).
 
 ## Install
 
@@ -95,7 +95,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-git-hooks.ps
 
 Three hooks:
 
-- `pre-commit`: red-line scan (new lines only), SQL review, summary base fields;
+- `pre-commit`: red-line scan (new lines only), SQL review, summary fields plus the acceptance / impact / task sections, and the L1 claim check;
 - `post-commit`: records whether the commit was covered by the gate, used for the bypass rate;
 - `pre-merge-commit`: merge commits go through the same gate.
 
@@ -175,7 +175,7 @@ Example: "add a status filter to the order list query".
 2. `coding-skill` matches "start writing code" → its body points to `编码规范.md` and the order module card, and only then are those read
 3. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`; a "pass" verdict cannot leave any layer unverified, every cited evidence path must exist, and every data source must appear in the compiled bindings
 4. `expert-reviewer` matches before merging → review verdict and "missing capability" go back into `summary.md`
-5. On commit, `pre-commit` checks the base summary fields and the SQL verdict (including "pass while a layer is unverified"); stage 10 checks the content of `lesson_id` / `sql_review` and requires a human to confirm a promoted check really turns red for that lesson
+5. On commit, `pre-commit` checks the summary fields and the three content sections (an unfilled acceptance/impact/task table is rejected), the SQL verdict (including "pass while a layer is unverified"), and whether an L1 claim really is one file and 30 lines; stage 10 checks `corrections` / `impl_corrections` / `lesson_id` / `sql_review` and requires a human to confirm a promoted check really turns red for that lesson
 
 Three things keep it from turning into luck.
 

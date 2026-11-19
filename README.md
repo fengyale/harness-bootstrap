@@ -62,7 +62,7 @@ package gate: OPEN
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 ```
 
-五套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 只查基础字段、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）。
+五套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 查 summary 字段与三节内容（占位符算未填）、L1 声明按真实 diff 核对、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）。
 
 ## 装到项目
 
@@ -95,7 +95,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-git-hooks.ps
 
 三个 hook：
 
-- `pre-commit`：红线扫描（只查新增行）、SQL 评审、summary 基础字段；
+- `pre-commit`：红线扫描（只查新增行）、SQL 评审、summary 字段与验收标准/影响面/任务拆分三节内容、L1 声明核对；
 - `post-commit`：记录本次提交是否被门禁覆盖，用于计算绕过率；
 - `pre-merge-commit`：合并提交同样经过门禁。
 
@@ -175,7 +175,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 2. 动代码时 `coding-skill` 命中"开始写代码" → 正文指向 `编码规范.md` 和订单模块卡，这时才读这两份
 3. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`；结论写「通过」时四层不得留「未验证」，引用的证据路径必须存在、数据源必须在编译后的绑定里
 4. 合并前 `expert-reviewer` 命中 → 评审结论与「待补短板」写回 `summary.md`
-5. 提交时 `pre-commit` 校验 summary 基础字段与 SQL 结论（含"结论通过但四层未验证"的矛盾）；阶段 10 校验 `lesson_id` / `sql_review` 内容，并要求人工确认晋升的检查真的会因该教训变红
+5. 提交时 `pre-commit` 校验 summary 字段与三节内容（验收标准/影响面/任务拆分留占位符即拒）、SQL 结论（含"结论通过但四层未验证"的矛盾），并核对 L1 声明是否真的只有 1 文件 / 30 行；阶段 10 校验 `corrections` / `impl_corrections` / `lesson_id` / `sql_review` 内容，并要求人工确认晋升的检查真的会因该教训变红
 
 保证它不退化成"看运气"的是三件事：
 

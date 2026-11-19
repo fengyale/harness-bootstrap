@@ -14,7 +14,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 - 需求已分析完，进入实现或重构
 
-> **开工前先定档**：按 `.harness/rules/开发流程规范.md` 第 1.1 节选 `L0 / L1 / L2 / L3`；L0 不建记录，L1 写 `_small.md`，L2/L3 写 `summary.md`。拿不准就升档。
+> **开工前先定档**：只有「1 个文件 · diff ≤30 行 · 不碰公共层 / DB / 配置 / 接口」才是 `L1`，其余都是 `L2 / L3`（判据见 `.harness/rules/开发流程规范.md` 第 1.1 节）。拿不准就升档。
 
 <!-- harness:package:end -->
 
@@ -36,7 +36,11 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 ### 步骤
 
-1. **确认记录已落盘**：L0 无记录；L1 已在 `.harness/changes/_small.md` 追加一行；L2/L3 的 `summary.md` 已存在、`scripts\check-summary.ps1 -Feature <特性> -Stage initial` 通过，且**初始 summary 已单独提交**（该提交只含 `.harness/` 下文件）。在 feature/fix 分支或 `HARNESS_TASK` 下，HEAD 必须已含该特性 summary，否则 pre-commit 会拒绝源码提交。不满足就退回阶段 1
+1. **确认记录已落盘**（一条命令判定，不靠记忆）：
+   - L0：无记录，直接下一步
+   - L2/L3：跑 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 3 -Feature <特性>`；`summary-exists` 不过就退回阶段 1 —— 复制模板、填验收标准 / 影响面 / 任务拆分，跑 `check-summary.ps1 -Stage initial`，再单独提交一次
+   - L1：在 `.harness/changes/_small.md` 追加一行，和改动一起提交
+   - 提交时 pre-commit 会按**真实 diff** 校验 L1 声明：超过 1 个文件或 30 行仍标 L1，直接拒绝并提示改走 summary
 2. 确认模块与包路径
 3. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
 4. 写最小可用改动；跨模块改动写进 `summary.md` 影响面

@@ -21,18 +21,20 @@
 - 加载技能：`loaded_skills: <request-analysis, coding-skill>`
 - 未加载技能原因：`load_skip_reason: <一句话；loaded_skills 为 none 时必填>`
 - 触及模块：`touched_modules: <module1, module2>`
-- 纠正次数：`corrections: 0`（先写 0，收尾时按实际改）
-- 实现层纠正：`impl_corrections: 0`（属于实现细节的纠正数；没有就填 0）
 - 流程档位：`flow: <L2|L3>`（L2 标准 / L3 完整，判据见 `.harness/rules/开发流程规范.md` 第 1.1 节；L1 不建本文件，只写 `_small.md`）
+
+> 这一段和下面三节一起过 `-Stage initial`：**功能点与验收标准 / 业务影响 / 任务拆分**必须是真的内容，留模板占位符（`<…>`）会直接失败。只填字段不填这三节，等于没做需求分析。
 
 ## 第二阶段：收尾（阶段 5–10 再填）
 
 - 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace> -- <一句话摘要>`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
 - SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 语法 / 结构 / 绑定 / 结果 / 计划 / 结论；无 SQL 写"无 SQL 变更")`
+- 纠正次数：`corrections: <N>`（收尾时按实际填；不是先写 0 再改，写之前在对话里数一遍）
+- 实现层纠正：`impl_corrections: <N>`（属于实现细节的纠正数；没有就填 0，不能大于 `corrections`）
 
-> 两个阶段的字段由 `scripts/check-summary.ps1` 分档校验：**阶段 1 与 pre-commit 只查第一阶段**
-> （加载技能 / 档位 / 纠正次数 / 实现层纠正 / 触及模块）；`lesson_id` 与 `sql_review` 由**阶段 10** 查。
-> **缺字段或留占位符 = 任务未完成。**
+> 两个阶段的字段由 `scripts/check-summary.ps1` 分档校验：**阶段 1 与 pre-commit 查档位 / 加载技能 / 触及模块 + 上面三节内容**；
+> **`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由阶段 10 查**——它们只有做完才知道，提前写只能写假数。
+> **缺字段、留占位符、内容节只有表头 = 任务未完成。**
 >
 > `lesson_id` 是"第 2 次才落盘"的机器判据：**每条纠正写一行**（多条就写多行），
 > 同一条教训必须复用同一个 id，并在 `--` 后写一句话摘要；**写之前先看

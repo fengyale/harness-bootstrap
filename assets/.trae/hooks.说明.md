@@ -25,7 +25,7 @@
 > powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-git-hooks.ps1
 > ```
 >
-> **git pre-commit 现在做三件事**：红线扫描（只算新增行）、SQL 评审门禁（`harness-required.json` 的 `sqlGate` 为 true 时 fail-closed）、`summary.md` 基础字段校验（`Stage initial`）。编辑器 hook 建议只跑红线扫描，不要重复全套门禁。
+> **git pre-commit 现在做四件事**：红线扫描（只算新增行）、SQL 评审门禁（`harness-required.json` 的 `sqlGate` 为 true 时 fail-closed）、`summary.md` 字段与三节内容校验（`Stage initial`）、L1 声明按真实 diff 核对（>1 文件或 >30 行拒绝）。编辑器 hook 建议只跑红线扫描，不要重复全套门禁。
 
 ## 三、启用编辑器 hook 的步骤
 

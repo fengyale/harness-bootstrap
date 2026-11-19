@@ -334,7 +334,9 @@ fi
 # cannot attribute the code, and blocking every commit there would be unusable.
 # HARNESS_ALLOW_NO_RECORD=1 is the explicit exception for L0 / one-off imports.
 ASSOC_MISS=0
-SOURCE_CHANGES=$(git -c core.quotepath=false diff --cached --name-only --no-renames 2>/dev/null | grep -E '\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less|json|yml|yaml|properties|toml|ini)$' | grep -Ev '^(\.harness|\.trae|\.claude|scripts|docs|node_modules|dist|build|target)/' || true)
+SRC_EXT_RE='\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less|json|yml|yaml|properties|toml|ini)$'
+SRC_EXCL_RE='^(\.harness|\.trae|\.claude|scripts|docs|node_modules|dist|build|target)/'
+SOURCE_CHANGES=$(git -c core.quotepath=false diff --cached --name-only --no-renames 2>/dev/null | grep -E "$SRC_EXT_RE" | grep -Ev "$SRC_EXCL_RE" || true)
 if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW_NO_RECORD:-0}" != "1" ]; then
   if git cat-file -e HEAD:.harness/changes 2>/dev/null; then
     TASK_NAME="${HARNESS_TASK:-}"
@@ -362,9 +364,33 @@ if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW
   fi
 fi
 
+# L1 size claim. A row in _small.md says "this change is small": one file, at
+# most 30 changed lines. Nothing used to verify the claim, so a 200-line change
+# could label itself L1 and pass every gate. The size is only knowable after the
+# code exists, so the check lives here, at commit time: it never slows the small
+# path (one command, one row) and it catches the mislabelled one. Splitting one
+# big task into many small commits still passes; the per-commit limit is the
+# deliberate trade-off written down in the rules doc, section 1.1.
+L1_OVERSIZE=0
+if [ "$REPLAY_CONTEXT" -eq 0 ] && git -c core.quotepath=false diff --cached --name-only --no-renames -- .harness/changes/_small.md 2>/dev/null | grep -q .; then
+  if [ -n "$SOURCE_CHANGES" ]; then
+    L1_FILES=$(printf '%s\n' "$SOURCE_CHANGES" | grep -c . || true)
+    L1_LINES=$(git -c core.quotepath=false diff --cached --numstat --no-renames 2>/dev/null | awk 'NF >= 3 { a=$1; d=$2; if (a=="-") a=0; if (d=="-") d=0; print a" "d" "$3 }' | while read -r a d p; do
+      printf '%s\n' "$p" | grep -Eq "$SRC_EXT_RE" || continue
+      printf '%s\n' "$p" | grep -Eq "$SRC_EXCL_RE" && continue
+      echo $((a + d))
+    done | awk '{ s += $1 } END { print s + 0 }')
+    if [ "${L1_FILES:-0}" -gt 1 ] || [ "${L1_LINES:-0}" -gt 30 ]; then
+      L1_OVERSIZE=1
+      echo "[FAIL] this commit declares L1 (it stages .harness/changes/_small.md) but changes $L1_FILES source file(s) / $L1_LINES line(s). L1 means 1 file and <= 30 lines." >&2
+      echo "       L2/L3: copy .harness/changes/_template/summary.md, fill the content sections, run check-summary -Stage initial, commit it on its own first." >&2
+      echo "       if it really is one file and <= 30 lines, split the change into separate commits." >&2
+    fi
+  fi
+fi
+
 if [ ! -s "$DIFF_FILE" ]; then
   # Fail closed: an empty diff must not be able to hide an order violation
-  # (a custom diff driver or a future filter change could produce one).
   if [ "$LATE_SUMMARY" -ne 0 ]; then
     gate_fail 'a new summary.md must be committed on its own'
   fi
@@ -472,11 +498,11 @@ EOF
 fi
 rm -f "$DIFF_FILE"
 
-if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ] || [ $LATE_SUMMARY -ne 0 ] || [ $ASSOC_MISS -ne 0 ]; then
+if [ $STATUS -ne 0 ] || [ $SQL_STATUS -ne 0 ] || [ $SUMMARY_STATUS -ne 0 ] || [ $LATE_SUMMARY -ne 0 ] || [ $ASSOC_MISS -ne 0 ] || [ "$L1_OVERSIZE" -ne 0 ]; then
   printf '{"event":"scan","ts":"%s","blocked":1,"files":%s,"hunks":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FILES_N" "$HUNKS_N" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
   echo ""
   echo "harness gate blocked: fix red lines, complete the summary fields, add a sql_review note for SQL changes,"
-  echo "commit the initial summary before the code, or give the code a change record."
+  echo "commit the initial summary before the code, give the code a change record, or move an L1 row to a summary."
   echo "(--no-verify bypasses this gate; the bypass is counted by scripts/metrics.ps1.)"
   exit 1
 fi

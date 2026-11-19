@@ -37,6 +37,13 @@ $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', 'sql_review: 
 $tpl = $tpl -replace '(?m)^- 本次暴露的短板：[^\r\n]*', '- 本次暴露的短板：无'
 $tpl = $tpl -replace '(?m)^- 已补的能力：[^\r\n]*', '- 已补的能力：无'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2 (standard)'
+# initial now checks content, not just field names: fill the three sections the
+# same way a real analysis would, otherwise every fixture below is a placeholder.
+$tpl = $tpl -replace '(?m)^\| F1 \|.*$', '| F1 | demo feature | returns 200 on POST | no retries |'
+$tpl = $tpl -replace '(?m)^- 受影响模块：.*$', '- 受影响模块：demo'
+$tpl = $tpl -replace '(?m)^- 用户影响范围：.*$', '- 用户影响范围：none'
+$tpl = $tpl -replace '(?m)^- 与已有特性的关系：.*$', '- 与已有特性的关系：none'
+$tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage initial -Quiet
@@ -368,12 +375,14 @@ git -C $proj commit -q -m rm-rules-json
 Expect 'commit with only red-line-rules.json deleted' $LASTEXITCODE 1
 git -C $proj reset --hard HEAD -q
 
-# removing a basic field must still be blocked by the hook
-$s2 = ($s -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_\-])corrections:' }) -join "`r`n"
+# removing a field the initial stage still owns must be blocked by the hook.
+# (corrections moved to the final stage on purpose: it is only knowable at
+# close-out, so the initial gate must not demand it.)
+$s2 = ($s -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_\-])loaded_skills:' }) -join "`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $s2 -Encoding UTF8
 git -C $proj add -A
 git -C $proj commit -q -m missing-field
-Expect 'commit without corrections field' $LASTEXITCODE 1
+Expect 'commit without loaded_skills field' $LASTEXITCODE 1
 
 Step 'sqlGate=true: an unstaged sqlGate=false must not bypass the gate'
 # Reset the failed staged summary so the fixture is clean before the next probe.
@@ -447,6 +456,30 @@ git -C $proj rm --cached -q scripts/red-line-scan.ps1 scripts/red-line-scan.py
 git -C $proj commit -q -m rm-last-scanner
 Expect 'commit that removes the last tracked scanner' $LASTEXITCODE 1
 git -C $proj reset --hard HEAD -q
+
+Step 'L1 claim is checked against the real diff'
+git -C $proj reset --hard HEAD -q
+# two source files labelled L1 is not L1
+Set-Content -LiteralPath "$proj\L1a.java" -Value 'public class L1a {}' -Encoding UTF8
+Set-Content -LiteralPath "$proj\L1b.java" -Value 'public class L1b {}' -Encoding UTF8
+Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value '- 2026-11-19 | l1-two-files | L1a.java, L1b.java | test | -' -Encoding UTF8
+git -C $proj add L1a.java L1b.java .harness/changes/_small.md
+git -C $proj commit -q -m l1-two-files
+Expect 'L1 declaration with two source files' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\L1a.java", "$proj\L1b.java" -Force -ErrorAction SilentlyContinue
+
+# one file but more than 30 changed lines is not L1 either
+$bigLines = @('public class L1big {')
+for ($i = 1; $i -le 40; $i++) { $bigLines += "    // filler $i" }
+$bigLines += '}'
+[System.IO.File]::WriteAllLines("$proj\L1big.java", $bigLines, (New-Object System.Text.UTF8Encoding($false)))
+Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value '- 2026-11-19 | l1-too-big | L1big.java | test | -' -Encoding UTF8
+git -C $proj add L1big.java .harness/changes/_small.md
+git -C $proj commit -q -m l1-too-big
+Expect 'L1 declaration with more than 30 lines' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
+Remove-Item -LiteralPath "$proj\L1big.java" -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }

@@ -9,14 +9,23 @@
     loaded but did not" failure stays invisible. This script turns the exit
     check into a machine decision.
 
+    Presence of the fields is not the point by itself: the summary is the only
+    place where acceptance criteria are written before code. So the initial
+    stage checks the CONTENT that guides coding (acceptance criteria, impact,
+    task breakdown), and the counts a reviewer needs are checked at close-out,
+    where they are actually known.
+
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-summary.ps1 -Feature my-feature
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-summary.ps1 -Feature my-feature -Stage initial
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-summary.ps1 -File .harness\changes\my-feature\summary.md
 
   STAGES
-    initial  task start  : loaded_skills / flow / corrections / impl_corrections / touched_modules
-    final    task close  : the above plus lesson_id and sql_review
+    initial  task start  : flow / loaded_skills / touched_modules, plus real
+                           content in acceptance criteria, impact and task
+                           breakdown (a table of placeholders is not content)
+    final    task close  : the same, plus corrections / impl_corrections as real
+                           numbers, lesson_id and sql_review
 
   EXIT CODE
     0 = all required fields valid / 1 = at least one field invalid
@@ -123,7 +132,91 @@ function Test-Placeholder {
     return $false
 }
 
-# ------------------------------------------------------- sql_review content
+# ------------------------------------------------------------- content sections
+# A summary whose "acceptance criteria" table is still the template's placeholder
+# row is a file, not an analysis: the agent can fill every count field and still
+# start coding without deciding what "done" means. Section names live in
+# harness-required.json so this script stays pure ASCII.
+$script:contentCfg = $null
+$cfgPath = Join-Path $PSScriptRoot 'harness-required.json'
+if (Test-Path -LiteralPath $cfgPath) {
+    try {
+        $cfgAll = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        if ($cfgAll.PSObject.Properties['summaryContent']) { $script:contentCfg = $cfgAll.summaryContent }
+    } catch { }
+}
+
+function Get-ContentNeedles {
+    param([string]$Name)
+    if (-not $script:contentCfg) { return @() }
+    $p = $script:contentCfg.PSObject.Properties[$Name]
+    if (-not $p) { return @() }
+    return @($p.Value | ForEach-Object { [string]$_ } | Where-Object { $_.Length -gt 0 })
+}
+
+# Body of a "## heading" section: from the matching heading to the next heading
+# of the same or a higher level. Returns $null when no heading matches.
+function Get-SectionLines {
+    param([string[]]$Needles)
+    $lines = $script:text -split "\r?\n"
+    $start = -1
+    $level = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $m = [regex]::Match($lines[$i], '^(#{2,3})\s+')
+        if (-not $m.Success) { continue }
+        foreach ($n in $Needles) {
+            if ($lines[$i] -match ('^#{2,3}\s+' + [regex]::Escape($n))) {
+                $start = $i
+                $level = $m.Groups[1].Length
+                break
+            }
+        }
+        if ($start -ge 0) { break }
+    }
+    if ($start -lt 0) { return $null }
+    $body = @()
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+        $h = [regex]::Match($lines[$i], '^(#+)\s')
+        if ($h.Success -and $h.Groups[1].Length -le $level) { break }
+        $body += $lines[$i]
+    }
+    return $body
+}
+
+# A section counts as filled when it holds at least one line that is neither a
+# heading, a table separator, a header cell nor a leftover template slot.
+# -RequireTableRow is used for the two tables; the impact section may be bullets.
+function Test-RealContent {
+    param([string[]]$Needles, [switch]$RequireTableRow)
+    if ($null -eq $Needles -or $Needles.Count -eq 0) { return $true }
+    $body = Get-SectionLines -Needles $Needles
+    if ($null -eq $body) { return $false }
+    $afterSeparator = $false
+    foreach ($line in $body) {
+        $t = $line.Trim()
+        if ($t.Length -eq 0) { continue }
+        if ($t -match '^#{1,6}\s') { continue }
+        if ($t -match '^\|?\s*:?-{2,}') { $afterSeparator = $true; continue }
+        if ($t -match '^\|') {
+            # A row before the separator is the header row (field names only).
+            if (-not $afterSeparator) { continue }
+            $cells = @($t.Trim('|').Split('|') | ForEach-Object { ($_ -replace '`', '').Trim() } | Where-Object { $_.Length -gt 0 })
+            if ($cells.Count -eq 0) { continue }
+            # Every cell must be real: the ID cell ("F1") is never a placeholder,
+            # so "any real cell" would count the untouched template row.
+            $allReal = $true
+            foreach ($c in $cells) { if (Test-Placeholder $c) { $allReal = $false; break } }
+            if ($allReal) { return $true }
+            continue
+        }
+        if ($RequireTableRow) { continue }
+        $clean = ($t -replace '^[-*]\s+', '') -replace '`', ''
+        if (-not (Test-Placeholder $clean)) { return $true }
+    }
+    return $false
+}
+
+
 # Presence alone made "syntax unverified / structure unverified / ... / verdict
 # pass" a valid review: the field was non-empty, so every gate said OK. The
 # conclusion template and the rules already forbid that combination, so check it
@@ -270,20 +363,19 @@ elseif (Test-Placeholder $flow) { Add-Fail 'flow' 'empty or placeholder' }
 # an error. U+FF08 is written as \uFF08 so this file stays pure ASCII.
 elseif ($flow -notmatch '^L[123]([ \t]|$|[\(\uFF08])') { Add-Fail 'flow' 'must be L1, L2 or L3' }
 
-$corr = Get-FieldRaw 'corrections'
-$corrValue = -1
-if ($null -eq $corr) { Add-Fail 'corrections' 'missing' }
-elseif ($corr -notmatch '^(\d+)') { Add-Fail 'corrections' 'must be a non-negative integer' }
-else { $corrValue = [int]$matches[1] }
-
-$impl = Get-FieldRaw 'impl_corrections'
-$implValue = -1
-if ($null -eq $impl) { Add-Fail 'impl_corrections' 'missing (fill 0 when there was none)' }
-elseif ($impl -notmatch '^(\d+)') { Add-Fail 'impl_corrections' 'must be a non-negative integer' }
-else { $implValue = [int]$matches[1] }
-
-if ($corrValue -ge 0 -and $implValue -ge 0 -and $implValue -gt $corrValue) {
-    Add-Fail 'impl_corrections' 'cannot exceed corrections'
+# ------------------------------------------------------------ content (before code)
+# These three sections are what makes the summary useful while coding: they say
+# what "done" means, what the change touches and how the work is split. A summary
+# with a complete field block and a template table full of <slots> passes every
+# count check and still guides nothing, so the content is checked here.
+if (-not (Test-RealContent -Needles (Get-ContentNeedles 'acceptance') -RequireTableRow)) {
+    Add-Fail 'acceptance' 'feature table has no real row (fill every acceptance criterion, not the template slot)'
+}
+if (-not (Test-RealContent -Needles (Get-ContentNeedles 'impact'))) {
+    Add-Fail 'impact' 'impact section is empty (modules / interfaces / tables, or an explicit "none")'
+}
+if (-not (Test-RealContent -Needles (Get-ContentNeedles 'tasks') -RequireTableRow)) {
+    Add-Fail 'tasks' 'task table has no real row (split the work into tasks, each <= 4h)'
 }
 
 $modules = Get-FieldRaw 'touched_modules'
@@ -293,6 +385,25 @@ if (Test-Placeholder $modules) {
 
 # ---------------------------------------------------------------- final only
 if ($Stage -eq 'final') {
+    # Counts are only known once the work is done. Asking for them at task start
+    # forced a fake "corrections: 0" that was then edited later, so the number a
+    # reviewer trusted was written before the review happened.
+    $corr = Get-FieldRaw 'corrections'
+    $corrValue = -1
+    if ($null -eq $corr) { Add-Fail 'corrections' 'missing' }
+    elseif ($corr -notmatch '^(\d+)') { Add-Fail 'corrections' 'must be a non-negative integer' }
+    else { $corrValue = [int]$matches[1] }
+
+    $impl = Get-FieldRaw 'impl_corrections'
+    $implValue = -1
+    if ($null -eq $impl) { Add-Fail 'impl_corrections' 'missing (fill 0 when there was none)' }
+    elseif ($impl -notmatch '^(\d+)') { Add-Fail 'impl_corrections' 'must be a non-negative integer' }
+    else { $implValue = [int]$matches[1] }
+
+    if ($corrValue -ge 0 -and $implValue -ge 0 -and $implValue -gt $corrValue) {
+        Add-Fail 'impl_corrections' 'cannot exceed corrections'
+    }
+
     $lessons = @(Get-AllLessonIds)
     if ($lessons.Count -eq 0) {
         Add-Fail 'lesson_id' 'missing (one kebab-case id per lesson, or - when there is none)'
