@@ -73,12 +73,38 @@
 > 首次通常只装 3–5 个。**这一节必须改成"实际装了什么"**，因为它是你（模型）
 > 判断"该用哪个技能"的唯一索引——列了没装的技能，你会去找不存在的文件。
 
-- **主流程**（`main-dev`）：`request-analysis` · `coding-skill` · `expert-reviewer`
-  <br>（可选，装了才写：`unit-test-write` · `unit-test-ci` · `deploy-verify`）
-- **业务实现**（`biz-dev`）：`<只列实际安装的专题，如 redis-cache>`
-- **线上排查**（`trouble-shooting`）：`<只列实际安装的，如 slow-sql>`
+<!-- skills-index:begin -->
+| 分类 | 技能 | 用途（description 首句，≤40 字） |
+| --- | --- | --- |
+| biz-dev | `crud-scaffold` | 为一张新业务表从零搭一套增删改查，或给已有表补齐管理端维护接口时使用 |
+| biz-dev | `pagination-query` | 列表接口要返回总数、深翻页变慢、翻页数据重复或总数对不上时使用 |
+| biz-dev | `redis-cache` | 缓存设计与读写：判断该不该缓存、加缓存、处理缓存与数据库不一致、应对穿透击穿雪… |
+| biz-dev | `mq-messaging` | 要用消息做跨进程通知、异步解耦、削峰，或已有消费者重复处理、丢消息、积压时需要… |
+| biz-dev | `transaction-consistency` | 一次请求要写多张表、调外部接口、更新缓存，或跨服务写入需要最终一致、请求可能重… |
+| biz-dev | `exception-handling` | 接口报错信息前后端理解不一致、对外暴露内部堆栈、线上排障找不到对应请求时使用 |
+| biz-dev | `business-validation` | 业务规则校验散落在多处、同一错误在入口与落库时口径不一、并发下出现重复提交时使用 |
+| biz-dev | `excel-import-export` | 批量导入表格文件、按条件导出大数据量、导入失败要定位到行时使用 |
+| biz-dev | `db-migration` | 上线要改表结构、加索引、加字段，或给大表批量订正数据时使用 |
+| biz-dev | `scheduled-task` | 周期性批处理、定时同步或定时清理任务上线时使用 |
+| biz-dev | `file-upload` | 附件、头像、凭证等文件上传功能开发或改造时使用 |
+| biz-dev | `notification` | 面向使用者的消息提醒（站内、短信、邮件、推送）上线或改造时使用 |
+| biz-dev | `stats-report` | 报表或看板指标开发、口径争议、数据刷新不及时时使用 |
+| biz-dev | `sql-review` | SQL 性能评审：新增或修改 SQL、加索引、改分页、改批量写入时使用 |
+| main-dev | `coding-skill` | 编码实现：按项目分层写业务代码，遵守数据访问、异常与缓存约定，改完必须做编译验证 |
+| main-dev | `deploy-verify` | 一次发布上线前后使用 |
+| main-dev | `expert-reviewer` | 代码评审：按结构、红线、性能、安全、一致性、可测性六个维度评审改动并输出分级结论 |
+| main-dev | `request-analysis` | 需求分析与拆解：把一句话需求转成可验证的任务清单，判断落在哪个模块、影响哪些接… |
+| main-dev | `unit-test-ci` | 搭建或调整持续集成流水线时使用 |
+| main-dev | `unit-test-write` | 为新逻辑补测试、或修完缺陷后补回归用例时使用 |
+| trouble-shooting | `slow-sql` | 慢查询排查与优化：接口响应变慢、数据库 CPU 高、报表查询超时时使用 |
+| trouble-shooting | `oom-troubleshoot` | 进程内存持续上涨、频繁被系统终止或响应逐渐变慢时使用 |
+| trouble-shooting | `cpu-high-troubleshoot` | 进程占用持续偏高、请求响应变慢或线程疑似卡死时使用 |
+| trouble-shooting | `mq-backlog-troubleshoot` | 消息积压、消费延迟持续增长或消费速度明显低于生产速度时使用 |
+| trouble-shooting | `redis-hotkey-troubleshoot` | 缓存中单个键访问极度集中，导致某节点负载不均、时延抖动或热点集体失效击穿时使用 |
+<!-- skills-index:end -->
 
 > 用不到的专题**直接删掉技能目录**（技能清单每轮占上下文）。
+> 上表由 `scripts/sync-skills-index.ps1` 扫描 `.harness/skills/` 生成：加删技能后跑一次 `-Write`，`verify-harness` 的 `skills-index` 会校验它是否漂移。
 > 完整索引与触发约定见 `.harness/skills/README.md`；本表要与它保持一致。
 > **技能缺失不是问题，检查缺失才是问题**——缺技能时按 `coding-skill` 的"下一步"表用最低限度手工替代。
 
@@ -131,7 +157,7 @@
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。
 - **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行，**提交时 pre-commit 按实际 diff 核对，超过 1 文件或 30 行会被拒绝**；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/` 下的特性目录（目录名即特性名），运行 `check-summary.ps1 -Feature 特性名 -Stage initial` 通过后**单独提交一次**（只含 `.harness/` 下文件），再改代码——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交，因为 git 只能看提交顺序、看不到编辑顺序。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
-- **必上技能**：收到需求先加载 `request-analysis`；动代码先加载 `coding-skill`；合并前加载 `expert-reviewer`
+- **必上技能**：收到需求先加载 `request-analysis`；**动代码前先跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名` 并把 `DECLARE` 行贴进回复**（出现 `[HINT]` 说明记录缺失，先补记录），再加载 `coding-skill`；合并前加载 `expert-reviewer`
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查——它们做完才知道。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**

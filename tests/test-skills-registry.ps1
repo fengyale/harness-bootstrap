@@ -50,6 +50,14 @@ function New-Entry([string]$EntryName, [string]$SourceDir) {
 
 if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
 Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
+# The fixture skills have no [E1]/[E2] anchors, and a package install is strict.
+# Keep this fixture on the upgrade behaviour (WARN) so the registry assertions
+# are about registration, not about grounding; the strict switch gets its own
+# case at the end.
+$fixtureCfgPath = "$proj\scripts\harness-required.json"
+$fixtureCfg = (Get-Content -LiteralPath $fixtureCfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+$fixtureCfg.groundingStrict = $false
+[System.IO.File]::WriteAllText($fixtureCfgPath, (($fixtureCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 $demoDir  = New-Skill 'main-dev' 'demo-skill' 'demo-skill'
 $extraDir = New-Skill 'biz-dev' '99-extra-helper' 'extra-helper'
@@ -195,6 +203,61 @@ Check 'real content passes fill-depth' ($LASTEXITCODE -eq 0)
 Add-Content -LiteralPath $structPath -Value ('| a | `List<String>` | `' + [char]0x2026 + '` |') -Encoding UTF8
 $g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
 Check 'inline code is not a placeholder' ($LASTEXITCODE -eq 0)
+
+Step 'skills index: the directory is the only source of truth'
+# The per-category table used to be maintained by hand in .harness/skills/README.md
+# and AGENTS.md, so it drifted whenever a skill was added. Both shipped files now
+# carry a marker pair; the fixture has different skills, so the shipped table must
+# register as drift, and -Write must bring it back in sync.
+Copy-Item -LiteralPath "$pkg\assets\.harness\skills\README.md" -Destination $indexPath -Force
+Copy-Item -LiteralPath "$pkg\assets\AGENTS.md" -Destination "$proj\AGENTS.md" -Force
+$syncScript = "$proj\scripts\sync-skills-index.ps1"
+$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+$siCode = $LASTEXITCODE
+Check 'shipped table is stale for this fixture' ($siCode -eq 1)
+Check 'drift is reported under the skills-index name' ($si -match 'skills-index: drift')
+Check 'drift names the file it came from' ($si -match 'drift in \.harness/skills/README\.md')
+$null = New-Skill 'biz-dev' '97-index-helper' 'index-helper'
+$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+Check 'adding a skill still fails the check' ($LASTEXITCODE -eq 1)
+$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Write 2>&1 | Out-String)
+Check 'write succeeds' ($LASTEXITCODE -eq 0)
+$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+Check 'check passes after write' ($LASTEXITCODE -eq 0)
+$written = [System.IO.File]::ReadAllText($indexPath, [System.Text.Encoding]::UTF8)
+Check 'the written table lists the new skill' ($written -match '\| biz-dev \| `index-helper` \|')
+$out = RunVerify
+Check 'verify-harness no longer fails skills-index' (-not ($out -match 'FAIL\]\s+skills-index'))
+Check 'verify-harness reports skills-index PASS' ($out -match '\[PASS\]\s+skills-index')
+
+Step 'stale: a recently loaded skill whose evidence changed fails'
+# The template puts loaded_skills behind a Chinese label and backticks, and the
+# skill key may carry a numeric prefix. Both used to make the FAIL never fire.
+$staleDir = New-Skill 'main-dev' 'stale-probe' 'stale-probe'
+$staleFile = Join-Path $staleDir 'SKILL.md'
+Add-Content -LiteralPath $staleFile -Value @('- verified: 2020-01-01', '- [E2] src/Main.java :: proves a watched file') -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\t-stale" | Out-Null
+$lbl = (-join ([char]0x52A0, [char]0x8F7D, [char]0x6280, [char]0x80FD)) + [char]0xFF1A
+$staleSummary = @('# stale probe', '', ('- ' + $lbl + '`loaded_skills: stale-probe`'))
+[System.IO.File]::WriteAllLines("$proj\.harness\changes\t-stale\summary.md", $staleSummary, (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'loaded + drifted skill fails the stale check' (($LASTEXITCODE -eq 1) -and ($g -match '\[FAIL\]\s+stale'))
+$fixed = @([System.IO.File]::ReadAllLines($staleFile, [System.Text.Encoding]::UTF8) |
+    ForEach-Object { if ($_ -match '^- verified:') { '- verified: ' + (Get-Date -Format 'yyyy-MM-dd') } else { $_ } })
+[System.IO.File]::WriteAllLines($staleFile, $fixed, (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 're-verifying clears the stale failure' ($LASTEXITCODE -eq 0)
+
+Step 'groundingStrict: an ungrounded skill fails only when switched on'
+$strictCfg = (Get-Content -LiteralPath $fixtureCfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+$strictCfg.groundingStrict = $true
+[System.IO.File]::WriteAllText($fixtureCfgPath, (($strictCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'strict mode fails an ungrounded skill' (($LASTEXITCODE -eq 1) -and ($g -match 'groundingStrict=true'))
+$strictCfg.groundingStrict = $false
+[System.IO.File]::WriteAllText($fixtureCfgPath, (($strictCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'upgrade behaviour keeps it a warning' ($LASTEXITCODE -eq 0)
 
 Step 'missing README is reported once'
 Remove-Item -LiteralPath $indexPath -Force

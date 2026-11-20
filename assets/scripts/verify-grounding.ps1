@@ -18,7 +18,8 @@
                     Skill count is unlimited by default, pass -MaxGrounded N
                     only during cold start
     5. stale        code behind an [E2] anchor changed after the skill was verified
-                    ("- verified: YYYY-MM-DD" resets the clock; WARN only)
+                    ("- verified: YYYY-MM-DD" resets the clock). FAIL when the skill
+                    was loaded in the last 14 days, WARN otherwise
     6. coverage     a filled project must not keep the template's placeholder rows:
                     a placeholder structure tree is FAIL, a wiki table that is
                     still a template is WARN (needs .harness\stack.json)
@@ -84,6 +85,14 @@ if (Test-Path -LiteralPath $stackPath) {
     try { $stack = (Get-Content -LiteralPath $stackPath -Raw -Encoding UTF8) | ConvertFrom-Json } catch { $stack = $null }
 }
 $compileFail = 0
+# Strict mode: a fresh install treats a missing anchor as a defect; an upgraded
+# project is merged with false so its older skills do not fail on day one.
+$groundingStrict = $false
+if ($cfg -and ($cfg.PSObject.Properties.Name -contains 'groundingStrict')) {
+    # A hand-written "false" in JSON must not become true through a cast.
+    $raw = $cfg.groundingStrict
+    $groundingStrict = if ($raw -is [string]) { $raw.Trim().ToLowerInvariant() -eq 'true' } else { [bool]$raw }
+}
 
 # new-project mode: the only state where a user confirmation can stand in for
 # code evidence, because there is no code to point at yet.
@@ -197,6 +206,37 @@ foreach ($base in @('.harness', 'scripts')) {
             ForEach-Object { $harnessBasenames[$_.Name] = $true }
     }
 }
+
+# A skill that was loaded in the last two weeks is actively guiding work, so a
+# stale anchor is not a note any more: it is about to teach the wrong shape.
+function Get-RecentlyLoadedSkills {
+    param([int]$Days = 14)
+    $set = @{}
+    $changes = Join-Path $rootPath '.harness\changes'
+    if (-not (Test-Path -LiteralPath $changes)) { return $set }
+    $cut = (Get-Date).AddDays(-$Days)
+    foreach ($f in @(Get-ChildItem -LiteralPath $changes -Recurse -Filter summary.md -File -ErrorAction SilentlyContinue)) {
+        if ($f.LastWriteTime -lt $cut) { continue }
+        $txt = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+        # The summary template wraps the field in a Chinese label and backticks;
+        # match the field name anywhere on the line.
+        $m = [regex]::Match($txt, '(?m)^\s*-\s*[^\r\n]*?\bloaded_skills:\s*`?([^`\r\n]*)')
+        if (-not $m.Success) { continue }
+        foreach ($n in ($m.Groups[1].Value -split '[,;]+')) {
+            $n = $n.Trim().Trim('`').Trim()
+            if ($n.Length -eq 0) { continue }
+            if ($n -match '^(none|n/a|-|no)$') { continue }
+            # "biz-dev/04-sql-review" and "04-sql-review" must match the skill
+            # name used by the files: keep the last segment, drop the number.
+            $n = ($n -replace '\\', '/')
+            $n = ($n -split '/')[-1]
+            $n = ($n -replace '^\d+-', '')
+            $set[$n.ToLowerInvariant()] = $true
+        }
+    }
+    return $set
+}
+$recentlyLoaded = Get-RecentlyLoadedSkills
 
 foreach ($s in $skillFiles) {
     $lines = [System.IO.File]::ReadAllLines($s.Path, [System.Text.Encoding]::UTF8)
@@ -378,14 +418,23 @@ foreach ($s in $skillFiles) {
     }
 
     if ($e12 -eq 0) {
+        $strictNow = ($groundingStrict -and $codeExists -and -not $newProject)
         if ($e0 -gt 0) {
             if ($codeExists) {
-                Add-Result 'grounded' 'WARN' "$($s.Category)/$($s.Name): code exists -- replace [E0] confirmations with [E1]/[E2]"
+                if ($strictNow) {
+                    Add-Result 'grounded' 'FAIL' "$($s.Category)/$($s.Name): code exists but only [E0] confirmations; add [E1]/[E2] (groundingStrict=true)"
+                } else {
+                    Add-Result 'grounded' 'WARN' "$($s.Category)/$($s.Name): code exists -- replace [E0] confirmations with [E1]/[E2]"
+                }
             } else {
                 Add-Result 'grounded' 'WARN' "$($s.Category)/$($s.Name): new project without code -- [E0] confirmations only; upgrade to [E1]/[E2] once code exists"
             }
         } else {
-            Add-Result 'grounded' 'WARN' "$($s.Category)/$($s.Name): no [E1]/[E2] anchor (ungrounded skill)"
+            if ($strictNow) {
+                Add-Result 'grounded' 'FAIL' "$($s.Category)/$($s.Name): no [E1]/[E2] anchor (groundingStrict=true; set it false in scripts/harness-required.json to downgrade)"
+            } else {
+                Add-Result 'grounded' 'WARN' "$($s.Category)/$($s.Name): no [E1]/[E2] anchor (ungrounded skill)"
+            }
         }
     }
 
@@ -408,7 +457,13 @@ foreach ($s in $skillFiles) {
     }
     if ($staleList.Count -gt 0) {
         $shown = @($staleList | Select-Object -First 3)
-        Add-Result 'stale' 'WARN' "$($s.Name): $($staleList.Count) watched file(s) changed after verified $($verified.ToString('yyyy-MM-dd')): $($shown -join '; ')"
+        $detail = "$($s.Name): $($staleList.Count) watched file(s) changed after verified $($verified.ToString('yyyy-MM-dd')): $($shown -join '; ')"
+        $skillKey = ($s.Name -replace '^\d+-', '').ToLowerInvariant()
+        if ($recentlyLoaded.ContainsKey($skillKey)) {
+            Add-Result 'stale' 'FAIL' ($detail + '; loaded in the last 14 days, so re-read the code and refresh the skill')
+        } else {
+            Add-Result 'stale' 'WARN' $detail
+        }
     }
 
     # --- inline `path` tokens that point at installed harness assets
@@ -487,6 +542,8 @@ foreach ($s in $skillFiles) {
 }
 if ($MaxGrounded -gt 0 -and $groundedCount -gt $MaxGrounded) {
     Add-Result 'grounded' 'WARN' "$groundedCount grounded skill(s) exceed the cold-start budget $MaxGrounded"
+} elseif ($groundedCount -eq 0 -and $skillFiles.Count -gt 0 -and $groundingStrict -and $codeExists -and -not $newProject) {
+    Add-Result 'grounded' 'FAIL' "no skill carries an [E1]/[E2] anchor; groundingStrict=true (set it false in scripts/harness-required.json to downgrade)"
 } elseif ($groundedCount -gt 0) {
     Add-Result 'grounded' 'PASS' "$groundedCount grounded skill(s)"
 }

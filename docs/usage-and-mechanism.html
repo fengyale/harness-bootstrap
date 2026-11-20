@@ -551,7 +551,7 @@
   <div class="main">
 
     <header class="hero">
-      <div class="eyebrow">harness-bootstrap · v1.31.6</div>
+      <div class="eyebrow">harness-bootstrap · v1.31.7</div>
       <h1>把 AI 编码的约定<br>变成可执行的约束</h1>
       <p class="lede">
         Harness Bootstrap 是一个元技能。它读取一个真实项目，按证据生成
@@ -782,13 +782,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
       <div class="grid grid--2">
         <div class="card card--accent" style="--i:0">
           <h3>任务开始</h3>
-          <p>收到需求先加载 <code>request-analysis</code>，建立 <code>.harness/changes/&lt;feature&gt;/summary.md</code>，写清需求、验收、影响面、风险和任务拆分。</p>
+          <p>收到需求先加载 <code>request-analysis</code>，建立 <code>.harness/changes/&lt;feature&gt;/summary.md</code>，写清需求、验收、影响面、风险和任务拆分。跑完把 <code>DECLARE: record=… | flow=… | next=…</code> 这一行贴进回复；出现 <code>[HINT]</code> 说明记录还没落盘。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 1 -Feature &lt;name&gt;</code></pre>
         </div>
         <div class="card card--green" style="--i:1">
           <h3>动代码</h3>
-          <p>先加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 和阶段 5 会再次执行同一条命令，不通过就 BLOCKED。</p>
+          <p>先跑一次阶段 3 确认记录在盘（缺记录时 <code>[HINT]</code> 会指名加载 <code>request-analysis</code>），再加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 和阶段 5 会再次执行同一条命令，不通过就 BLOCKED。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 3 -Feature &lt;name&gt;</code></pre>
         </div>
@@ -1189,7 +1189,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
       </div>
 
       <div class="footer">
-        本页基于仓库当前代码（v1.31.6）整理。原始说明见
+        本页基于仓库当前代码（v1.31.7）整理。原始说明见
         <a href="../README.md">README</a>、
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；

@@ -1,7 +1,28 @@
-HARNESS-BOOTSTRAP VERSION 1.31.6
+HARNESS-BOOTSTRAP VERSION 1.31.7
 
 changelog
 ---------
+1.31.7  (决策点填充 / 技能索引单一真源)
+- 探测：`probe-project.ps1` 新增 `probe-facts.json`——实体 / Controller 映射 /
+  Topic / 缓存 Key / 表名的待确认草稿，每类上限 60 条，超出标 truncated
+- 索引：新增 `sync-skills-index.ps1`，技能清单由实际目录生成到
+  `.harness/skills/README.md` 与 `AGENTS.md` 的标记块；`verify-harness` 新增
+  `skills-index`（缺标记 WARN，漂移 FAIL）
+- 技能：01-crud-scaffold / 02-pagination-query / 04-mq-messaging /
+  05-transaction-consistency / 08-excel-import-export / 09-db-migration
+  补"决策表 + 形状 + 自检"骨架，B+ 从 4 个增至 10 个
+- 技能：`coding-skill` 把"先证明记录已存在"前移为第 0 步（先跑 `stage-gate -Stage 1`
+  并贴 `DECLARE` 行，再读代码），description 去掉"需求已明确"这句跳过授权
+- 门禁：`stage-gate` 在 `summary-exists` 失败时打印 `[HINT]` 指名加载 `request-analysis`
+  并给 4 步动作；阶段 1/3 通过时打印可直接粘贴的 `DECLARE` 行（记录 / 档位 / 下一步）
+- 门禁：pre-commit 在 HEAD 无 `.harness/changes` 时区分"首次接入"与"`.gitignore` 忽略"，
+  后者告警并写 `assoc_skip`，不再静默放行
+- 门禁：`verify-grounding` 新增 `groundingStrict`（新装 true、升级合并 false）；
+  `stale` 在"最近 14 天加载过"时升 FAIL；`metrics` 复盘把 stale 一并列进结论
+- 文档：新增 `references/示例-填充完成度.md`（合成示例，只校准密度）
+- 测试：新增 `tests/test-probe.ps1`（第 6 套）；skills-registry 补索引漂移断言；
+  test-update 断言 groundingStrict 合并为 false
+
 1.31.6  (归因门禁不再被 .gitignore 静默关掉 / 填充深度)
 - 门禁：`audit-order` 在 `.harness/changes` 被 `.gitignore` 忽略时直接 FAIL 并给出两条出路；
   新增 `recordsTracked`（默认 true），显式 false 才允许跳过，且 `verify-harness` 报 WARN

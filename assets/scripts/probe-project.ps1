@@ -7,8 +7,11 @@
     generated harness matches the real repository instead of a template fantasy.
 
   OUTPUT
-    <out>\baseline.json   machine readable, the agent parses this
-    <out>\baseline.md     human readable summary for the user to confirm
+    <out>\baseline.json     machine readable, the agent parses this
+    <out>\baseline.md       human readable summary for the user to confirm
+    <out>\probe-facts.json  draft facts (entities / controllers / topics /
+                            cache keys / tables) for the user to confirm before
+                            they are copied into .harness/wiki/
 
   USAGE  (no pwsh on 5.1 boxes; Bypass required by the execution policy)
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-project.ps1
@@ -28,7 +31,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
-$outDir   = Join-Path $rootPath $Out
+# -Out may be relative to the project (default) or an absolute path elsewhere;
+# Join-Path would glue an absolute child onto the root and produce a bogus path.
+$outIsRooted = [System.IO.Path]::IsPathRooted($Out)
+$outDir = if ($outIsRooted) { $Out } else { Join-Path $rootPath $Out }
 if (-not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
 
 function Find-Files {
@@ -179,6 +185,161 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force -ErrorAction Silently
 $topExt = @($hist.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 12 |
     ForEach-Object { [pscustomobject]@{ ext = $_.Key; count = $_.Value } })
 
+# ------------------------------------------------------ draft facts (read only)
+# The baseline answers "what kind of project is this"; it cannot answer "what is
+# in it", so the agent filling .harness/wiki/ starts from zero. These five
+# regexes extract the cheapest evidence instead: entity and controller class
+# names, MQ topics, cache-key literals and DDL table names. They are a DRAFT for
+# the user to confirm, never an authority: a missed fact costs nothing, a wrong
+# one costs trust, so every pattern stays deliberately narrow.
+#
+# Relative paths are built while walking the tree. Never derive them with
+# Substring($rootPath.Length): %TEMP% is an 8.3 short name on CI
+# (C:\Users\RUNNER~1\...) while Get-ChildItem returns long names, and the slice
+# then lands in the middle of a directory name.
+$probeSkip = @('.git','.harness','.trae','.claude','.idea','.vscode','node_modules',
+    'target','build','dist','out','bin','obj','coverage','vendor')
+
+function Get-ProbeFiles {
+    param([string]$StartPath, [string]$RelPrefix)
+    $found = New-Object System.Collections.Generic.List[object]
+    $stack = New-Object System.Collections.Stack
+    $stack.Push([pscustomobject]@{ Full = $StartPath; Rel = $RelPrefix })
+    while ($stack.Count -gt 0) {
+        $cur = $stack.Pop()
+        foreach ($f in @(Get-ChildItem -LiteralPath $cur.Full -File -Force -ErrorAction SilentlyContinue)) {
+            if (-not ($f.Name -like '*.java' -or $f.Name -like '*.sql')) { continue }
+            $rel = if ($cur.Rel) { $cur.Rel + '/' + $f.Name } else { $f.Name }
+            $found.Add([pscustomobject]@{ FullName = $f.FullName; Rel = $rel; Name = $f.Name })
+        }
+        foreach ($d in @(Get-ChildItem -LiteralPath $cur.Full -Directory -Force -ErrorAction SilentlyContinue)) {
+            if ($probeSkip -contains $d.Name) { continue }
+            $rel = if ($cur.Rel) { $cur.Rel + '/' + $d.Name } else { $d.Name }
+            $stack.Push([pscustomobject]@{ Full = $d.FullName; Rel = $rel })
+        }
+    }
+    # Return a plain array: PS 5.1 throws "Argument types do not match" (a
+    # PSToObjectArrayBinder bug) when @() is applied directly to a List[object].
+    return $found.ToArray()
+}
+
+function Read-ProbeText {
+    param([string]$PathToRead)
+    try { return [System.IO.File]::ReadAllText($PathToRead, [System.Text.Encoding]::UTF8) }
+    catch { return '' }
+}
+
+# One mapping per controller, the first string attribute on a class or method.
+# "produces = ..." must NOT be read as a path, hence value=/bare-string only.
+$mappingRe  = [regex]'(?s)@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\s*\(\s*(?:value\s*=\s*)?\{?\s*"([^"]*)"'
+# Covers @KafkaListener(topic = "x") and topics = {"x","y"} (first capture).
+$topicRe    = [regex]'(?i)\btopics?\s*=\s*\{?\s*"([^"]+)"'
+# At least one colon is structural; uppercase is tolerated so placeholders like
+# demo:cart:{userId} are not silently dropped.
+$cacheKeyRe = [regex]'(?i)"([a-z0-9_-]+:[a-z0-9_:{}.-]+)"'
+# An optional backticked schema prefix is common (CREATE TABLE `db`.`t`); the
+# captured group must be the table name, not the schema.
+$tableRe    = [regex]'(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[]?[A-Za-z0-9_]+[`"\]]?\s*\.\s*)?[`"\[]?([A-Za-z0-9_]+)'
+
+$factEntities    = New-Object System.Collections.Generic.List[object]
+$factControllers = New-Object System.Collections.Generic.List[object]
+$factTopics      = New-Object System.Collections.Generic.List[object]
+$factKeys        = New-Object System.Collections.Generic.List[object]
+$factTables      = New-Object System.Collections.Generic.List[object]
+$keySeen     = New-Object 'System.Collections.Generic.HashSet[string]'
+$tableSeen   = New-Object 'System.Collections.Generic.HashSet[string]'
+
+foreach ($f in @(Get-ProbeFiles -StartPath $rootPath -RelPrefix '')) {
+    if ($f.Name -like '*.java') {
+        $text = Read-ProbeText $f.FullName
+
+        if ($f.Rel -match '(?i)(^|/)model/entity/' -or $f.Name -match '(?i)Entity\.java$') {
+            $cls = $f.Name -replace '\.java$', ''
+            if ($cls -and $cls -ne 'Entity') {
+                $factEntities.Add([pscustomobject][ordered]@{ name = $cls; path = $f.Rel })
+            }
+        }
+
+        if ($f.Rel -match '(?i)(^|/)controller/' -or $f.Name -match '(?i)Controller\.java$') {
+            $cls = $f.Name -replace '\.java$', ''
+            $m = $mappingRe.Match($text)
+            $mapping = if ($m.Success) { $m.Groups[1].Value } else { $null }
+            $factControllers.Add([pscustomobject][ordered]@{ name = $cls; path = $f.Rel; mapping = $mapping })
+        }
+
+        if ($text -match 'MessageListener|@KafkaListener|@RabbitListener') {
+            $tm = $topicRe.Match($text)
+            if ($tm.Success) {
+                $factTopics.Add([pscustomobject][ordered]@{ topic = $tm.Groups[1].Value; path = $f.Rel })
+            }
+        }
+
+        if ($f.Rel -match '(?i)cache|redis|service|repository') {
+            foreach ($km in $cacheKeyRe.Matches($text)) {
+                $k = $km.Groups[1].Value
+                if ($k.Length -le 80 -and $keySeen.Add($k)) {
+                    $factKeys.Add([pscustomobject][ordered]@{ key = $k; path = $f.Rel })
+                }
+            }
+        }
+    } elseif ($f.Name -like '*.sql') {
+        $text = Read-ProbeText $f.FullName
+        foreach ($tm in $tableRe.Matches($text)) {
+            $t = $tm.Groups[1].Value
+            if ($tableSeen.Add($t + '|' + $f.Rel)) {
+                $factTables.Add([pscustomobject][ordered]@{ table = $t; path = $f.Rel })
+            }
+        }
+    }
+}
+
+$entityCount     = $factEntities.Count
+$controllerCount = $factControllers.Count
+$topicCount      = $factTopics.Count
+$keyCount        = $factKeys.Count
+$tableCount      = $factTables.Count
+
+# Stable order (the directory walk is a stack) and a hard cap per class: a draft
+# that dumps 4000 cache keys is unreadable and unusable for confirmation.
+$factLimit = 60
+$probeTruncated = $false
+function Select-ProbeLimit {
+    param([object[]]$Rows)
+    if (@($Rows).Count -gt $factLimit) {
+        $script:probeTruncated = $true
+        return @($Rows)[0..($factLimit - 1)]
+    }
+    return @($Rows)
+}
+
+$entityRows     = @($factEntities    | Sort-Object path, name)
+$controllerRows = @($factControllers | Sort-Object path)
+$topicRows      = @($factTopics      | Sort-Object path, topic)
+$keyRows        = @($factKeys        | Sort-Object path, key)
+$tableRows      = @($factTables      | Sort-Object path, table)
+
+$facts = [ordered]@{
+    generatedAt = (Get-Date).ToString('s')
+    root        = $rootPath
+    truncated   = $probeTruncated
+    entities    = @(Select-ProbeLimit $entityRows)
+    controllers = @(Select-ProbeLimit $controllerRows)
+    topics      = @(Select-ProbeLimit $topicRows)
+    cacheKeys   = @(Select-ProbeLimit $keyRows)
+    tables      = @(Select-ProbeLimit $tableRows)
+}
+# The cap may have flipped the flag inside Select-ProbeLimit above; write the
+# final value back so the serialised object cannot claim truncated=false.
+$facts['truncated'] = $probeTruncated
+
+$factsRelText = ($Out -replace '\\', '/').TrimEnd('/')
+$factsRel = if (-not $factsRelText -or $factsRelText -eq '.') { 'probe-facts.json' }
+            else { $factsRelText + '/probe-facts.json' }
+# Count what the draft actually contains: reporting pre-cap totals next to a
+# 60-row array reads like a contradiction.
+$factsCountNote = 'probe-facts: {0} entities / {1} controllers / {2} topics / {3} keys / {4} tables (draft, capped at 60/class)' -f `
+    $facts.entities.Count, $facts.controllers.Count, $facts.topics.Count, $facts.cacheKeys.Count, $facts.tables.Count
+
 # --------------------------------------------------------------- write json
 $baseline = [ordered]@{
     generatedAt  = (Get-Date).ToString('s')
@@ -198,7 +359,9 @@ $baseline = [ordered]@{
     notes = @(
         'baseline.json is evidence, not a plan. Read it, then propose what to create.',
         'Commands (build/test/lint) MUST be discovered by actually running them; this probe does not guess them.',
-        'Anything not present here must be marked TODO(pending) rather than invented.'
+        'Anything not present here must be marked TODO(pending) rather than invented.',
+        $factsCountNote,
+        ('probe-facts draft: {0} (confirm every row before copying it into .harness/wiki/)' -f $factsRel)
     )
 }
 # ------------------------------------------------------------ recommendations
@@ -299,6 +462,11 @@ $baseline['recommendations'] = $recommendations
 $jsonOut = Join-Path $outDir 'baseline.json'
 $jsonText = $baseline | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText($jsonOut, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
+
+# probe-facts.json sits next to baseline.json; -Out decides where that is.
+$factsJsonOut = Join-Path $outDir 'probe-facts.json'
+$factsText = $facts | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($factsJsonOut, $factsText, (New-Object System.Text.UTF8Encoding($false)))
 
 # --------------------------------------------------------------- write md
 $md = New-Object System.Text.StringBuilder
@@ -407,10 +575,14 @@ Write-Host "  src roots    : $(if ($srcRoots.Count) { $srcRoots -join ', ' } els
 Write-Host "  test roots   : $(if ($testRoots.Count) { $testRoots -join ', ' } else { '(none)' })"
 Write-Host "  existing rules: $(if ($existingAgents.Count) { $existingAgents -join ', ' } else { '(none)' })"
 Write-Host "  git          : repo=$isGit branch=$branch dirty=$dirty"
+$truncNote = if ($probeTruncated) { ' (truncated to 60 per class)' } else { '' }
+Write-Host "  draft facts  : $factsCountNote$truncNote"
 Write-Host ""
 Write-Host "  written: $jsonOut"
 Write-Host "  written: $mdOut"
+Write-Host "  written: $factsJsonOut"
 Write-Host ""
 Write-Host "NEXT: read baseline.md, confirm with the user, then generate the harness."
 Write-Host "      Commands still unknown must be discovered by running them."
+Write-Host "      probe-facts.json is a DRAFT: confirm each row before writing it into .harness/wiki/."
 exit 0

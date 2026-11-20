@@ -41,7 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      25 .ps1 file(s) parse
+[PASS] parse      27 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -64,7 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite test-update
 ```
 
-Five suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking summary fields plus the three content sections (a placeholder table fails), the L1 claim checked against the real diff, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, the commit-range summary-order audit, and the skill registration check (unindexed / no entry).
+Six suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking summary fields plus the three content sections (a placeholder table fails), the L1 claim checked against the real diff, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, the commit-range summary-order audit, the skill registration check (unindexed / no entry), and the probe fact draft (entities / endpoints / topics / keys / tables).
 
 ## Install
 

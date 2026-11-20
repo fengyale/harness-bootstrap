@@ -373,6 +373,7 @@ Check 'dry-run reports requiredAnyOf'      ($dry -match 'add requiredAnyOf:')
 Check 'dry-run reports required removal'   ($dry -match 'remove required:.*scripts/red-line-scan\.ps1')
 Check 'dry-run reports sqlGate delta'      ($dry -match 'add sqlGate: true')
 Check 'dry-run reports new config blocks'  (($dry -match 'add sqlReview') -and ($dry -match 'add summaryContent') -and ($dry -match 'add recordsTracked'))
+Check 'dry-run reports the strict migration default' ($dry -match 'add groundingStrict: false')
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
 Check 'dry-run plans lessons MOVE'         ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons\.md')
 Check 'dry-run plans promoted MOVE'        ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons-promoted\.txt')
@@ -431,6 +432,9 @@ Check 'required JSON merged: requiredAnyOf added' ($mergedConfig.PSObject.Proper
 Check 'required JSON merged: sqlReview added' ($mergedConfig.PSObject.Properties.Name -contains 'sqlReview')
 Check 'required JSON merged: summaryContent added' ($mergedConfig.PSObject.Properties.Name -contains 'summaryContent')
 Check 'required JSON merged: recordsTracked added' ($mergedConfig.PSObject.Properties.Name -contains 'recordsTracked')
+# Strict mode is a migration default: an upgraded project must keep WARN until
+# its older skills are re-anchored, otherwise the first verify goes red.
+Check 'required JSON merged: groundingStrict is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'groundingStrict' -and $mergedConfig.groundingStrict -eq $false)
 Check 'summaryContent keeps the acceptance needles' (@($mergedConfig.summaryContent.acceptance).Count -gt 0)
 Check 'required JSON merged: project note kept' ($mergedConfig._note -eq 'old install')
 Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.required) -contains 'scripts/red-line-scan.ps1'))

@@ -214,6 +214,13 @@ function Get-RequiredDelta {
             $dstHas = ($dst.PSObject.Properties.Name -contains $key)
             if ($srcHas -and -not $dstHas) { $parts += ('add ' + $key + ' (new config block)') }
         }
+        # groundingStrict is a migration default, not a copy: a fresh install is
+        # strict, but an upgraded project would go red on day one (its installed
+        # skills predate the anchors), so the merge adds false and says why.
+        if (($src.PSObject.Properties.Name -contains 'groundingStrict') -and
+            -not ($dst.PSObject.Properties.Name -contains 'groundingStrict')) {
+            $parts += 'add groundingStrict: false (upgrade keeps WARN; set true after the anchors are filled)'
+        }
         # Old projects that followed the previous "delete the rule" opt-out may
         # have left the gate scripts behind. Without this hint the new pair
         # contract would fail their next verify with no explanation.
@@ -390,6 +397,12 @@ function Merge-RequiredJson {
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
             $cfg | Add-Member -NotePropertyName $key -NotePropertyValue $src.$key
         }
+    }
+    # Migration default: false keeps the old WARN behaviour for a project whose
+    # skills were compiled before the strict check existed.
+    if (($src.PSObject.Properties.Name -contains 'groundingStrict') -and
+        -not ($cfg.PSObject.Properties.Name -contains 'groundingStrict')) {
+        $cfg | Add-Member -NotePropertyName groundingStrict -NotePropertyValue $false
     }
     [System.IO.File]::WriteAllText($DstPath, (($cfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
     return $true

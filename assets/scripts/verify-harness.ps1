@@ -10,17 +10,19 @@
     1. structure    required files exist
     2. frontmatter  every SKILL.md has valid name/description and name matches dir
     3. links        .trae/skills entries resolve to .harness/skills sources
-    4. red lines    IDs identical in AGENTS.md, the spec file and red-line-rules.json
-    5. gate         git pre-commit / pre-merge-commit hooks installed and call the scanner
-    6. runnable     red-line-scan.ps1 actually runs and returns a clean result
-    7. resident     AGENTS.md stays under the size budget
-    8. grounding    skill paths and evidence anchors (delegates to verify-grounding.ps1)
-    9. agents       AGENTS.md contains the fixed information architecture
-    10. metrics      task summaries exist (field validity is check 12)
-    11. modules      .harness/modules cards have sections and evidence
-    12. summary      task summaries pass scripts/check-summary.ps1 (same rules as the gates)
-    13. sql-gate     sqlGate policy: rule + runnable gate + hook wiring, or explicit opt-out
-    14. lessons      a lesson that repeated twice must be promoted into a check, not a note
+    4. skills-index the skill table in .harness/skills/README.md and AGENTS.md is
+                    generated from the directory (sync-skills-index.ps1 -Check)
+    5. red lines    IDs identical in AGENTS.md, the spec file and red-line-rules.json
+    6. gate         git pre-commit / pre-merge-commit hooks installed and call the scanner
+    7. runnable     red-line-scan.ps1 actually runs and returns a clean result
+    8. resident     AGENTS.md stays under the size budget
+    9. grounding    skill paths and evidence anchors (delegates to verify-grounding.ps1)
+    10. agents      AGENTS.md contains the fixed information architecture
+    11. metrics     task summaries exist (field validity is check 13)
+    12. modules     .harness/modules cards have sections and evidence
+    13. summary     task summaries pass scripts/check-summary.ps1 (same rules as the gates)
+    14. sql-gate    sqlGate policy: rule + runnable gate + hook wiring, or explicit opt-out
+    15. lessons     a lesson that repeated twice must be promoted into a check, not a note
 
   USAGE  (no pwsh on Windows PowerShell 5.1 boxes; Bypass is required by policy)
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1
@@ -309,7 +311,36 @@ if ($registryBad -eq 0 -and $skillDirs.Count -gt 0) {
     }
 }
 
-# ---------------------------------------------------------------- 4 red lines
+# ------------------------------------------------------------ 3c skills index
+# "which skills exist" used to be maintained by hand in two places, so it drifted
+# as soon as a skill was added or removed. The directory is the source of truth;
+# sync-skills-index.ps1 renders the table into both files and compares it here.
+# A package installed before the script existed has no marker pair yet: report
+# WARN instead of blocking an upgrade (the script is copied on the next run).
+$syncIndexPath = Join-Path $rootPath 'scripts\sync-skills-index.ps1'
+if (Test-Path -LiteralPath $syncIndexPath) {
+    $siOut = & $PS -NoProfile -ExecutionPolicy Bypass -File $syncIndexPath -Root $rootPath -Check 2>&1
+    $siCode = $LASTEXITCODE
+    if ($siCode -eq 0) {
+        Add-Result 'skills-index' 'PASS' (($siOut | Select-Object -Last 1) -join '')
+    } else {
+        $siFirst = @($siOut | Select-Object -First 1)
+        $siText = ($siOut | Out-String)
+        # Real drift wins over a missing block: an install with one file updated
+        # and the other not yet must still report the drift, not hide it as WARN.
+        if ($siText -match 'drift in') {
+            Add-Result 'skills-index' 'FAIL' "sync-skills-index reports drift: $siFirst"
+        } elseif ($siText -match 'no marker pair') {
+            Add-Result 'skills-index' 'WARN' "no marker block yet (upgrade path): $siFirst"
+        } else {
+            Add-Result 'skills-index' 'FAIL' "sync-skills-index failed: $siFirst"
+        }
+    }
+} else {
+    Add-Result 'skills-index' 'WARN' 'missing: scripts\sync-skills-index.ps1 (skill index not verified; it is copied by the next upgrade)'
+}
+
+# ---------------------------------------------------------------- 5 red lines
 $jsonPath = Join-Path $rootPath 'scripts\red-line-rules.json'
 $agentsPath = Join-Path $rootPath 'AGENTS.md'
 
@@ -408,7 +439,7 @@ foreach ($rs in @($cfg.requiredRuleSections)) {
     }
 }
 
-# --------------------------------------------------------------------- 5 gate
+# --------------------------------------------------------------------- 6 gate
 # Ask git for the EFFECTIVE hooks directory. In a linked worktree
 # --absolute-git-dir is .git/worktrees/<name> (git never runs its hooks/);
 # --git-path hooks returns the common directory and honours core.hooksPath.
@@ -512,7 +543,7 @@ if (-not $recordsTracked) {
     } catch { }
 }
 
-# ----------------------------------------------------------------- 6 runnable
+# ----------------------------------------------------------------- 7 runnable
 # The scanner must actually run HERE. Prefer PowerShell, fall back to the python
 # twin -- otherwise "0 FAIL" would just mean "this check never executed".
 $scanPs = Join-Path $rootPath 'scripts\red-line-scan.ps1'
@@ -567,7 +598,7 @@ if ($scanHollow) {
     }
 }
 
-# ------------------------------------------------------------ 6a lesson gate
+# ------------------------------------------------------------ 7a lesson gate
 # "Persist on the second occurrence" only holds if the second occurrence forces
 # a check. metrics.ps1 owns the counting; this delegates so the numbers cannot
 # drift between the report and the gate.
@@ -583,7 +614,7 @@ if (Test-Path -LiteralPath $metricsPath) {
     }
 }
 
-# --------------------------------------------------------------- 6b sql gate
+# --------------------------------------------------------------- 7b sql gate
 # Three states, because "no rule" used to be indistinguishable from "the rule
 # was deleted":
 #   sqlGate=true   -> rule + runtime + hook wiring + a real run are all required
@@ -705,7 +736,7 @@ if ($sqlGateInvalid) {
     }
 }
 
-# ------------------------------------------------------------------ 7 resident
+# ------------------------------------------------------------------ 8 resident
 if (Test-Path -LiteralPath $agentsPath) {
     $lineCount = ([System.IO.File]::ReadAllLines($agentsPath, [System.Text.Encoding]::UTF8)).Count
     if ($lineCount -le $MaxAgentsLines) {
@@ -715,7 +746,7 @@ if (Test-Path -LiteralPath $agentsPath) {
     }
 }
 
-# --------------------------------------------------------------- 8 grounding
+# --------------------------------------------------------------- 9 grounding
 $groundingPath = Join-Path $rootPath 'scripts\verify-grounding.ps1'
 if (Test-Path -LiteralPath $groundingPath) {
     $gOut  = & $PS -NoProfile -ExecutionPolicy Bypass -File $groundingPath -Root $rootPath -Quiet 2>&1
@@ -730,7 +761,7 @@ if (Test-Path -LiteralPath $groundingPath) {
     Add-Result 'grounding' 'WARN' 'missing: scripts\verify-grounding.ps1'
 }
 
-# ------------------------------------------------------ 9 agents structure
+# ------------------------------------------------------ 10 agents structure
 # The resident file has a fixed information architecture. Without this check the
 # installer can "merge" by appending one small section and still pass -- which is
 # exactly how a thin AGENTS.md happens.
@@ -806,7 +837,7 @@ if ($agentsSections.Count -gt 0 -and (Test-Path -LiteralPath $agentsPath)) {
     }
 }
 
-# ----------------------------------------------------------------- 10 metrics
+# ----------------------------------------------------------------- 11 metrics
 $changesRoot = Join-Path $rootPath '.harness\changes'
 if (Test-Path -LiteralPath $changesRoot) {
     $sumCount = 0
@@ -815,7 +846,7 @@ if (Test-Path -LiteralPath $changesRoot) {
         if (-not (Test-Path -LiteralPath $sf)) { return }
         $sumCount++
     }
-    # Field-level validity is judged once, by check-summary.ps1 in check 12; a
+    # Field-level validity is judged once, by check-summary.ps1 in check 13; a
     # second regex here is exactly how the checks drifted apart before.
     if ($sumCount -eq 0) {
         Add-Result 'metrics' 'WARN' 'no task summary yet (record one real task, then run metrics.ps1)'
@@ -847,7 +878,7 @@ if (Test-Path -LiteralPath $changesRoot) {
     }
 }
 
-# ------------------------------------------------------------ 10b summary fields
+# ------------------------------------------------------------ 11b summary fields
 # metrics.ps1 can only count what is present. This check reuses the same validator
 # as stage-gate and pre-commit so the three cannot drift. WARN only: historical
 # summaries may predate a field, and a FAIL here would block an otherwise sound
@@ -889,7 +920,7 @@ if (Test-Path -LiteralPath $changesRoot) {
     }
 }
 
-# ---------------------------------------------------------------- 11 modules
+# ---------------------------------------------------------------- 12 modules
 # Module cards hold "what breaks here". A card without evidence is a rumour, and
 # a card missing sections is a stub -- both are caught here.
 $modulesRoot = Join-Path $rootPath '.harness\modules'

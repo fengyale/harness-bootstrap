@@ -4,6 +4,8 @@
   "_requiredAnyOf说明": "每组至少存在一个文件；用于「同一能力有多个运行时」的场景。扫描器的 ps1/py 只保留一个也算完整。",
   "_recordsTracked说明": "true = .harness/changes 必须被 git 跟踪（默认）。false = 项目明确放弃源码归因审计：audit-order 跳过并说明原因，verify-harness 报 WARN。若目录被 .gitignore 忽略却未声明 false，audit-order 直接 FAIL——否则门禁会静默永不生效。",
   "recordsTracked": true,
+  "_groundingStrict说明": "true = 有代码的项目里，技能没有 E1/E2 锚点直接 FAIL（新装默认）。false = 只报 WARN（默认给升级项目，等锚点补齐后再打开）。升级不会自动改成 true。",
+  "groundingStrict": true,
   "sqlGate": true,
   "sqlReview": {
     "_说明": "check-summary.ps1 -Stage final 用它检查 sql_review 的结论与证据是否自相矛盾：结论写通过/已改写，但四层或计划里仍有已定义的未验证标记，就直接 FAIL；值里引用的 .harness 路径必须存在。noneMarkers 命中则视为本条不适用。",
@@ -67,6 +69,7 @@
     "scripts/stage-gate-rules.json",
     "scripts/check-summary.ps1",
     "scripts/setup-links.ps1",
+    "scripts/sync-skills-index.ps1",
     "scripts/verify-grounding.ps1",
     "scripts/agents-delta.ps1",
     "scripts/metrics.ps1",

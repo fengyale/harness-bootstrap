@@ -755,6 +755,21 @@ if ($tasks.Count -eq 0) {
             $verdict += "lesson repeated $($lessonCounts[$k])x: $k (promote it into a rule, a gate or a skill)"
         }
     }
+    # The two-week review also has to say which skills have drifted from the code.
+    # verify-grounding already computes that (anchor file newer than "- verified:"),
+    # so reuse its verdict instead of maintaining a second mtime comparison.
+    $vgPath = Join-Path $rootPath 'scripts\verify-grounding.ps1'
+    if (-not $Quiet -and (Test-Path -LiteralPath $vgPath)) {
+        try {
+            $psHost = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
+            $vgOut = & $psHost -NoProfile -ExecutionPolicy Bypass -File $vgPath -Root $rootPath 2>&1
+            foreach ($line in @($vgOut)) {
+                if ($line -match '\[(WARN|FAIL)\]\s+stale\s+(.+)$') {
+                    $verdict += ('stale skill (' + $matches[1].ToLower() + '): ' + $matches[2])
+                }
+            }
+        } catch { }
+    }
 }
 # Bad small rows are reported even when the window has no valid task; otherwise
 # a typo in _small.md would look like "no tasks" with no explanation.

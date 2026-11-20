@@ -41,7 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      25 .ps1 file(s) parse
+[PASS] parse      27 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
@@ -64,7 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite test-update
 ```
 
-五套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 查 summary 字段与三节内容（占位符算未填）、L1 声明按真实 diff 核对、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）。
+六套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 查 summary 字段与三节内容（占位符算未填）、L1 声明按真实 diff 核对、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）、探测事实草稿（实体 / 端点 / Topic / Key / 表名）。
 
 ## 装到项目
 

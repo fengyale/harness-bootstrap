@@ -38,7 +38,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
-$allSuites = @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1', 'test-skills-registry.ps1')
+$allSuites = @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-audit-order.ps1', 'test-skills-registry.ps1', 'test-probe.ps1')
 $suites = $allSuites
 if ($Suite) {
     # exact name first; a prefix is accepted only when it picks exactly one suite,
