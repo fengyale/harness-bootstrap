@@ -19,6 +19,9 @@
                     only during cold start
     5. stale        code behind an [E2] anchor changed after the skill was verified
                     ("- verified: YYYY-MM-DD" resets the clock; WARN only)
+    6. coverage     a filled project must not keep the template's placeholder rows:
+                    a placeholder structure tree is FAIL, a wiki table that is
+                    still a template is WARN (needs .harness\stack.json)
 
   NEW PROJECT MODE
     Detected by .harness/project-brief.md. There is no code to cite yet, so a
@@ -484,6 +487,149 @@ if ($MaxGrounded -gt 0 -and $groundedCount -gt $MaxGrounded) {
     Add-Result 'grounded' 'WARN' "$groundedCount grounded skill(s) exceed the cold-start budget $MaxGrounded"
 } elseif ($groundedCount -gt 0) {
     Add-Result 'grounded' 'PASS' "$groundedCount grounded skill(s)"
+}
+
+# ---------------------------------------------------------------- 4 coverage
+# A wiki page can be long and still be the template: the >=5-line check in
+# verify-harness cannot see that. probe output is the cheap witness of "what the
+# project actually has", so this check is gated on it and stays advisory (WARN)
+# except for the structure tree -- a fenced tree line that still starts with "<"
+# unambiguously means the tree was never copied from the real repository.
+# probe-project does NOT count entities / topics / endpoints, so there is no
+# numeric reconciliation here on purpose: a count check would reward padding.
+function Chars { param([int[]]$Codes) -join ($Codes | ForEach-Object { [char]$_ }) }
+function Test-PlaceholderCell {
+    param([string]$Cell)
+    # template slots are usually wrapped in backticks; strip them before the
+    # "<...>" test can see the token.
+    $t = $Cell.Trim().Trim([char]0x60).Trim()
+    if ($t.Length -eq 0) { return $true }
+    # a cell that IS one angle-bracket token is a template slot. A java type in
+    # prose (List<String>) must stay real, hence the CJK requirement below.
+    if ($t -match '^<[^<>]*>$') { return $true }
+    if (($t -match '<[^<>]*>') -and ($t -match '[\u4e00-\u9fa5]')) { return $true }
+    if ($t -match '\bTODO\b') { return $true }
+    if ($t -eq '...' -or $t -eq '-' -or $t -eq ([string][char]0x2026) -or $t -eq ([string][char]0x2014)) { return $true }
+    return $false
+}
+function Test-RealTableRow {
+    param([string]$Line)
+    if ($Line -notmatch '^\s*\|') { return $false }
+    if ($Line -match '^\s*\|[\s:|-]+\|\s*$') { return $false }
+    $cells = @($Line.Trim().Trim('|').Split('|'))
+    if ($cells.Count -lt 2) { return $false }
+    # the first cell is an ID/label column and is never a placeholder, so only
+    # the remaining cells decide whether the row carries real content.
+    foreach ($c in @($cells | Select-Object -Skip 1)) {
+        if (-not (Test-PlaceholderCell $c)) { return $true }
+    }
+    return $false
+}
+function Get-SectionTableRows {
+    param([string[]]$Lines, [string]$HeadingPattern)
+    $in = $false
+    $inFence = $false
+    $seenSep = $false
+    $rows = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $Lines) {
+        if ($l -match '^\s*```') { $inFence = -not $inFence; continue }
+        if ($inFence) { continue }
+        if (-not $in) {
+            if ($l -match $HeadingPattern) { $in = $true }
+            continue
+        }
+        # only a level-2 heading ends the section: level-3 entries are content.
+        if ($l -match '^##\s') { break }
+        if ($l -notmatch '^\s*\|') { continue }
+        if ($l -match '^\s*\|[\s:|-]+\|\s*$') { $seenSep = $true; continue }
+        $rows.Add($l)
+    }
+    # The header row carries column names, not data. Counting it as real is how a
+    # table that was never filled looked populated (caught in review, 1.31.5).
+    if ($seenSep -and $rows.Count -gt 0) { return @($rows | Select-Object -Skip 1) }
+    return $rows
+}
+function Get-SectionSubHeadings {
+    param([string[]]$Lines, [string]$HeadingPattern)
+    $in = $false
+    $inFence = $false
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $Lines) {
+        if ($l -match '^\s*```') { $inFence = -not $inFence; continue }
+        if ($inFence) { continue }
+        if ($l -match '^##\s') { $in = ($l -match $HeadingPattern); continue }
+        if ($in -and $l -match '^###\s') { $out.Add($l) }
+    }
+    return $out
+}
+
+if ($newProject -and -not $codeExists) {
+    Add-Result 'coverage' 'PASS' 'new project without code: wiki coverage deferred'
+} else {
+    $rulesDir = Join-Path $rootPath '.harness\rules'
+    $wikiDir  = Join-Path $rootPath '.harness\wiki'
+    $structFile = Join-Path $rulesDir ((Chars 0x5DE5,0x7A0B,0x7ED3,0x6784) + '.md')
+    $agentsDoc2 = Join-Path $rootPath 'AGENTS.md'
+    $agentsFilled = $false
+    if (Test-Path -LiteralPath $agentsDoc2) {
+        $agentsFilled = ([System.IO.File]::ReadAllText($agentsDoc2, [System.Text.Encoding]::UTF8) -notmatch '<[^<>\r\n]+>')
+    }
+
+    # (a) structure tree: deterministic, but only once the resident file says
+    #     "filled" -- otherwise the project is mid-compile and verify-harness
+    #     already reports the placeholders in AGENTS.md.
+    if ($codeExists -and $agentsFilled -and (Test-Path -LiteralPath $structFile)) {
+        $inFence = $false
+        $bad = New-Object System.Collections.Generic.List[string]
+        # tree glyphs (vertical / branch / last / horizontal) built from code
+        # points so this file stays pure ASCII for PS 5.1.
+        $glyphs = '[' + ([char]0x2502) + ([char]0x251C) + ([char]0x2514) + ([char]0x2500) + ']'
+        foreach ($l in [System.IO.File]::ReadAllLines($structFile, [System.Text.Encoding]::UTF8)) {
+            if ($l -match '^\s*```') { $inFence = -not $inFence; continue }
+            if (-not $inFence) { continue }
+            $x = ($l -replace $glyphs, '').Trim()
+            if ($x.StartsWith('<')) { $bad.Add($x) }
+        }
+        if ($bad.Count -gt 0) {
+            Add-Result 'coverage' 'FAIL' ("structure tree still has {0} placeholder path(s), first: {1}" -f $bad.Count, $bad[0])
+        }
+    }
+
+    # (b) capability vs wiki: advisory, and only for capabilities probe detected.
+    if ($null -eq $stack) {
+        Add-Result 'coverage' 'WARN' 'no .harness\stack.json: coverage cannot be reconciled (run scripts\probe-stack.ps1)'
+    } else {
+        $bizFile  = Join-Path $wikiDir ((Chars 0x4E1A,0x52A1,0x6A21,0x578B) + '.md')
+        $dataFile = Join-Path $wikiDir ((Chars 0x6570,0x636E,0x6A21,0x578B) + '.md')
+        $msgHead   = '^##\s*' + (Chars 0x6D88,0x606F,0x62D3,0x6251)
+        $cacheHead = '^##\s*' + (Chars 0x7F13,0x5B58,0x7B56,0x7565)
+        $entHead   = '^##\s*' + (Chars 0x5B9E,0x4F53,0x6982,0x89C8)
+        $tblHead   = '^##\s*' + (Chars 0x8868,0x7ED3,0x6784,0x5B9A,0x4E49)
+        if ($stack.orm -and (Test-Path -LiteralPath $dataFile)) {
+            $dl = [System.IO.File]::ReadAllLines($dataFile, [System.Text.Encoding]::UTF8)
+            $real = @(Get-SectionSubHeadings $dl $tblHead | Where-Object {
+                ($_ -notmatch '^###\s*<') -and ($_ -notmatch '\bTODO\b')
+            })
+            if ($real.Count -eq 0) {
+                Add-Result 'coverage' 'WARN' "data model: orm=$($stack.orm) but no real table section yet"
+            }
+        }
+        if (Test-Path -LiteralPath $bizFile) {
+            $bl2 = [System.IO.File]::ReadAllLines($bizFile, [System.Text.Encoding]::UTF8)
+            if ($stack.orm) {
+                $real = @(Get-SectionTableRows $bl2 $entHead | Where-Object { Test-RealTableRow $_ })
+                if ($real.Count -eq 0) { Add-Result 'coverage' 'WARN' 'business model: orm detected but the entity table has no real row' }
+            }
+            if ($stack.mq) {
+                $real = @(Get-SectionTableRows $bl2 $msgHead | Where-Object { Test-RealTableRow $_ })
+                if ($real.Count -eq 0) { Add-Result 'coverage' 'WARN' 'business model: MQ detected but the message table has no real row' }
+            }
+            if ($stack.cache) {
+                $real = @(Get-SectionTableRows $bl2 $cacheHead | Where-Object { Test-RealTableRow $_ })
+                if ($real.Count -eq 0) { Add-Result 'coverage' 'WARN' 'business model: cache detected but the cache table has no real row' }
+            }
+        }
+    }
 }
 
 # -------------------------------------------------------------------- summary

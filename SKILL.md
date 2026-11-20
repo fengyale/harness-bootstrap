@@ -355,7 +355,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agents-delta.ps1
 
 要求**三个脚本都 0 FAIL**，把真实输出贴给用户。
 `verify-harness` 查结构（含常驻文件五块是否齐全、是否空心、有无模板占位符），
-`verify-grounding` 查"技能里写的路径/证据是不是真的"，`agents-delta` 查重装差异。
+`verify-grounding` 查"技能里写的路径/证据是不是真的"，外加覆盖度（`工程结构.md` 目录树仍含 `<` 会 FAIL，wiki 表仍是模板只 WARN），`agents-delta` 查重装差异。
 
 阶段门（**手动跑，不接 hook**——它要跑编译和测试，接进提交会拖慢每次 commit）：
 

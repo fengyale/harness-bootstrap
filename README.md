@@ -60,6 +60,8 @@ package gate: OPEN
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+# 只跑一套（约 1–3 分钟），输出末尾会打印每套耗时
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite test-update
 ```
 
 五套测试会在 `%TEMP%` 建临时项目，验证真实退出码：缺行 BLOCKED、占位 SKIP、编译与测试真跑、pre-commit 查 summary 字段与三节内容（占位符算未填）、L1 声明按真实 diff 核对、三个 hook 安装与卸载、A3+ 伪造被拒、升级只替换机制文件并保留历史、提交区间反序审计、技能注册检查（漏登记 / 缺入口）。

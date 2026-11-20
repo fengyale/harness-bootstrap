@@ -60,6 +60,8 @@ Run the behavioural tests:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1
+# one suite only (1-3 minutes); the run ends with a per-suite timing table
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite test-update
 ```
 
 Five suites build throw-away projects under `%TEMP%` and assert real exit codes: missing row BLOCKED, placeholder SKIP, compile/test actually executed, pre-commit checking summary fields plus the three content sections (a placeholder table fails), the L1 claim checked against the real diff, three hooks installed and removed, A3+ spoof rejected, upgrade replacing machinery while keeping history, the commit-range summary-order audit, and the skill registration check (unindexed / no entry).

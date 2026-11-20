@@ -143,6 +143,43 @@ $gCode = $LASTEXITCODE
 Check 'long skill: verify-grounding still exits 0' ($gCode -eq 0)
 Check 'long skill: reported as a size WARN' ($g -match 'consider moving examples')
 
+Step 'coverage: a placeholder structure tree is a failure'
+# verify-grounding cannot see that a long wiki page is still the template, so the
+# coverage check reads the structure tree: a fenced line that still starts with
+# "<" means the tree was never copied from the real repository.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\rules" | Out-Null
+$structName = (-join ([char]0x5DE5, [char]0x7A0B, [char]0x7ED3, [char]0x6784)) + '.md'
+$structPath = Join-Path "$proj\.harness\rules" $structName
+[System.IO.File]::WriteAllLines($structPath, @(
+    '# structure', '', '```text', '<project>/', '+-- src/', '```', ''
+), (New-Object System.Text.UTF8Encoding($false)))
+Set-Content -LiteralPath "$proj\AGENTS.md" -Value '# demo project', 'no placeholders here' -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$proj\src" | Out-Null
+Set-Content -LiteralPath "$proj\src\Main.java" -Value 'class Main { }' -Encoding ASCII
+New-Item -ItemType Directory -Force -Path "$proj\baseline" | Out-Null
+Set-Content -LiteralPath "$proj\baseline\baseline.json" -Value '{"srcRoots":["src"],"testRoots":[]}' -Encoding UTF8
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$gCode = $LASTEXITCODE
+Check 'placeholder tree fails coverage' ($gCode -eq 1)
+Check 'failure names the structure tree' ($g -match 'coverage.*structure tree')
+[System.IO.File]::WriteAllLines($structPath, @(
+    '# structure', '', '```text', 'demo/', '+-- src/', '```', ''
+), (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'filled tree clears the failure' ($LASTEXITCODE -eq 0)
+
+Step 'coverage: an unfilled wiki table is a warning'
+# The tree is filled now. A wiki page copied from the template must be reported
+# as "no real row" but stay a WARN: probe cannot count entities, so a hard
+# failure here would punish projects whose table is legitimately short.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\wiki" | Out-Null
+$bizName = (-join ([char]0x4E1A, [char]0x52A1, [char]0x6A21, [char]0x578B)) + '.md'
+Copy-Item -LiteralPath (Join-Path $pkg "assets\.harness\wiki\$bizName") -Destination (Join-Path "$proj\.harness\wiki" $bizName) -Force
+Set-Content -LiteralPath "$proj\.harness\stack.json" -Value '{"orm":"mybatis","cache":"redis","mq":"present"}' -Encoding UTF8
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'template wiki table is reported as a warning' ($g -match 'WARN.*no real row')
+Check 'coverage warning does not fail the run' ($LASTEXITCODE -eq 0)
+
 Step 'missing README is reported once'
 Remove-Item -LiteralPath $indexPath -Force
 $out = RunVerify

@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.31.5",
+    "title": "(覆盖度检查 / 单套跑)",
+    "body": [
+      "- 门禁：verify-grounding 新增 coverage 项。已填项目（AGENTS.md 无占位符且已有代码）",
+      "  的工程结构.md 目录树仍含 < 直接 FAIL；stack.json 检出 orm / cache / mq 而对应",
+      "  wiki 表仍是模板时只 WARN；新项目无代码时整段跳过",
+      "- 不做数量对账：probe-project 并不统计实体 / Topic / 端点数，行数比对只会奖励凑行数",
+      "- 测试：run-all 新增 -Suite（只跑一套，约 1–3 分钟）与每套耗时表；",
+      "  test-skills-registry 断言占位目录树 FAIL、填好后 exit 0",
+      "- 文档：接地协议校验项补第 7 条；质量分级 / SKILL.md / README 同步"
+    ]
+  },
+  {
     "version": "1.31.4",
     "title": "(技能不再限长 / 做法骨架分两层)",
     "body": [
