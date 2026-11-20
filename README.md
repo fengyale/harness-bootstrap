@@ -133,7 +133,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 - `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`
 - 红线汇总只替换 R5/R6 的脚本检查格
 - 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动
-- 技能正文默认只提示差异；`-MergeSkills` 只换回项目自己的 `harness:project` 区块，定位不到或仍有 slot 标 `PENDING`（不设合并后行数上限），都不写盘
+- 技能正文默认只提示差异；`-MergeSkills` 只换回项目自己的 `harness:project` 区块，定位不到或仍有 slot 标 `PENDING`（不设合并后行数上限），都不写盘；frontmatter 默认原样保留，唯一例外是 1.31.8 前 `description` 里那句「需求已明确…」（会被读成可以跳过 `request-analysis` 和 summary），命中即换成新版 description，并在 MERGE 明细里点名
 - `-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖，但覆盖后是含 slot 的骨架，要重新编译再跑 `verify-harness.ps1`（重置那一步可配 `-SkipVerify`）
 - 技能索引与 `_template` 分开对待：前者是项目资产，后者是包资产
 

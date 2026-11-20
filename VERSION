@@ -1,7 +1,17 @@
-HARNESS-BOOTSTRAP VERSION 1.31.10
+HARNESS-BOOTSTRAP VERSION 1.31.11
 
 changelog
 ---------
+1.31.11  (升级会迁移旧 description 的"跳过需求分析"授权)
+- 1.31.8 从 `coding-skill` 技能模板删掉了「需求已明确…」这句，但 `-MergeSkills` 按设计
+  保留磁盘 frontmatter，存量项目升级后这句仍然留在 description 里——模型据此
+  跳过 `request-analysis`，summary 链路也随之断掉
+- `update-harness.ps1`：仅在 `-MergeSkills` 且 description 命中那句旧文案时，换成
+  模板的新 description，并在 MERGE 明细里写明 "stale pre-1.31.8 description clause
+  replaced"；其他项目自改的 description 保持不动
+- 测试：新增 merge-stale fixture，断言 dry-run 点名、apply 迁移、旧句消失、
+  project 块保留，以及未命中旧句的自定义 description 不被改写
+
 1.31.10  (文档对齐 1.31.6–1.31.9 的机制)
 - 说明页：验收步骤从"三个脚本"改为两个自检脚本 + 阶段门，并补上 1.31.5–1.31.9
   新增的检查（`skills-index` / `fill-depth` / `coverage` / 空 project 块）；

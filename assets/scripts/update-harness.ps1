@@ -645,7 +645,13 @@ function Merge-SkillBlocks {
     $outLines = @($parts)
 
     # The compile step rewrites description for the project; replacing the
-    # frontmatter would reset those trigger words.
+    # frontmatter would reset those trigger words. One exception: the pre-1.31.8
+    # description ended with a clause telling the model that requirements were
+    # already clear, which was read as permission to skip request-analysis (and
+    # with it summary.md). Keeping the disk frontmatter verbatim let that clause
+    # survive every upgrade, so only the known stale sentence is migrated; any
+    # other project wording is still preserved.
+    $descMigrated = 0
     if ($srcLines.Count -gt 0 -and $srcLines[0].Trim() -eq '---' -and
         $dstLines.Count -gt 0 -and $dstLines[0].Trim() -eq '---') {
         $srcEnd = -1
@@ -657,6 +663,27 @@ function Merge-SkillBlocks {
             $merged += $dstLines[0..$dstEnd]
             if ($srcEnd + 1 -le $outLines.Count - 1) { $merged += $outLines[($srcEnd + 1)..($outLines.Count - 1)] }
             $outLines = $merged
+
+            # "xu qiu yi ming que, ..." built from code points: this file must
+            # stay pure ASCII (PS 5.1 parses a BOM-less .ps1 as ANSI).
+            $staleDesc = -join @(
+                [char]0x9700, [char]0x6C42, [char]0x5DF2, [char]0x660E, [char]0x786E, [char]0x3001,
+                [char]0x9700, [char]0x8981, [char]0x5199, [char]0x6216, [char]0x6539, [char]0x4EE3,
+                [char]0x7801, [char]0x65F6, [char]0x4F7F, [char]0x7528, [char]0x3002
+            )
+            $srcDescLine = $null
+            for ($i = 1; $i -lt $srcEnd; $i++) {
+                if ($srcLines[$i] -match '^description:') { $srcDescLine = $srcLines[$i]; break }
+            }
+            if ($srcDescLine) {
+                for ($i = 0; $i -lt $outLines.Count; $i++) {
+                    if ($outLines[$i] -match '^description:' -and $outLines[$i].Contains($staleDesc)) {
+                        $outLines[$i] = $srcDescLine
+                        $descMigrated = 1
+                        break
+                    }
+                }
+            }
         }
     }
 
@@ -681,6 +708,7 @@ function Merge-SkillBlocks {
     $detail = $mode + '; ' + $kept + ' project block(s) kept'
     if ($appended -gt 0) { $detail += ', ' + $appended + ' project-only block(s) appended' }
     if ($legacyAdded -gt 0) { $detail += ', ' + $legacyAdded + ' legacy section(s) wrapped' }
+    if ($descMigrated -gt 0) { $detail += ', stale pre-1.31.8 description clause replaced' }
     return [pscustomobject]@{ Status = 'MERGE'; Detail = $detail; Text = $text; Bom = $bom }
 }
 

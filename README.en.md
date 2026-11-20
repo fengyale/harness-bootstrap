@@ -133,7 +133,7 @@ The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.
 - `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead. Keys outside the whitelist are summarized as one `add N key(s) by hand` line in the dry run (empty arrays / null count as missing); `groundingStrict` is always written as `false` on upgrade
 - The red-line summary replaces just the R5/R6 checked cell
 - Old L1 summary directories move to the upgrade backup and are deleted after verification; `-KeepL1` keeps them, and L2/L3 history is never touched
-- Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, writing neither (no post-merge line cap)
+- Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, writing neither (no post-merge line cap). Frontmatter is kept as-is, with one exception: the pre-1.31.8 `description` clause that told the model requirements were already clear (read as permission to skip `request-analysis` and the summary) is replaced with the current one and named in the MERGE detail
 - `-UpdateSkills` replaces only uncompiled copies that still contain `slot:`; `-ForceSkills` overrides, but leaves slot-bearing skeletons, so recompile them and run `verify-harness.ps1` again (`-SkipVerify` for the reset step)
 - The skill index and `_template` are treated separately, one as a project asset and the other as a package asset
 

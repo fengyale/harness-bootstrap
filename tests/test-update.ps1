@@ -128,6 +128,33 @@ $mergeInstalled = @(
 )
 [System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", $mergeInstalled, (New-Object System.Text.UTF8Encoding($false)))
 
+# A skill compiled before 1.31.8 still carries the old description clause that
+# told the model requirements were already clear (read as permission to skip
+# request-analysis and summary.md). -MergeSkills must migrate that sentence while
+# keeping every other project-tuned description untouched.
+$staleDesc = -join @(
+    [char]0x9700, [char]0x6C42, [char]0x5DF2, [char]0x660E, [char]0x786E, [char]0x3001,
+    [char]0x9700, [char]0x8981, [char]0x5199, [char]0x6216, [char]0x6539, [char]0x4EE3,
+    [char]0x7801, [char]0x65F6, [char]0x4F7F, [char]0x7528, [char]0x3002
+)
+New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-stale" | Out-Null
+$staleInstalled = @(
+    '---',
+    'name: merge-stale',
+    ('description: project-tuned start ' + $staleDesc),
+    '---',
+    '',
+    '<!-- harness:package:begin mode -->',
+    'old-stale-package',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings',
+    '- cache: StaleCache',
+    '<!-- harness:project:end -->'
+)
+[System.IO.File]::WriteAllLines("$proj\.harness\skills\main-dev\merge-stale\SKILL.md", $staleInstalled, (New-Object System.Text.UTF8Encoding($false)))
+
 # Legacy skill (no markers): adopted by heading, and a team-only section must
 # be wrapped instead of dropped.
 New-Item -ItemType Directory -Force -Path "$proj\.harness\skills\main-dev\merge-legacy" | Out-Null
@@ -264,6 +291,27 @@ Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-skill\SK
     '<!-- harness:package:begin mode -->',
     '## new package section',
     'new-package-line',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## Project bindings (fill at install)',
+    '- cache: <!-- slot:cache.api -->',
+    '<!-- harness:project:end -->'
+) -Encoding UTF8
+# Template for the stale-description fixture: the installed copy carries the
+# pre-1.31.8 clause, the package carries the current description.
+New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-stale" | Out-Null
+Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-stale\SKILL.md" -Value @(
+    '---',
+    'name: merge-stale',
+    'description: template description',
+    '---',
+    '',
+    '# stale skill',
+    '',
+    '<!-- harness:package:begin mode -->',
+    '## new package section',
+    'new-stale-package',
     '<!-- harness:package:end -->',
     '',
     '<!-- harness:project:begin bindings -->',
@@ -411,6 +459,7 @@ Check 'dry-run: legacy skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\m
 Check 'dry-run: missing project block PENDING' ($dryMerge -match '\[PENDING\s*\].*main-dev\\merge-pending\\SKILL\.md')
 Check 'dry-run: long merged skill MERGE (no line cap)' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-big\\SKILL\.md')
 Check 'dry-run: renamed skill MERGE' ($dryMerge -match '\[MERGE\s*\].*biz-dev\\04-renamed-probe\\SKILL\.md')
+Check 'dry-run: stale description migration is named' (($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-stale\\SKILL\.md') -and ($dryMerge -match 'stale pre-1.31.8 description clause replaced'))
 Check 'dry-run: renamed match is explained' ($dryMerge -match 'matched by frontmatter name')
 Check 'dry-run: no line-limit reason' ($dryMerge -notmatch 'hard limit 120')
 
@@ -547,6 +596,13 @@ Check 'merge: old package text gone' ($mergeAfter -notmatch 'old-package-line')
 Check 'merge: project block kept' ($mergeAfter -match 'ProjectCache')
 Check 'merge: project-only block kept' ($mergeAfter -match 'keep-me')
 Check 'merge: project description kept' ($mergeAfter -match 'description: project-tuned description')
+
+# The stale clause is the only frontmatter text -MergeSkills may rewrite.
+$staleAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-stale\SKILL.md", [System.Text.Encoding]::UTF8)
+Check 'stale: package text refreshed' ($staleAfter -match 'new-stale-package')
+Check 'stale: description migrated to the template one' ($staleAfter -match 'description: template description')
+Check 'stale: old clause gone' ($staleAfter -notmatch [regex]::Escape($staleDesc))
+Check 'stale: project binding kept' ($staleAfter -match 'StaleCache')
 
 # A skill installed under a project-chosen directory name must still be found.
 $renamedAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\biz-dev\04-renamed-probe\SKILL.md", [System.Text.Encoding]::UTF8)

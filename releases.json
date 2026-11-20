@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.31.11",
+    "title": "(升级会迁移旧 description 的「跳过需求分析」授权)",
+    "body": [
+      "- 1.31.8 从 coding-skill 模板删掉了「需求已明确…」，但 -MergeSkills 按设计保留磁盘",
+      "  frontmatter，存量项目升级后这句仍在：模型据此跳过 request-analysis，summary 链路也断",
+      "- update-harness：仅 -MergeSkills 且 description 命中旧文案时替换为模板 description，",
+      "  并在 MERGE 明细里写 stale pre-1.31.8 description clause replaced；其他自定义保持不动",
+      "- 测试：merge-stale fixture 覆盖 dry-run 点名、apply 迁移、旧句消失、project 块保留、",
+      "  未命中旧句的自定义 description 不被改写",
+      "- 文档：README 中英 / SKILL.md / 说明页 / 质量分级 同步该迁移语义"
+    ]
+  },
+  {
     "version": "1.31.10",
     "title": "(文档对齐 1.31.6–1.31.9 的机制)",
     "body": [
