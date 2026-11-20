@@ -231,6 +231,12 @@ Set-Content -LiteralPath "$newPkg\assets\scripts\new-tool.ps1" -Value '# new too
 # The new package must carry the config for the MANUAL branch to be exercised.
 Copy-Item -LiteralPath "$pkg\assets\scripts\red-line-rules.json" -Destination "$newPkg\assets\scripts\red-line-rules.json"
 Copy-Item -LiteralPath "$pkg\assets\scripts\harness-required.json" -Destination "$newPkg\assets\scripts\harness-required.json"
+# Simulate a future package key that this updater does not merge: the dry run
+# must name it, otherwise the new script would read a missing key and skip its
+# check without a word.
+$npCfg = (Get-Content -LiteralPath "$newPkg\assets\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+$npCfg | Add-Member -NotePropertyName futureBlock -NotePropertyValue ([pscustomobject]@{ enabled = $true }) -Force
+[System.IO.File]::WriteAllText("$newPkg\assets\scripts\harness-required.json", (($npCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 # Python scanners are package-owned machinery: they must be UPDATE, not MANUAL.
 Copy-Item -LiteralPath "$pkg\assets\scripts\red-line-scan.py" -Destination "$newPkg\assets\scripts\red-line-scan.py"
 Add-Content -LiteralPath "$newPkg\assets\scripts\red-line-scan.py" -Value '# upgrade-test-marker' -Encoding ASCII
@@ -374,6 +380,8 @@ Check 'dry-run reports required removal'   ($dry -match 'remove required:.*scrip
 Check 'dry-run reports sqlGate delta'      ($dry -match 'add sqlGate: true')
 Check 'dry-run reports new config blocks'  (($dry -match 'add sqlReview') -and ($dry -match 'add summaryContent') -and ($dry -match 'add recordsTracked'))
 Check 'dry-run reports the strict migration default' ($dry -match 'add groundingStrict: false')
+Check 'dry-run names keys outside the merge whitelist' (($dry -match 'by hand \(not in the merge whitelist\)') -and ($dry -match 'futureBlock'))
+Check 'a merged key is not reported as manual' ($dry -notmatch 'merge whitelist[^;]*sqlGate')
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
 Check 'dry-run plans lessons MOVE'         ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons\.md')
 Check 'dry-run plans promoted MOVE'        ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons-promoted\.txt')

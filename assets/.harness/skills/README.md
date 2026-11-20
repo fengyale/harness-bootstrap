@@ -1,10 +1,11 @@
 # 技能矩阵总览
 
-> 技能的**完整清单**由 `.trae/skills/` 的实际内容决定（每个技能一个目录 + `SKILL.md`）；
-> 正文真源在 `.harness/skills/<分类>/<技能>/SKILL.md`。
-> 本文件是**分类索引**，新增/删除技能后要回来同步。
+> 技能的**完整清单**由 `.harness/skills/<分类>/<技能>/SKILL.md` 的目录结构决定——
+> **目录是唯一真源**；`.trae/skills` 只是指向它的发现入口（junction，不入库）。
+> 下面「分类清单」那张表由 `scripts/sync-skills-index.ps1` 生成，**不要手改标记块内的内容**；
+> 分类说明里的数量只是参考；新增/删除技能后，以生成表里的条目为准（生成表不含数量，自己数条目）。
 
-> 下表由 `scripts/sync-skills-index.ps1` 扫描 `.harness/skills/` 生成；新增/删除技能后跑一次 `-Write`，`verify-harness` 的 `skills-index` 会校验它是否漂移。
+> 新增或删除技能后跑一次 `sync-skills-index.ps1 -Write`；`verify-harness` 的 `skills-index` 会校验它是否漂移。
 
 <!-- skills-index:begin -->
 | 分类 | 技能 | 用途（description 首句，≤40 字） |
@@ -47,7 +48,7 @@
 > **关键原则**：流程技能**只定义流程与检查点，不重复展开模式细节**；
 > 模式细节一律下推到 `biz-dev`。规则文件（`.harness/rules/`）只定义边界，同样不展开做法。
 
-## main-dev（流程类，6 个）
+## main-dev（流程类）
 
 | 技能 | 对应阶段 | 什么时候用 |
 | --- | --- | --- |
@@ -58,7 +59,7 @@
 | `unit-test-ci` | 7 | 跑质量门禁、CI 挂了 |
 | `deploy-verify` | 8–9 | 发版 / 冒烟验证 / 线上回滚（阶段 10 沉淀无专属技能） |
 
-## biz-dev（实现类，14 个）
+## biz-dev（实现类）
 
 | 编号 | 技能 | 什么时候用 |
 | --- | --- | --- |
@@ -79,7 +80,7 @@
 
 > **项目里用不到的专题，直接删掉那个技能目录**——不要为了凑数保留，技能清单每轮都占上下文。
 
-## trouble-shooting（排查类，5 个）
+## trouble-shooting（排查类）
 
 | 编号 | 技能 | 什么时候用 |
 | --- | --- | --- |

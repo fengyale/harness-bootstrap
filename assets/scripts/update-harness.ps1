@@ -87,6 +87,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $MergeKnown = -not $NoMergeKnown
 
+# One list for both the delta report and the actual merge. Two copies used to be
+# maintained by hand, so adding a key could report "by hand" while the merge
+# quietly did it (or vice versa). Keep this the only place to edit.
+$script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict')
+
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $pkgPath = (Resolve-Path -LiteralPath $PackagePath).Path
 $assets = Join-Path $pkgPath 'assets'
@@ -231,6 +236,31 @@ function Get-RequiredDelta {
         ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
         if (-not $dstHasFlag -and $dstRules.Count -eq 0 -and @($dstGate).Count -gt 0) {
             $parts += 'legacy SQL opt-out left sql-review-gate.* behind: delete it or add "sqlGate": false'
+        }
+        # Keys the package ships but this script does not merge are the silent
+        # failure class: the new script reads them, the old project lacks them,
+        # and the check quietly does nothing. One line, not one per key -- eight
+        # separate lines on every upgrade is noise people learn to skip.
+        $unknown = @()
+        foreach ($p in @($src.PSObject.Properties.Name)) {
+            if ($p.StartsWith('_')) { continue }
+            if ($script:MergeKeys -contains $p) { continue }
+            if ($dst.PSObject.Properties.Name -contains $p) {
+                # Present but empty is the same silent skip: the checkers test
+                # the value, not the key.
+                $v = $dst.$p
+                $isEmpty = ($null -eq $v) -or (($v -is [array]) -and (@($v).Count -eq 0))
+                if (-not $isEmpty) { continue }
+            }
+            $unknown += $p
+        }
+        if ($unknown.Count -gt 0) {
+            # Show them all (capped) so a newly added key is actually visible;
+            # truncating at 6 is how the one that matters gets hidden.
+            $cap = 12
+            $shown = @($unknown | Select-Object -First $cap) -join ', '
+            if ($unknown.Count -gt $cap) { $shown += (', +' + ($unknown.Count - $cap) + ' more') }
+            $parts += ('add ' + $unknown.Count + ' key(s) by hand (not in the merge whitelist): ' + $shown)
         }
         return ($parts -join '; ')
     } catch {
@@ -390,9 +420,9 @@ function Merge-RequiredJson {
     # sqlReview / summaryContent are the config behind the content checks. They
     # are new keys in 1.29-1.31; without them the new check-summary silently
     # returns early, so an upgrade would ship the script but not the gate.
-    # recordsTracked (1.31.6) does the same for audit-order: absent means true,
-    # but an explicit opt-out must survive the upgrade.
-    foreach ($key in @('sqlReview', 'summaryContent', 'recordsTracked')) {
+    # Derived from $script:MergeKeys so the report and the merge cannot drift.
+    $copyKeys = @($script:MergeKeys | Where-Object { @('required', 'requiredAnyOf', 'sqlGate', 'groundingStrict') -notcontains $_ })
+    foreach ($key in $copyKeys) {
         if (($src.PSObject.Properties.Name -contains $key) -and
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
             $cfg | Add-Member -NotePropertyName $key -NotePropertyValue $src.$key

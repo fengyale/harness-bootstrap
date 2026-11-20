@@ -743,7 +743,7 @@ if ($tasks.Count -eq 0) {
         $verdict += "$($overBudget.Count) task(s) over the A6 budget (corrections > 2 or impl_corrections > 0): $names"
     }
     if ($skillRate -ne $null -and $skillRate -lt 50 -and $tasks.Count -ge 5) {
-        $verdict += "skill load rate = $skillRate% (< 50%): skills are probably not triggering"
+        $verdict += "skill load rate = $skillRate% (self-reported, < 50%): skills are probably not triggering"
     }
     if ($tasks.Count -ge 5) {
         # The skill must have existed for the whole observation window; otherwise
@@ -878,10 +878,12 @@ if (-not $Quiet) {
     Write-Host ("scans: {0}   commits: {1}   blocked: {2}   bypass: {3} ({4}%)   summary-order audits: {5}" -f `
         $stats.Scans, $stats.Commits, $stats.Blocked, $stats.Bypass, $(if ($null -eq $stats.BypassRate) { 'n/a' } else { $stats.BypassRate }), $stats.OrderAudits)
     Write-Host ("attribution skipped: {0} (ignored .harness: {1})" -f $stats.AssocSkip, $stats.AssocIgnored)
-    Write-Host ("skill load rate: {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
+    # The number comes from summary.md, so it measures what the agent wrote, not
+    # what it read. The label says so; otherwise it looks like telemetry.
+    Write-Host ("skill load rate (self-reported): {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
     if ($Compare -and $null -ne $prevStats) {
         $prevRate = if ($null -eq $prevStats.SkillRate) { 'n/a' } else { "$($prevStats.SkillRate)%" }
-        Write-Host ("previous window: tasks {0}   avg corrections {1}   avg impl {2}   skill rate {3}   blocked {4}" -f `
+        Write-Host ("previous window: tasks {0}   avg corrections {1}   avg impl {2}   skill rate {3} (self-reported)   blocked {4}" -f `
             $prevStats.Tasks.Count, $prevStats.AvgCorr, $prevStats.AvgImpl, $prevRate, $prevStats.Blocked)
         Write-Host ("trend: {0}" -f $trendVerdict) -ForegroundColor $(switch ($trendVerdict) { 'IMPROVING' { 'Green' } 'REGRESSING' { 'Red' } default { 'Yellow' } })
     }

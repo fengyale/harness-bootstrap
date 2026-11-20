@@ -1,7 +1,20 @@
-HARNESS-BOOTSTRAP VERSION 1.31.8
+HARNESS-BOOTSTRAP VERSION 1.31.9
 
 changelog
 ---------
+1.31.9  (去掉假信号：自报口径写实 / 白名单漏键可见 / 重复表收敛)
+- 度量：`metrics` 的 "skill load rate" 改为 "skill load rate (self-reported)"。
+  该数字来自 `summary.md` 的自报字段，不是观测值；原文案会让人误以为有遥测
+- 升级：`harness-required.json` 里出现**不在合并白名单**的键时，dry-run 明确写
+  `add <key> by hand`。此前新键会被静默丢弃，新脚本读不到就空跑
+- 规则：`缓存与一致性.md` §4 的手段表收敛为指针（指向技能 Step 4），只保留
+  🔴 降级三条。同一张表曾有两份副本，措辞已开始分叉
+- 技能索引：`.harness/skills/README.md` 纠正"清单由 `.trae/skills` 决定"的错误说法
+  （目录才是真源，`.trae` 只是入口），分类标题去掉会漂移的 6/14/5 计数
+- 文档：三处"承诺 > 实际"改为写实——`load_skip_reason` 仅在 `loaded_skills: none`
+  时必填且 `metrics` 不读它；`stale` 对近 14 天加载过的技能是 FAIL；wiki 环境事实
+  只校验占位符与证据路径，语义真假由评审兜底
+
 1.31.8  (定版前修复：门禁降级 / 空壳技能 / 探测幂等)
 - 门禁：pre-commit 拒绝「`red-line-rules.json` 与源码同一提交」。此前一次 `git add`
   可以把规则表调弱并同时提交违规代码，扫描读到弱表直接放过——实测可绕过
