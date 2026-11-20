@@ -315,8 +315,8 @@
     {
       "id": "upgrade-skill-merge",
       "file": "assets/scripts/update-harness.ps1",
-      "patterns": ["Merge-SkillBlocks", "harness:project:", "hard limit 120"],
-      "why": "已编译技能升级只能替换 package 区块、保留 project 区块；定位不到或超行数时不写盘，否则会把项目绑定覆盖掉。"
+      "patterns": ["Merge-SkillBlocks", "harness:project:", "unfilled slot"],
+      "why": "已编译技能升级只能替换 package 区块、保留 project 区块；定位不到或仍有未填 slot 时不写盘，否则会把项目绑定覆盖掉或把骨架留成半成品。"
     },
     {
       "id": "skill-block-markers",

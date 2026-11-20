@@ -13,8 +13,10 @@
                     [E0] confirmations are legal only in new-project mode
     3. grounded     every skill carries at least one [E1]/[E2] anchor
                     (new project: [E0] counts but stays a WARN)
-    4. size         per-file line budget; skill count is unlimited by default,
-                    pass -MaxGrounded N only during cold start
+    4. size         a very long skill body is reported as WARN; there is no
+                    hard line limit (a skill costs context only when triggered).
+                    Skill count is unlimited by default, pass -MaxGrounded N
+                    only during cold start
     5. stale        code behind an [E2] anchor changed after the skill was verified
                     ("- verified: YYYY-MM-DD" resets the clock; WARN only)
 
@@ -40,7 +42,7 @@
 [CmdletBinding()]
 param(
     [string]$Root = (Get-Location).Path,
-    [int]$MaxSkillLines = 120,
+    [int]$WarnSkillLines = 250,
     [int]$MaxGrounded = 0,
     [switch]$Quiet
 )
@@ -428,11 +430,12 @@ foreach ($s in $skillFiles) {
         }
     }
 
-    # --- 4 quota: per-file size. The budget in the docs is a hard limit
-    #     (<= 80 target, 120 max), so over-budget must FAIL; a WARN let every
-    #     install drift past the number that keeps progressive loading cheap.
-    if ($lines.Count -gt $MaxSkillLines) {
-        Add-Result 'quota' 'FAIL' "$($s.Category)/$($s.Name): $($lines.Count) lines (hard limit $MaxSkillLines; target <= 80)"
+    # --- 4 size: a skill body is paid for only when the skill is triggered, so
+    #     length itself is not a defect -- a complex skill is legitimately long.
+    #     A very long body is still worth a look, hence WARN instead of FAIL:
+    #     the fix is to move examples into an attached file, not to cut content.
+    if ($lines.Count -gt $WarnSkillLines) {
+        Add-Result 'size' 'WARN' "$($s.Category)/$($s.Name): $($lines.Count) lines; consider moving examples to an attached file"
     }
 }
 

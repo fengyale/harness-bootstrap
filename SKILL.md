@@ -295,7 +295,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 | `rules/开发流程规范.md` | 十阶段（按项目裁剪）+ 质量门 | 质量门必须可判定 |
 | `rules/缓存与一致性.md` / `消息与异步.md` / `数据迁移与回滚.md` | 项目是否真有缓存 / MQ / 数据库 | 三项都是通用判据，**没有对应能力就整份删除**，不要留下用不到的规则 |
 | `wiki/*` 四份 | **从真实代码提取** | 保留「权威来源声明」；提取不到标 `TODO(待确认)` |
-| `skills/*`（**仅启用集**） | **编译**，不是复制：骨架来自模板，绑定来自 `stack.json` + 代码证据（见 `references/技能编译协议.md`） | 目标 ≤80 行，硬上限 120 行；正文不得出现本项目没有的技术；`description` 同步改写，不写技术栈名；**保留 `harness:package` / `harness:project` 区块标记**，只替换 project 块里的 slot |
+| `skills/*`（**仅启用集**） | **编译**，不是复制：骨架来自模板，绑定来自 `stack.json` + 代码证据（见 `references/技能编译协议.md`） | 正文只写做法、不重复规则层；**不设行数上限**（按需加载），超过 250 行把示例拆到附属文件；正文不得出现本项目没有的技术；`description` 同步改写，不写技术栈名；**保留 `harness:package` / `harness:project` 区块标记**，只替换 project 块里的 slot |
 | `.trae/agents/*` | 按实际红线调整 | 只新增，不覆盖已有 |
 | `scripts/red-line-rules.json` | 从 `references/红线候选池.md` **挑 5–8 条** | 每条 pattern 先手工试跑，确认不误报 |
 | `rules/SQL评审规范.md` + `skills/*/sql-review` | **仅当项目有数据库访问** | 方言、执行计划方式、大表 / 索引现状；没有数据库的项目整条跳过 |
@@ -405,7 +405,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
 - `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent`），其余键保留，`-NoMergeKnown` 退回只打印差异
 - `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
-- `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING、超过 120 行时 MANUAL，都不写盘；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
+- `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING，都不写盘（合并后行数不设上限）；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
 - `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异
 - `.harness\changes|metrics`：L2/L3 历史**永不触碰**；旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除，`-KeepL1` 保留）；`_small.md` 缺失时才补模板；`_template` 视为包资产，有新版会替换并备份；`lessons.md` / `lessons-promoted.txt` 从旧 `metrics\` 迁移一次
 - `.gitignore` 只追加缺的 `.harness/metrics/` 与 `.harness/upgrade/` 两行，不重写用户文件

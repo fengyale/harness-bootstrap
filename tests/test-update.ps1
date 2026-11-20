@@ -307,7 +307,9 @@ Set-Content -LiteralPath "$newPkg\assets\.harness\skills\main-dev\merge-pending\
     '- path: <!-- slot:sandbox.path -->',
     '<!-- harness:project:end -->'
 ) -Encoding UTF8
-# Over-budget template: 130 filler lines plus a package block.
+# Long-merged template: 130 filler lines plus a package block. The 120-line cap
+# was removed because a skill is loaded on demand; this fixture now proves the
+# merge still happens above that length (a re-added cap would turn it MANUAL).
 New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness\skills\main-dev\merge-big" | Out-Null
 $bigLines = @('---', 'name: merge-big', 'description: template description', '---', '', '# big skill', '<!-- harness:package:begin mode -->')
 for ($i = 1; $i -le 130; $i++) { $bigLines += "filler-$i" }
@@ -398,10 +400,10 @@ $dryMerge = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts
 Check 'dry-run: marker skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-skill\\SKILL\.md')
 Check 'dry-run: legacy skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-legacy\\SKILL\.md')
 Check 'dry-run: missing project block PENDING' ($dryMerge -match '\[PENDING\s*\].*main-dev\\merge-pending\\SKILL\.md')
-Check 'dry-run: over-budget skill MANUAL' ($dryMerge -match '\[MANUAL\s*\].*main-dev\\merge-big\\SKILL\.md')
+Check 'dry-run: long merged skill MERGE (no line cap)' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-big\\SKILL\.md')
 Check 'dry-run: renamed skill MERGE' ($dryMerge -match '\[MERGE\s*\].*biz-dev\\04-renamed-probe\\SKILL\.md')
 Check 'dry-run: renamed match is explained' ($dryMerge -match 'matched by frontmatter name')
-Check 'dry-run: over-budget reason names the limit' ($dryMerge -match 'hard limit 120')
+Check 'dry-run: no line-limit reason' ($dryMerge -notmatch 'hard limit 120')
 
 # -------------------------------------------------------------------- apply
 Write-Host ''
@@ -551,7 +553,9 @@ Check 'legacy: project description kept' ($legacyAfter -match 'description: lega
 Check 'legacy: markers present after adoption' ($legacyAfter -match 'harness:project:begin bindings')
 
 Check 'pending: file not written' ([System.IO.File]::ReadAllText($pendingFile, [System.Text.Encoding]::UTF8) -eq $pendingBefore)
-Check 'big: file not written' ([System.IO.File]::ReadAllText($bigFile, [System.Text.Encoding]::UTF8) -eq $bigBefore)
+# The 120-line cap is gone: a long merge must be written, not skipped.
+$bigAfter = [System.IO.File]::ReadAllText($bigFile, [System.Text.Encoding]::UTF8)
+Check 'big: merged above the old cap' (($bigAfter -ne $bigBefore) -and ($bigAfter -match 'filler-130'))
 
 $mergeStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8)
 $legacyStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8)

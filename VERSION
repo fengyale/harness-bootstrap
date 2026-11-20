@@ -1,7 +1,18 @@
-HARNESS-BOOTSTRAP VERSION 1.31.3
+HARNESS-BOOTSTRAP VERSION 1.31.4
 
 changelog
 ---------
+1.31.4  (技能不再限长 / 做法骨架分两层)
+- 门禁：`verify-grounding` 删除技能行数硬限（>120 行 FAIL），改为 >250 行 WARN。
+  技能按需加载，复杂技能本来就长；限长会逼着把做法塞回常驻的规则层
+- 升级：`update-harness -MergeSkills` 不再因合并结果超 120 行标 MANUAL
+- 技能：`redis-cache` 补做法骨架（该不该缓存的判断表、读/写路径形状、三类故障处置），
+  项目 API 与真实代码留在 project 块的 slot + E2 锚点
+- 规则：`编码规范.md` 缓存节的完整方法对换成 8 行边界示例，做法指向技能（层级别纠正）
+- 文档：规则与技能写法新增「技能正文的两层骨架」；技能编译协议 / 接地协议 /
+  维护与体检 / SKILL.md / README 同步删除行数条款
+- 测试：test-update 改为断言「超过 120 行仍然 MERGE」，防止限长规则悄悄回来
+
 1.31.3  (升级补齐新配置块)
 - 升级：`update-harness` 合并 `harness-required.json` 时补上 `sqlReview` 与
   `summaryContent`。1.29–1.31 新增的这两个配置块此前不会合并，老项目升级后

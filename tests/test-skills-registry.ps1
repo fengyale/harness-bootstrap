@@ -128,6 +128,21 @@ Check 'metrics reports the skill as not registered' ($m -match 'skill not regist
 Check 'unregistered skill is not a retire candidate' (-not ($m -match 'orphan-helper.*retire candidate'))
 Check 'registered but never loaded is still a retire candidate' ($m -match 'demo-skill.*retire candidate')
 
+Step 'a long skill body is a WARN, not a failure'
+# The 120-line cap was removed: a skill is loaded on demand, so a complex skill
+# is legitimately long. Re-adding a hard limit would make this fixture FAIL.
+$longDir = New-Skill 'main-dev' 'long-skill' 'long-skill'
+$longFile = Join-Path $longDir 'SKILL.md'
+$longLines = @([System.IO.File]::ReadAllLines($longFile))
+for ($i = 1; $i -le 260; $i++) { $longLines += "filler-$i" }
+[System.IO.File]::WriteAllLines($longFile, $longLines, (New-Object System.Text.UTF8Encoding($false)))
+Add-Content -LiteralPath $indexPath -Value '| `long-skill` | demo |' -Encoding UTF8
+New-Entry 'long-skill' $longDir
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$gCode = $LASTEXITCODE
+Check 'long skill: verify-grounding still exits 0' ($gCode -eq 0)
+Check 'long skill: reported as a size WARN' ($g -match 'consider moving examples')
+
 Step 'missing README is reported once'
 Remove-Item -LiteralPath $indexPath -Force
 $out = RunVerify

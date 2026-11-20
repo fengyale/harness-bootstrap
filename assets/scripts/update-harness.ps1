@@ -20,8 +20,8 @@
                            harness:project blocks already compiled on disk
                            (frontmatter kept, project-only blocks appended).
                            Refuses with PENDING when a project block cannot be
-                           placed or an unfilled slot remains, and with MANUAL
-                           above the 120-line budget. -UpdateSkills replaces
+                           placed or an unfilled slot remains. The merged length
+                           is not capped. -UpdateSkills replaces
                            only uncompiled skills (still has slot markers);
                            -ForceSkills replaces any skill. Uninstalled template
                            skills are never added (the install keeps 3-5).
@@ -629,9 +629,6 @@ function Merge-SkillBlocks {
     if ($slot.Success) {
         return [pscustomobject]@{ Status = 'PENDING'; Detail = ('unfilled slot ' + $slot.Groups[1].Value + '; compile this skill first'); Text = $null; Bom = $false }
     }
-    if ($outLines.Count -gt 120) {
-        return [pscustomobject]@{ Status = 'MANUAL'; Detail = ('merged result would be ' + $outLines.Count + ' lines (hard limit 120); keep manual'); Text = $null; Bom = $false }
-    }
 
     $bytes = [System.IO.File]::ReadAllBytes($DestPath)
     $bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
@@ -742,8 +739,8 @@ if (Test-Path -LiteralPath $srcSkills) {
             }
         } elseif ($MergeSkills) {
             # New template skeleton + the project blocks already compiled on
-            # disk. Refuses (MANUAL/PENDING) when a project block has no place
-            # to go or the result would break the 120-line budget.
+            # disk. Refuses (MANUAL/PENDING) only when a project block has no
+            # place to go; the merged length is not capped.
             $m = Merge-SkillBlocks $src $dst
             $detail = if ($matchedByName) { 'matched by frontmatter name (renamed directory); ' + $m.Detail } else { $m.Detail }
             if ($m.Status -eq 'MERGE') {
