@@ -403,7 +403,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
-- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked`），其余键保留，`-NoMergeKnown` 退回只打印差异
+- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked`），其余键保留并在 dry-run 里点名"by hand"；`-NoMergeKnown` 退回只打印差异。`groundingStrict` 是迁移默认值：新装 `true`，升级固定写 `false`（等存量技能补上锚点后再手动打开）
 - `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
 - `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING，都不写盘（合并后行数不设上限）；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
 - `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异

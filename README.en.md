@@ -130,16 +130,16 @@ The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.
 
 `scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept:
 
-- `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead
+- `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead. Keys outside the whitelist are summarized as one `add N key(s) by hand` line in the dry run (empty arrays / null count as missing); `groundingStrict` is always written as `false` on upgrade
 - The red-line summary replaces just the R5/R6 checked cell
 - Old L1 summary directories move to the upgrade backup and are deleted after verification; `-KeepL1` keeps them, and L2/L3 history is never touched
-- Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, and `MANUAL` above 120 lines, writing neither
+- Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, writing neither (no post-merge line cap)
 - `-UpdateSkills` replaces only uncompiled copies that still contain `slot:`; `-ForceSkills` overrides, but leaves slot-bearing skeletons, so recompile them and run `verify-harness.ps1` again (`-SkipVerify` for the reset step)
 - The skill index and `_template` are treated separately, one as a project asset and the other as a package asset
 
 After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
 
-The first `verify-harness.ps1` after an upgrade may report `skills-registry`: skills that exist in the project but were never indexed or given an entry are now named. They were already unreachable before the upgrade — add them to `.harness\skills\README.md` with a platform entry, or delete the ones no longer in use. If the upgrade itself fails, the output now includes the full `Copy-Item` command that restores the backup.
+The first `verify-harness.ps1` after an upgrade may report `skills-registry`: skills that exist in the project but were never indexed or given an entry are now named. They were already unreachable before the upgrade — add them to `.harness\skills\README.md` with a platform entry, or delete the ones no longer in use. `skills-index` normally starts as a `WARN` in an existing install (`AGENTS.md` has no generated marker block yet); run `scripts\sync-skills-index.ps1 -Root . -Write` once. A `FAIL` there means real drift. If the upgrade itself fails, the output now includes the full `Copy-Item` command that restores the backup.
 
 ## What you get
 
@@ -158,7 +158,7 @@ AGENTS.md                    the only resident file (<=150 lines): stack, comman
   lessons-promoted.txt       promoted lessons (one per line, each must carry check + fails-when)
   metrics/                   gate.jsonl (local gate log)
 .trae/                       platform discovery entries: skill links, agents, hooks
-scripts/                     probe, scan, stage gate, field checks, metrics, uninstall
+scripts/                     probe, scan, stage gate, field checks, metrics, skills index sync, uninstall
 ```
 
 ## How a single task is guided
@@ -193,7 +193,7 @@ A broken loading chain shows up in three ways:
 | --- | --- | --- |
 | **It should trigger but does not** | Whether the entry exists, whether `description` uses the user's own words, whether two skills share trigger words | Look for it in the platform skill list; restart and repeat the sentence; `metrics.ps1` shows whether `load_skip_reason` clusters |
 | **It triggers but is not followed** | Whether the steps are decidable, whether referenced paths exist, whether the skill has drifted from the code | `verify-grounding.ps1` checks paths and evidence; rewrite "should / try to" into checkable items |
-| **The index is missing an entry** | Whether a new rule / wiki page / skill was added to the `AGENTS.md` file index and `skills/README.md` | `skills-registry` in `verify-harness.ps1` (indexed + platform entry), plus links / frontmatter; the references check in `verify-grounding.ps1` |
+| **The index is missing an entry** | Whether a new rule / wiki page / skill was added to the `AGENTS.md` file index and `skills/README.md` | `skills-registry` in `verify-harness.ps1` (indexed + platform entry) and `skills-index` (generated-table drift, fixed by `sync-skills-index.ps1 -Write`), plus links / frontmatter; the references check in `verify-grounding.ps1` |
 
 > None of the three relies on a feeling: `loaded_skills` and `load_skip_reason` are recorded, and `verify-*` asserts the structure. Tuning trigger words is covered in `references/维护与体检.md` section 3.
 

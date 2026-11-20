@@ -130,7 +130,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`：
 
-- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异
+- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`
 - 红线汇总只替换 R5/R6 的脚本检查格
 - 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动
 - 技能正文默认只提示差异；`-MergeSkills` 只换回项目自己的 `harness:project` 区块，定位不到或仍有 slot 标 `PENDING`（不设合并后行数上限），都不写盘
@@ -139,7 +139,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 
 升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
 
-升级后第一次跑 `verify-harness.ps1` 可能报 `skills-registry`：老项目里存在、但从未登记或建入口的技能会被点名。它们此前一直不可达，不是升级弄坏的——按提示补 `.harness\skills\README.md` 登记与平台入口，或删除不再使用的技能目录。若升级本身失败，输出里会带上从备份恢复的完整 `Copy-Item` 命令。
+升级后第一次跑 `verify-harness.ps1` 可能报 `skills-registry`：老项目里存在、但从未登记或建入口的技能会被点名。它们此前一直不可达，不是升级弄坏的——按提示补 `.harness\skills\README.md` 登记与平台入口，或删除不再使用的技能目录。`skills-index` 在存量项目里通常先报 `WARN`（`AGENTS.md` 还没有生成标记块），跑一次 `scripts\sync-skills-index.ps1 -Root . -Write` 即可；报 `FAIL` 才是真有漂移。若升级本身失败，输出里会带上从备份恢复的完整 `Copy-Item` 命令。
 
 ## 装完之后
 
@@ -158,7 +158,7 @@ AGENTS.md                    唯一常驻文件（≤150 行）：技术栈、�
   lessons-promoted.txt       已晋升教训清单（团队共享；每条必须带 check + fails-when）
   metrics/                   gate.jsonl（本机门禁日志）
 .trae/                       平台发现入口：skills 链接、agents、hooks
-scripts/                     探测、扫描、阶段门、字段校验、度量、卸载
+scripts/                     探测、扫描、阶段门、字段校验、度量、技能清单同步、卸载
 ```
 
 ## 一次任务是怎么被引导的
@@ -193,7 +193,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 | --- | --- | --- |
 | **该触发不触发** | 入口是否建了、`description` 是否写了用户原话、是否和别的技能撞词 | 平台技能列表里有没有它；重启后重发一句原话；翻 `summary.md` 的 `load_skip_reason` 是否集中出现（`metrics.ps1` 不读该字段） |
 | **触发了不照做** | 正文步骤是否可判定、指向的路径是否存在、技能是否已和代码脱节 | `verify-grounding.ps1` 查路径与证据；正文里"应该/尽量"这类词改成可勾选的检查项 |
-| **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 `skills-registry`（登记 + 平台入口）、links / frontmatter；`verify-grounding.ps1` 的 references |
+| **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 `skills-registry`（登记 + 平台入口）与 `skills-index`（生成表漂移，跑 `sync-skills-index.ps1 -Write` 修）、links / frontmatter；`verify-grounding.ps1` 的 references |
 
 > 三种症状都不靠"感觉"：`check-summary` 会拦缺字段的 summary，`verify-*` 会查结构与证据；但"加载率"是自报值，别把它当遥测。
 

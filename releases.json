@@ -1,5 +1,22 @@
 [
   {
+    "version": "1.31.10",
+    "title": "(文档对齐 1.31.6–1.31.9 的机制)",
+    "body": [
+      "- 说明页：验收步骤从「三个脚本」改为两个自检脚本 + 阶段门，并补上 1.31.5–1.31.9",
+      "  新增的检查（skills-index / fill-depth / coverage / 空 project 块）",
+      "- 说明页：升级步骤补白名单外键的 by hand 提示与 groundingStrict 迁移语义；",
+      "  升级后验证补 skills-index 的 WARN → -Write 处置",
+      "- 模板 AGENTS.md：门禁表补 sync-skills-index 与两个自检脚本，audit-order 注明",
+      "  「记录目录被 ignore 时 FAIL」",
+      "- SKILL.md：升级边界补 groundingStrict（新装 true / 升级固定 false）",
+      "- README 中英：升级段补白名单外键与 groundingStrict；升级后验证补",
+      "  skills-index 的 WARN → -Write；文件索引补「技能清单同步」；修掉英文版残留的",
+      "  MANUAL above 120 lines（1.31.4 已取消合并后的行数上限）",
+      "- 维护者文档：发布清单新增「改过技能目录先跑 sync-skills-index -Write」"
+    ]
+  },
+  {
     "version": "1.31.9",
     "title": "(去掉假信号：自报口径写实 / 白名单漏键可见 / 重复表收敛)",
     "body": [
