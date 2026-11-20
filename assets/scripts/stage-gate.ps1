@@ -475,6 +475,7 @@ foreach ($d in $targets) {
     Write-Host ("-" * 70)
 
     $autoFail = 0; $autoPass = 0; $humanCount = 0; $skipCount = 0
+    $stageHints = @()
     foreach ($c in $d.Criteria) {
         if ($c.Kind -eq 'HUMAN') {
             $humanCount++
@@ -494,7 +495,24 @@ foreach ($d in $targets) {
         } else {
             $autoFail++
             Write-Host ("  [FAIL]   {0,-20} {1}" -f $c.Id, $r.Detail) -ForegroundColor Red
+            if ($c.Id -eq 'summary-exists') { $stageHints += 'no-summary' }
         }
+    }
+
+    # "no summary.md" used to be a dead end: the agent saw a FAIL row and started
+    # coding anyway. The failure text is the only message it is guaranteed to
+    # read, so name the skill and the exact four steps here.
+    if ($stageHints -contains 'no-summary') {
+        $featLabel = if ($Feature) { $Feature } else { '<feature>' }
+        Write-Host "  [HINT]   the change record is missing; load skill 'request-analysis' first, then:" -ForegroundColor Yellow
+        Write-Host ("           1) copy .harness/changes/_template/summary.md to .harness/changes/{0}/summary.md" -f $featLabel) -ForegroundColor Yellow
+        Write-Host "           2) fill requirement / impact / tasks with real content (placeholders do not count)" -ForegroundColor Yellow
+        # A summary with only the three sections still fails check-summary: the
+        # flow / loaded_skills / touched_modules fields are mandatory at -Stage
+        # initial. Naming them here is what makes step 3 pass on the first try.
+        Write-Host "           2b) also fill flow (L1/L2/L3), loaded_skills and touched_modules (write none when empty)" -ForegroundColor Yellow
+        Write-Host ("           3) run scripts\check-summary.ps1 -Feature {0} -Stage initial" -f $featLabel) -ForegroundColor Yellow
+        Write-Host "           4) commit that record on its own, then start coding" -ForegroundColor Yellow
     }
 
     Write-Host ("-" * 70)
@@ -504,6 +522,20 @@ foreach ($d in $targets) {
         Write-Host ("  Cannot move past stage {0} until the FAIL rows are fixed." -f $d.Key) -ForegroundColor Red
     } else {
         Write-Host ("  RESULT: READY  (auto pass={0} skip={1}, manual={2} to confirm yourself)" -f $autoPass, $skipCount, $humanCount) -ForegroundColor Green
+        # One paste-ready line: the agent must echo it before touching code, so a
+        # skipped stage 0 becomes visible in the conversation instead of silent.
+        if ($Feature -and ($d.Key -eq '1' -or $d.Key -eq '3')) {
+            $flowVal = '?'
+            $smText = Get-SummaryText -FeatureName $Feature
+            if ($smText) {
+                # The template writes "flow: L2 (standard)" inside a labelled
+                # bullet and backticks, so match anywhere in the line.
+                $fm = [regex]::Match($smText, 'flow:\s*`?([A-Za-z][A-Za-z0-9]*)')
+                if ($fm.Success) { $flowVal = $fm.Groups[1].Value }
+            }
+            $nextStage = if ($d.Key -eq '1') { '2' } else { '4' }
+            Write-Host ("  DECLARE: record=.harness/changes/{0}/summary.md | flow={1} | next=scripts\stage-gate.ps1 -Stage {2} -Feature {0}" -f $Feature, $flowVal, $nextStage) -ForegroundColor Cyan
+        }
     }
 }
 

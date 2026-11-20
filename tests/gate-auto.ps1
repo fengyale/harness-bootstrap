@@ -496,6 +496,46 @@ Expect 'L1 declaration with more than 30 lines' $LASTEXITCODE 1
 git -C $proj reset --hard HEAD -q
 Remove-Item -LiteralPath "$proj\L1big.java" -Force -ErrorAction SilentlyContinue
 
+Step 'stage-gate prints a paste-ready declaration and names the missing skill'
+[System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed2, (New-Object System.Text.UTF8Encoding($true)))
+$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 1 -Feature demo 2>&1 | Out-String
+Expect 'stage 1 with an existing record' $LASTEXITCODE 0
+if ($out -match 'DECLARE: record=\.harness/changes/demo/summary\.md \| flow=L2') {
+    Write-Host 'ok: stage 1 prints DECLARE with the flow value'
+} else { Write-Host 'BAD: stage 1 did not print a DECLARE line' -ForegroundColor Red; $fail++ }
+
+$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature nosuch 2>&1 | Out-String
+Expect 'stage 3 without any record' $LASTEXITCODE 1
+if ($out -match '\[HINT\].*request-analysis') {
+    Write-Host 'ok: a missing record names request-analysis'
+} else { Write-Host 'BAD: a missing record did not name the skill' -ForegroundColor Red; $fail++ }
+
+Step 'pre-commit reports an ignored .harness instead of passing silently'
+$ig = Join-Path $env:TEMP 'hb-install-test\proj-ignore'
+if (Test-Path $ig) { Remove-Item $ig -Recurse -Force }
+New-Item -ItemType Directory -Force -Path "$ig\.harness\changes\demo", "$ig\.harness\metrics", "$ig\.harness\rules" | Out-Null
+[System.IO.File]::WriteAllText("$ig\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change is committed.`n", (New-Object System.Text.UTF8Encoding($false)))
+Copy-Item "$pkg\assets\scripts" "$ig\scripts" -Recurse
+[System.IO.File]::WriteAllText("$ig\.gitignore", ".harness/`n", (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$ig\AGENTS.md", "# demo`n", (New-Object System.Text.UTF8Encoding($false)))
+git -C $ig init -q
+git -C $ig config user.email t@t.t
+git -C $ig config user.name t
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$ig\scripts\install-git-hooks.ps1" -Root $ig | Out-Null
+[System.IO.File]::WriteAllText("$ig\Ignored.java", "public class Ignored {}`n", (New-Object System.Text.UTF8Encoding($false)))
+git -C $ig add -A
+$savedEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$igOut = git -C $ig commit -m ignored-tree 2>&1 | Out-String
+$ErrorActionPreference = $savedEap
+if ($igOut -match 'ignored by \.gitignore') {
+    Write-Host 'ok: an ignored .harness is reported by pre-commit'
+} else { Write-Host 'BAD: an ignored .harness passed silently' -ForegroundColor Red; $fail++ }
+$igEvents = @(Select-String -LiteralPath "$ig\.harness\metrics\gate.jsonl" -Pattern '"event":"assoc_skip","ts":"[^"]*","reason":"ignored"' -ErrorAction SilentlyContinue)
+if ($igEvents.Count -ge 1) {
+    Write-Host 'ok: assoc_skip records the ignored tree'
+} else { Write-Host 'BAD: no assoc_skip metric for the ignored tree' -ForegroundColor Red; $fail++ }
+
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }
 Write-Host "GATE-AUTO FAILURES: $fail" -ForegroundColor Red

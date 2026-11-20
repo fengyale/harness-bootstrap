@@ -1,6 +1,6 @@
 ---
 name: coding-skill
-description: 编码实现：按项目分层写业务代码，遵守数据访问、异常与缓存约定，改完必须做编译验证。需求已明确、需要写或改代码时使用。
+description: 编码实现：按项目分层写业务代码，遵守数据访问、异常与缓存约定，改完必须做编译验证。动代码前使用，先按第 0 步确认变更记录已落盘。
 ---
 
 <!-- harness:package:begin body -->
@@ -34,19 +34,35 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 <!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
 
-### 步骤
+### 第 0 步：先证明记录已存在（动任何代码之前）
 
-1. **确认记录已落盘**（一条命令判定，不靠记忆）：
-   - L0：无记录，直接下一步
-   - L2/L3：跑 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 3 -Feature <特性>`；`summary-exists` 不过就退回阶段 1 —— 复制模板、填验收标准 / 影响面 / 任务拆分，跑 `check-summary.ps1 -Stage initial`，再单独提交一次
-   - L1：在 `.harness/changes/_small.md` 追加一行，和改动一起提交
-   - 提交时 pre-commit 会按**真实 diff** 校验 L1 声明：超过 1 个文件或 30 行仍标 L1，直接拒绝并提示改走 summary
-2. 确认模块与包路径
-3. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
-4. 写最小可用改动；跨模块改动写进 `summary.md` 影响面
-5. 编译；编译不过先修编译，不"先放着"
-6. 自测：跑必跑命令，并手工走一遍失败路径
-7. 红线自查
+**已经读过业务代码、Grep 过实现，第 0 步就已经晚了**——档位和影响面无法事后追认。先跑命令，再读代码。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 1 -Feature <特性>
+```
+
+跑完把脚本打印的 `DECLARE: record=… | flow=… | next=…` 那行**原样贴进回复**（贴不出来就说明第 0 步没做）。
+`L0` / `L1` 没有 summary，脚本不会给 `DECLARE`：直接写明档位（`L0：无记录` / `L1：写 _small.md`）再动手。
+
+| 命令结果 | 下一步 |
+| --- | --- |
+| `READY` 且输出 `DECLARE: record=...` | 记录已在盘，进入步骤 1 |
+| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：写 summary 三节 → `check-summary.ps1 -Feature <特性> -Stage initial` → 单独提交一次 → 再回来 |
+| 档位 `L1` | 先在 `.harness/changes/_small.md` 追加一行，和代码一起提交 |
+| 档位 `L0` | 声明「L0：纯文档 / 注释 / 格式，无记录」，再改 |
+
+> 只有「1 个文件 · diff ≤30 行 · 不碰公共层 / DB / 配置 / 接口」才是 `L1`，其余都是 `L2 / L3`（判据见 `.harness/rules/开发流程规范.md` 第 1.1 节）。拿不准就升档。
+> 提交时 pre-commit 会按**真实 diff** 校验 L1 声明：超过 1 个文件或 30 行仍标 L1，直接拒绝并提示改走 summary。
+
+### 步骤（第 0 步通过后）
+
+1. 确认模块与包路径；有 `.harness/modules/<module>.md` 就先读它
+2. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
+3. 写最小可用改动；跨模块改动写进 `summary.md` 影响面
+4. 编译；编译不过先修编译，不"先放着"
+5. 自测：跑必跑命令，并手工走一遍失败路径
+6. 红线自查
 
 ### 三类改动怎么下手
 

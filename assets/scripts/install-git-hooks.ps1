@@ -374,6 +374,20 @@ if [ -n "$SOURCE_CHANGES" ] && [ "$REPLAY_CONTEXT" -eq 0 ] && [ "${HARNESS_ALLOW
       # leave an event metrics.ps1 can count.
       printf '{"event":"assoc_skip","ts":"%s","reason":"no-pointer","records":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SLOT_N:-0}" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
     fi
+  else
+    # HEAD has no .harness/changes. Two cases look identical here and must not:
+    #   1) first adoption -- the harness is on disk but not committed yet: legal
+    #   2) .harness is in .gitignore -- a record can never reach HEAD, so this
+    #      gate would stay off forever while every commit still printed "passed"
+    if [ -d "$ROOT/.harness" ]; then
+      if git check-ignore -q -- .harness/changes 2>/dev/null; then
+        echo "[WARN] .harness/changes is ignored by .gitignore: the change-record gate cannot see any record." >&2
+        echo "       remove that ignore rule, or set recordsTracked=false to turn the gate off on purpose." >&2
+        printf '{"event":"assoc_skip","ts":"%s","reason":"ignored"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
+      else
+        printf '{"event":"assoc_skip","ts":"%s","reason":"not-committed"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ROOT/.harness/metrics/gate.jsonl" 2>/dev/null
+      fi
+    fi
   fi
 fi
 

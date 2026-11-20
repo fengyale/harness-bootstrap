@@ -351,8 +351,9 @@
     {
       "id": "core-skill-minimal-change",
       "file": "assets/.harness/skills/main-dev/coding-skill/SKILL.md",
-      "patterns": ["### 三类改动怎么下手", "同一错误最多修 2 轮"],
-      "why": "编码技能必须给出改动类型的分支与失败处理上限，否则会顺手重构或无限重试。"
+      "patterns": ["### 第 0 步", "stage-gate.ps1 -Stage 1", "### 三类改动怎么下手", "同一错误最多修 2 轮"],
+      "forbid": "需求已明确",
+      "why": "编码技能必须把「先证明记录已存在」放在读代码之前（旧文案「需求已明确」等于给出跳过需求分析的授权），并保留改动类型分支与失败处理上限，否则会顺手重构或无限重试。"
     },
     {
       "id": "core-skill-severity-scope",
