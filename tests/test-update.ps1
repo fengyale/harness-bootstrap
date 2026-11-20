@@ -370,6 +370,7 @@ Check 'dry-run reports required delta'     ($dry -match 'add required:')
 Check 'dry-run reports requiredAnyOf'      ($dry -match 'add requiredAnyOf:')
 Check 'dry-run reports required removal'   ($dry -match 'remove required:.*scripts/red-line-scan\.ps1')
 Check 'dry-run reports sqlGate delta'      ($dry -match 'add sqlGate: true')
+Check 'dry-run reports new config blocks'  (($dry -match 'add sqlReview') -and ($dry -match 'add summaryContent'))
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
 Check 'dry-run plans lessons MOVE'         ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons\.md')
 Check 'dry-run plans promoted MOVE'        ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons-promoted\.txt')
@@ -422,6 +423,12 @@ Check 'project JSON untouched' ((Get-Content -LiteralPath "$proj\scripts\red-lin
 $mergedConfig = (Get-Content -LiteralPath "$proj\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
 Check 'required JSON merged: sqlGate added' ($mergedConfig.PSObject.Properties.Name -contains 'sqlGate')
 Check 'required JSON merged: requiredAnyOf added' ($mergedConfig.PSObject.Properties.Name -contains 'requiredAnyOf')
+# The content checks read these two blocks. An upgraded project that only got the
+# new script but not the config would run check-summary with the content gate
+# silently disabled, so the merge must add them.
+Check 'required JSON merged: sqlReview added' ($mergedConfig.PSObject.Properties.Name -contains 'sqlReview')
+Check 'required JSON merged: summaryContent added' ($mergedConfig.PSObject.Properties.Name -contains 'summaryContent')
+Check 'summaryContent keeps the acceptance needles' (@($mergedConfig.summaryContent.acceptance).Count -gt 0)
 Check 'required JSON merged: project note kept' ($mergedConfig._note -eq 'old install')
 Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.required) -contains 'scripts/red-line-scan.ps1'))
 Check 'required JSON merged: package entries added' (@($mergedConfig.required) -contains 'scripts/stage-gate.ps1')

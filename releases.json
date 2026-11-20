@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.31.3",
+    "title": "(升级补齐新配置块)",
+    "body": [
+      "- 升级：update-harness 合并 harness-required.json 时补上 sqlReview 与",
+      "  summaryContent。这两个 1.29–1.31 新增的配置块此前不会合并，老项目升级后",
+      "  拿到新脚本却缺配置，check-summary 提前 return，内容校验静默空跑",
+      "- 升级：dry-run 的 delta 明确列出 add sqlReview / add summaryContent",
+      "- 测试：test-update 断言两块被合并、dry-run 报告它们"
+    ]
+  },
+  {
     "version": "1.31.2",
     "title": "(文档对齐 1.31 行为 / 发版流程写实)",
     "body": [

@@ -1,7 +1,15 @@
-HARNESS-BOOTSTRAP VERSION 1.31.2
+HARNESS-BOOTSTRAP VERSION 1.31.3
 
 changelog
 ---------
+1.31.3  (升级补齐新配置块)
+- 升级：`update-harness` 合并 `harness-required.json` 时补上 `sqlReview` 与
+  `summaryContent`。1.29–1.31 新增的这两个配置块此前不会合并，老项目升级后
+  拿到新脚本、却因缺配置让 `check-summary` 提前 return——内容校验变成静默空跑
+- 升级：dry-run 的 delta 会明确列出 `add sqlReview` / `add summaryContent`，
+  不再只报 required / requiredAnyOf / sqlGate
+- 测试：test-update 断言两块被合并、dry-run 报告它们
+
 1.31.2  (文档对齐 1.31 行为 / 发版流程写实)
 - 质量分级：check-summary 写明 initial 查三节内容、final 查收尾计数；install-git-hooks
   补 L1 声明核对；audit-order 改为按显式声明 / harness-current-task / trailer /

@@ -6,7 +6,7 @@
 >
 > **Recorded 2026-10-29 (v1.18.0).** Every state below — especially section 6,
 > "What is not done yet" — is the state **at that time** and is not rewritten as
-> later progress lands. The package itself is now v1.31.2; see
+> later progress lands. The package itself is now v1.31.3; see
 > [VERSION](../VERSION) for what changed since.
 >
 > [中文版](README.md)
@@ -261,6 +261,9 @@ something a script can count.**
 ---
 
 ## 6. What is not done yet (as of 2026-10-29)
+
+> This section is a snapshot from 2026-10-29: it describes how far **that project**
+> got at the time, not what the package can do now.
 
 Honestly. Each row has its original evidence in `excerpt/` and is not backfilled
 when the package upgrades:

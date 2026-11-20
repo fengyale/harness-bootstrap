@@ -433,8 +433,38 @@ if (Test-Path -LiteralPath $htmlPath) {
     }
 }
 
+# Case-study READMEs: the "package is at vX.Y.Z" line is a frozen snapshot, so
+# nothing rewrote it when the version moved (it drifted to v1.31.3 while VERSION
+# was v1.31.1). Only that one sentence is asserted: the same files also carry the
+# record-date version (v1.18.0), which must NOT be rewritten.
+$csVer = ''
+if (Test-Path -LiteralPath $verPath) {
+    $csFirst = @([System.IO.File]::ReadAllLines($verPath, [System.Text.Encoding]::UTF8) | Select-Object -First 1)[0]
+    if ($csFirst -match 'VERSION\s+(\d+\.\d+\.\d+)') { $csVer = $matches[1] }
+}
+if ($csVer) {
+    # Chinese wording built from code points: this script stays pure ASCII.
+    $csCn = -join ([char]0x5305, [char]0x672C, [char]0x8EAB, [char]0x5DF2, [char]0x8FED, [char]0x4EE3, [char]0x5230)
+    foreach ($csDoc in @('README.md', 'README.en.md')) {
+        $csPath = Join-Path (Join-Path (Join-Path $repoRoot 'docs') 'case-study') $csDoc
+        if (-not (Test-Path -LiteralPath $csPath)) { continue }
+        $csText = Get-Content -LiteralPath $csPath -Raw -Encoding UTF8
+        $csHit = [regex]::Match($csText, [regex]::Escape($csCn) + '\s*v(\d+\.\d+\.\d+)')
+        if (-not $csHit.Success) {
+            $csHit = [regex]::Match($csText, 'The package itself is now v(\d+\.\d+\.\d+)')
+        }
+        if (-not $csHit.Success) {
+            Add-Result 'docs' 'FAIL' "docs\case-study\$csDoc has no 'package is at vX.Y.Z' line"
+            $docsBad++
+        } elseif ($csHit.Groups[1].Value -ne $csVer) {
+            Add-Result 'docs' 'FAIL' "docs\case-study\$csDoc says v$($csHit.Groups[1].Value); expected v$csVer"
+            $docsBad++
+        }
+    }
+}
+
 if ($docsBad -eq 0) {
-    Add-Result 'docs' 'PASS' 'README counts, reference numbers and page version match the files'
+    Add-Result 'docs' 'PASS' 'README counts, reference numbers, page and case-study versions match the files'
 }
 
 # --------------------------------------------------------------- 6 smoke
