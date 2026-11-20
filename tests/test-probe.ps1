@@ -157,6 +157,21 @@ try {
         Check 'empty tree: tables is empty' (@($factsEmpty.tables).Count -eq 0)
         Check 'empty tree: not truncated' ($factsEmpty.truncated -eq $false)
     }
+    Write-Host '=== a second run does not count its own output ===' -ForegroundColor Cyan
+    # The draft and the baseline land in the repository. If that directory is not
+    # skipped, run two reports .json files as project content and the extension
+    # histogram (plus codeExists) drifts on every run.
+    $first = Read-Facts (Join-Path $proj 'baseline\probe-facts.json')
+    $firstJson = (Get-Content -LiteralPath (Join-Path $proj 'baseline\baseline.json') -Raw -Encoding UTF8) | ConvertFrom-Json
+    $null = Run-Probe -TargetRoot $proj -OutArg 'baseline'
+    $second = Read-Facts (Join-Path $proj 'baseline\probe-facts.json')
+    $secondJson = (Get-Content -LiteralPath (Join-Path $proj 'baseline\baseline.json') -Raw -Encoding UTF8) | ConvertFrom-Json
+    Check 'second run keeps the entity count' (@($second.entities).Count -eq @($first.entities).Count)
+    $ext1 = @($firstJson.fileTypes | ForEach-Object { $_.ext })
+    $ext2 = @($secondJson.fileTypes | ForEach-Object { $_.ext })
+    Check 'second run adds no .json from its own draft' (-not ($ext2 -contains '.json'))
+    Check 'extension histogram is stable' (((@($ext1 | Sort-Object) -join ',')) -eq ((@($ext2 | Sort-Object) -join ',')))
+
 } finally {
     foreach ($d in @($proj, $empty, $absOut)) {
         if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }

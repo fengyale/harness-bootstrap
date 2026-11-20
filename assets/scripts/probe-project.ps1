@@ -170,12 +170,23 @@ if ($isGit) {
 }
 
 # ------------------------------------------------------ file type histogram
+# One skip list for every walk in this script. The draft output directory must be
+# on it: a second run would otherwise count its own baseline.json / probe-facts
+# and the histogram (and codeExists) would drift on every run.
+$probeSkip = @('.git','.harness','.trae','.claude','.idea','.vscode','node_modules',
+    'target','build','dist','out','bin','obj','coverage','vendor','baseline')
+$outTop = ((($Out -replace '\\', '/').Trim('/')) -split '/')[0]
+if ($outTop -and $outTop -ne '.' -and $outTop -ne '..' -and $probeSkip -notcontains $outTop) {
+    $probeSkip += $outTop
+}
+
 $hist = @{}
-$skip = @('.git','node_modules','target','build','dist','out','coverage','.harness','.trae','vendor','.idea')
+$skip = $probeSkip
 Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force -ErrorAction SilentlyContinue |
     Where-Object {
-        $rel = $_.FullName.Substring($rootPath.Length).TrimStart('\','/')
-        $parts = $rel -split '[\\/]'
+        # Segment match on the full path: deriving a relative path with
+        # Substring($rootPath.Length) breaks when %TEMP% is an 8.3 short name.
+        $parts = $_.FullName -split '[\\/]'
         -not ($parts | Where-Object { $skip -contains $_ })
     } |
     ForEach-Object {
@@ -197,8 +208,7 @@ $topExt = @($hist.GetEnumerator() | Sort-Object Value -Descending | Select-Objec
 # Substring($rootPath.Length): %TEMP% is an 8.3 short name on CI
 # (C:\Users\RUNNER~1\...) while Get-ChildItem returns long names, and the slice
 # then lands in the middle of a directory name.
-$probeSkip = @('.git','.harness','.trae','.claude','.idea','.vscode','node_modules',
-    'target','build','dist','out','bin','obj','coverage','vendor')
+# ($probeSkip is defined above, before the histogram, so both walks share it.)
 
 function Get-ProbeFiles {
     param([string]$StartPath, [string]$RelPrefix)

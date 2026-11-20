@@ -317,7 +317,7 @@ function Get-GateEvents {
         try { $e = $line | ConvertFrom-Json } catch {
             # A malformed gate line still counts as an un-dateable event so the
             # "skipped" number in the report cannot hide a broken log.
-            $out += [pscustomobject]@{ Event = 'invalid'; Date = $null; Blocked = '0'; Scanned = '' }
+            $out += [pscustomobject]@{ Event = 'invalid'; Date = $null; Blocked = '0'; Scanned = ''; Reason = '' }
             continue
         }
         $evtDate = $null
@@ -327,6 +327,9 @@ function Get-GateEvents {
             Date = $evtDate
             Blocked = "$($e.blocked)"
             Scanned = "$($e.scanned)"
+            # assoc_skip carries why attribution was skipped; without it the
+            # "gate is off" and "first adoption" cases look identical here.
+            Reason = "$($e.reason)"
         }
     }
     return $out
@@ -362,6 +365,8 @@ function Get-WindowStats {
     $commits = 0
     $bypass = 0
     $orderAudits = 0
+    $assocSkip = 0
+    $assocIgnored = 0
     foreach ($e in $Window.Events) {
         if ($e.Event -eq 'scan') {
             $scans++
@@ -375,6 +380,12 @@ function Get-WindowStats {
             # post-commit found a commit that bundled a new summary with code
             # (usually via --amend); it cannot un-commit, so it reports here.
             $orderAudits++
+        } elseif ($e.Event -eq 'assoc_skip') {
+            # Source commits that could not be tied to a change record. "ignored"
+            # means .harness/changes is in .gitignore, i.e. the gate is off by
+            # accident; "not-committed" is the legal first-adoption case.
+            $assocSkip++
+            if ($e.Reason -eq 'ignored') { $assocIgnored++ }
         }
     }
     $bypassRate = if ($commits -gt 0) { [math]::Round($bypass * 100.0 / $commits, 1) } else { $null }
@@ -395,6 +406,8 @@ function Get-WindowStats {
         Bypass = $bypass
         BypassRate = $bypassRate
         OrderAudits = $orderAudits
+        AssocSkip = $assocSkip
+        AssocIgnored = $assocIgnored
     }
 }
 
@@ -794,6 +807,13 @@ if (-not (Test-Path -LiteralPath $logPath)) {
         $verdict += "$($stats.OrderAudits) summary-order audit event(s): a commit bundled a new summary with code (usually amended); split it before the next release"
     }
 }
+# Attribution skips are reported even when no commit event was parsed: a project
+# whose hook never ran still has source commits that no record covers.
+if ($stats.AssocIgnored -gt 0) {
+    $verdict += "$($stats.AssocIgnored) source commit(s) skipped attribution because .harness/changes is ignored: the gate is off by accident; remove the ignore rule or set recordsTracked=false"
+} elseif ($stats.AssocSkip -gt 0) {
+    $verdict += "$($stats.AssocSkip) source commit(s) were not attributed (no pointer / record not committed yet); pass -Feature or add a Harness-Task trailer"
+}
 
 if ($Json) {
     $out = [pscustomobject]@{
@@ -809,6 +829,8 @@ if ($Json) {
         bypassCommits = $stats.Bypass
         bypassRate = $stats.BypassRate
         summaryOrderAudits = $stats.OrderAudits
+        attributionSkipped = $stats.AssocSkip
+        attributionSkippedIgnored = $stats.AssocIgnored
         skillLoadRate = $skillRate
         skills = $skillCounts
         skillAges = @($installed | ForEach-Object {
@@ -855,6 +877,7 @@ if (-not $Quiet) {
     Write-Host ("impl-level corrections: total {0}   avg {1} (target 0)" -f $totalImpl, $avgImpl)
     Write-Host ("scans: {0}   commits: {1}   blocked: {2}   bypass: {3} ({4}%)   summary-order audits: {5}" -f `
         $stats.Scans, $stats.Commits, $stats.Blocked, $stats.Bypass, $(if ($null -eq $stats.BypassRate) { 'n/a' } else { $stats.BypassRate }), $stats.OrderAudits)
+    Write-Host ("attribution skipped: {0} (ignored .harness: {1})" -f $stats.AssocSkip, $stats.AssocIgnored)
     Write-Host ("skill load rate: {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
     if ($Compare -and $null -ne $prevStats) {
         $prevRate = if ($null -eq $prevStats.SkillRate) { 'n/a' } else { "$($prevStats.SkillRate)%" }

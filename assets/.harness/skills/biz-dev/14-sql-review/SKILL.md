@@ -70,10 +70,10 @@ description: SQL 性能评审：新增或修改 SQL、加索引、改分页、�
 **结论模板：**
 
 ```text
-sql_review: <表名> · 语法 <OK/失败> · 结构 <OK/缺 X> · 绑定 <#{} / 无 ${}> · 结果 <已验(fixture/参数) / 未验证(原因)> · 计划 <type=ref key=idx_x rows≈N / 未跑> · 结论 <通过 / 已改写 / 待 DBA>
+sql_review: 表名 · 语法 OK/失败 · 结构 OK/缺 X · 绑定 #{} 或无 ${} · 结果 已验(fixture/参数) 或 未验证(原因) · 计划 type=ref key=idx_x rows≈N 或 未跑 · 结论 通过/已改写/待 DBA
 ```
 
-**证据：** 优先落盘到 `.harness/changes/<特性>/sql-review/`（EXPLAIN 输出、结果摘要、fixture 路径），在 `sql_review:` 里引用路径。
+**证据：** 优先落盘到 `.harness/changes/特性名/sql-review/`（EXPLAIN 输出、结果摘要、fixture 路径），在 `sql_review:` 里引用路径。
 
 ### 检查项
 

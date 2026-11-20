@@ -179,6 +179,21 @@ assert_tool_in_sync scripts/red-line-scan.py
 assert_tool_in_sync scripts/sql-review-gate.ps1
 assert_tool_in_sync scripts/sql-review-gate.py
 
+# The rule table is the scanner's input, so a changed table must not ride along
+# with source code: one `git add` could otherwise lower a rule and land the
+# violation together, and the scan would read the weakened table and pass.
+# Same-commit rule + code is blocked; the rule change goes in its own commit.
+if git cat-file -e HEAD:scripts/red-line-rules.json 2>/dev/null && \
+   ! git diff --cached --quiet HEAD -- scripts/red-line-rules.json 2>/dev/null; then
+  RULE_WITH_CODE=$(git diff --cached --name-only --diff-filter=ACMR HEAD -- . 2>/dev/null | \
+    grep -vE '^(scripts/|\.harness/|\.trae/|docs/)' | \
+    grep -E '\.(java|kt|kts|scala|groovy|sql|xml|py|js|mjs|cjs|ts|tsx|jsx|vue|svelte|cs|go|rs|php|rb|swift|m|mm|dart|lua|c|h|cc|cpp|cxx|hpp|html|css|scss|less)$' | \
+    head -n 1)
+  if [ -n "$RULE_WITH_CODE" ]; then
+    gate_fail "scripts/red-line-rules.json changes together with source code ($RULE_WITH_CODE); commit the rule change on its own, then commit the code"
+  fi
+fi
+
 # Read sqlGate from the index first, then HEAD. Do NOT read the worktree for
 # this key: an unstaged edit to false must not be able to switch the gate off.
 # An untracked config is treated as legacy (rule presence decides the policy).

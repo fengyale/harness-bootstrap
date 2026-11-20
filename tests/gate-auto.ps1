@@ -536,6 +536,44 @@ if ($igEvents.Count -ge 1) {
     Write-Host 'ok: assoc_skip records the ignored tree'
 } else { Write-Host 'BAD: no assoc_skip metric for the ignored tree' -ForegroundColor Red; $fail++ }
 
+Step 'a weaker rule table cannot ride along with violating code'
+# One `git add` used to lower a rule and land the violation together: the scan
+# read the weakened table from the worktree and passed. The table must be
+# committed on its own, so the previous table stays in force for the code.
+$ruleProj = Join-Path $env:TEMP 'hb-install-test\proj-rule'
+if (Test-Path $ruleProj) { Remove-Item $ruleProj -Recurse -Force }
+New-Item -ItemType Directory -Force -Path "$ruleProj\.harness\changes", "$ruleProj\.harness\metrics", "$ruleProj\.harness\rules" | Out-Null
+[System.IO.File]::WriteAllText("$ruleProj\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change.`n", (New-Object System.Text.UTF8Encoding($false)))
+Copy-Item "$pkg\assets\scripts" "$ruleProj\scripts" -Recurse
+[System.IO.File]::WriteAllText("$ruleProj\AGENTS.md", "# demo`n", (New-Object System.Text.UTF8Encoding($false)))
+git -C $ruleProj init -q
+git -C $ruleProj config user.email t@t.t
+git -C $ruleProj config user.name t
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$ruleProj\scripts\install-git-hooks.ps1" -Root $ruleProj | Out-Null
+[System.IO.File]::WriteAllText("$ruleProj\Bootstrap.java", "public class Bootstrap { }`n", (New-Object System.Text.UTF8Encoding($false)))
+git -C $ruleProj add -A
+git -C $ruleProj commit -q -m bootstrap
+# Weaken the table and add a violating file in the same commit.
+[System.IO.File]::WriteAllText("$ruleProj\scripts\red-line-rules.json", '{"rules":[{"id":"R1","pattern":"__never_matches__"}]}', (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$ruleProj\Bad.java", "public class Bad { double price = 1.5; }`n", (New-Object System.Text.UTF8Encoding($false)))
+git -C $ruleProj add -A
+$savedEap2 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$ruleOut = git -C $ruleProj commit -m 'feat: weaken rules and add code' 2>&1 | Out-String
+$ErrorActionPreference = $savedEap2
+if ($ruleOut -match 'changes together with source code') {
+    Write-Host 'ok: rule table + source in one commit is blocked'
+} else { Write-Host 'BAD: a weakened rule table rode along with code' -ForegroundColor Red; $fail++ }
+# The rule change alone is allowed.
+$ErrorActionPreference = 'Continue'
+git -C $ruleProj reset -q Bad.java 2>&1 | Out-Null
+git -C $ruleProj commit -q -m 'chore: rule table' -- scripts/red-line-rules.json 2>&1 | Out-Null
+$ruleAloneCode = $LASTEXITCODE
+$ErrorActionPreference = $savedEap2
+if ($ruleAloneCode -eq 0) {
+    Write-Host 'ok: the rule change alone is allowed'
+} else { Write-Host 'BAD: a standalone rule change was blocked' -ForegroundColor Red; $fail++ }
+
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }
 Write-Host "GATE-AUTO FAILURES: $fail" -ForegroundColor Red

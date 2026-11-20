@@ -259,6 +259,40 @@ $strictCfg.groundingStrict = $false
 $g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
 Check 'upgrade behaviour keeps it a warning' ($LASTEXITCODE -eq 0)
 
+Step 'an empty project block fails even without strict grounding'
+# Deleting the slot markers used to make a skeleton look compiled: no slot, no
+# anchor, nothing to fill -- and only a WARN. The project block must carry at
+# least one real line, independent of groundingStrict.
+$emptyDir = New-Skill 'main-dev' 'empty-probe' 'empty-probe'
+$emptyFile = Join-Path $emptyDir 'SKILL.md'
+[System.IO.File]::WriteAllLines($emptyFile, @(
+    '---',
+    'name: empty-probe',
+    'description: demo skill whose project block carries no fact',
+    '---',
+    '',
+    '# empty probe',
+    '',
+    '<!-- harness:package:begin body -->',
+    '## when',
+    'demo',
+    '<!-- harness:package:end -->',
+    '',
+    '<!-- harness:project:begin bindings -->',
+    '## bindings',
+    '<!-- harness:project:end -->'
+), (New-Object System.Text.UTF8Encoding($false)))
+Add-Content -LiteralPath $indexPath -Value '| `empty-probe` | demo |' -Encoding UTF8
+New-Entry 'empty-probe' $emptyDir
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'empty project block fails' (($LASTEXITCODE -eq 1) -and ($g -match 'carry no project fact'))
+$filled = @([System.IO.File]::ReadAllLines($emptyFile, [System.Text.Encoding]::UTF8) | ForEach-Object {
+    if ($_ -match '^## bindings$') { '## bindings'; '- entry: DemoService#get' } else { $_ }
+})
+[System.IO.File]::WriteAllLines($emptyFile, $filled, (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'one project fact clears it' ($LASTEXITCODE -eq 0)
+
 Step 'missing README is reported once'
 Remove-Item -LiteralPath $indexPath -Force
 $out = RunVerify

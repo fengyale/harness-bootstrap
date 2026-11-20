@@ -261,6 +261,8 @@ foreach ($s in $skillFiles) {
     $markerFail  = 0
     $slotInPkg   = 0
     $anchorInPkg = 0
+    $prjBlocks   = 0
+    $prjReal     = 0
     $inFence     = $false
     foreach ($line in $lines) {
         if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
@@ -281,6 +283,7 @@ foreach ($s in $skillFiles) {
                 $markerIds[$key] = $true
             }
             $markerStack.Add($key)
+            if ($kind -eq 'project') { $prjBlocks++ }
             continue
         }
         if ($line -match '<!--\s*harness:(package|project):end\s*-->') {
@@ -303,6 +306,13 @@ foreach ($s in $skillFiles) {
             if ($line -match '<!--\s*slot:') { $slotInPkg++ }
             if ($line -match '^\s*-\s*\[(E0|E1|E2)\]') { $anchorInPkg++ }
         }
+        if ($markerStack.Count -gt 0 -and $markerStack[$markerStack.Count - 1].StartsWith('project/')) {
+            # A project block that only carries headings and slot comments has no
+            # project fact in it. Deleting the slot markers used to make such a
+            # skill look complete, so emptiness is judged on its own.
+            $t = $line.Trim()
+            if ($t.Length -gt 0 -and $t -notmatch '^#' -and $t -notmatch '<!--') { $prjReal++ }
+        }
     }
     if ($markerStack.Count -gt 0) {
         Add-Result 'markers' 'FAIL' "$($s.Category)/$($s.Name): $($markerStack.Count) block marker(s) not closed"
@@ -318,6 +328,12 @@ foreach ($s in $skillFiles) {
     }
     if ($markerSeen -gt 0 -and $markerFail -eq 0) {
         Add-Result 'markers' 'PASS' "$($s.Category)/$($s.Name): block markers balanced ($($markerIds.Count) id(s))"
+    }
+    # Empty project blocks are a FAIL regardless of groundingStrict: the switch
+    # only governs evidence anchors, and an upgraded project must still carry
+    # real bindings or the skill is a skeleton wearing a compiled face.
+    if ($prjBlocks -gt 0 -and $prjReal -eq 0) {
+        Add-Result 'grounded' 'FAIL' "$($s.Category)/$($s.Name): $prjBlocks project block(s) carry no project fact; fill the bindings, or remove a skill this project does not use"
     }
     if ($stack -and $cfg.stackTermRules) {
         $negWords = @($cfg.negationWords)

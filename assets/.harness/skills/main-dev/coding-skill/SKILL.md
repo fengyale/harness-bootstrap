@@ -39,7 +39,7 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 **已经读过业务代码、Grep 过实现，第 0 步就已经晚了**——档位和影响面无法事后追认。先跑命令，再读代码。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 1 -Feature <特性>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 1 -Feature 特性名
 ```
 
 跑完把脚本打印的 `DECLARE: record=… | flow=… | next=…` 那行**原样贴进回复**（贴不出来就说明第 0 步没做）。
@@ -48,7 +48,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 | 命令结果 | 下一步 |
 | --- | --- |
 | `READY` 且输出 `DECLARE: record=...` | 记录已在盘，进入步骤 1 |
-| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：写 summary 三节 → `check-summary.ps1 -Feature <特性> -Stage initial` → 单独提交一次 → 再回来 |
+| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：写 summary 三节 → `check-summary.ps1 -Feature 特性名 -Stage initial` → 单独提交一次 → 再回来 |
 | 档位 `L1` | 先在 `.harness/changes/_small.md` 追加一行，和代码一起提交 |
 | 档位 `L0` | 声明「L0：纯文档 / 注释 / 格式，无记录」，再改 |
 
@@ -57,7 +57,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 ### 步骤（第 0 步通过后）
 
-1. 确认模块与包路径；有 `.harness/modules/<module>.md` 就先读它
+1. 确认模块与包路径；有 `.harness/modules/模块名.md` 就先读它
 2. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
 3. 写最小可用改动；跨模块改动写进 `summary.md` 影响面
 4. 编译；编译不过先修编译，不"先放着"

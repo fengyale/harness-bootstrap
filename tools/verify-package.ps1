@@ -201,6 +201,7 @@ if (Test-Path -LiteralPath $tplSkills) {
         $inFence = $false
         $slotInPkg = 0
         $anchorInPkg = 0
+        $angleInPkg = 0
         $prjN = 0
         $bad = 0
         foreach ($line in $lines) {
@@ -242,6 +243,10 @@ if (Test-Path -LiteralPath $tplSkills) {
             if ($stack.Count -gt 0 -and $stack[$stack.Count - 1].StartsWith('package/')) {
                 if ($line -match '<!--\s*slot:') { $slotInPkg++ }
                 if ($line -match '^\s*-\s*\[(E0|E1|E2)\]') { $anchorInPkg++ }
+                # An angle-bracket blank inside a package block has no owner: the
+                # upgrade copies the block into every project verbatim, so the
+                # blank survives forever and reads like an unfilled template.
+                if ($line -notmatch '<!--' -and $line -match '<[^<>\r\n]+>' -and $line -notmatch '<br\s*/?>') { $angleInPkg++ }
             }
         }
         if ($stack.Count -gt 0) {
@@ -254,6 +259,10 @@ if (Test-Path -LiteralPath $tplSkills) {
         }
         if ($anchorInPkg -gt 0) {
             Add-Result 'markers' 'FAIL' "${rel}: $anchorInPkg evidence anchor(s) inside a package block"
+            $bad++
+        }
+        if ($angleInPkg -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $angleInPkg angle-bracket blank(s) inside a package block; upgrade copies the block into every project, so the blank never gets filled (use a neutral word instead)"
             $bad++
         }
         # A template with only package blocks has nowhere for the installer to put

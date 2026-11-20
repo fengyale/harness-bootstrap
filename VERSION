@@ -1,7 +1,26 @@
-HARNESS-BOOTSTRAP VERSION 1.31.7
+HARNESS-BOOTSTRAP VERSION 1.31.8
 
 changelog
 ---------
+1.31.8  (定版前修复：门禁降级 / 空壳技能 / 探测幂等)
+- 门禁：pre-commit 拒绝「`red-line-rules.json` 与源码同一提交」。此前一次 `git add`
+  可以把规则表调弱并同时提交违规代码，扫描读到弱表直接放过——实测可绕过
+- 门禁：技能 project 块**没有任何项目事实**时 FAIL（不再依赖 `groundingStrict`）。
+  此前删掉 `slot:` 注释即可让空壳技能全绿，双所有权在存量项目上等于零执行
+- 探测：`probe-project` 的目录跳过表与扩展名直方图合并为一份，默认输出目录
+  `baseline/` 也在内；此前第二次运行会把自己的产物统计进去，直方图与 `codeExists` 漂移
+- 自检：`verify-package` 新增「package 块内不得有尖括号占位」（升级会把该块原样
+  写回项目，占位符永远填不上）；4 个技能里的 `<特性>` / `<module>` 改成中性名
+- 度量：`metrics.ps1` 解析 gate 日志里的 `assoc_skip` 事件，按 reason 区分
+  `ignored`（`.harness/changes` 被 ignore，门禁等于关掉）与 `not-committed`
+  （首次接入，合法）；文本输出新增 `attribution skipped` 行，`-Json` 新增
+  `attributionSkipped` / `attributionSkippedIgnored`
+- 判定：`ignored` 时在结论里直说"the gate is off by accident"，不再与首次接入
+  混为一谈；该结论在"没有 commit 事件"时也会输出，避免 hook 未装时整段静默
+- 测试：regression 断言两个计数与 ignored 结论；gate-auto 断言「规则表 + 源码
+  同提交被拦、规则表单独提交放行」；skills-registry 断言「空 project 块 FAIL、
+  填一条事实后放行」；test-probe 断言二次运行不把自己的产物计入直方图
+
 1.31.7  (决策点填充 / 技能索引单一真源)
 - 探测：`probe-project.ps1` 新增 `probe-facts.json`——实体 / Controller 映射 /
   Topic / 缓存 Key / 表名的待确认草稿，每类上限 60 条，超出标 truncated

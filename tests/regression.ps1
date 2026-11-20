@@ -106,6 +106,27 @@ Step 'metrics -Days 14 -Compare'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Compare
 if ($LASTEXITCODE -ne 0) { Write-Host "METRICS FAILED" -ForegroundColor Red; $script:fail++ }
 
+Step 'assoc_skip events are counted and the ignored case is called out'
+# The pre-commit hook writes assoc_skip when a source commit cannot be tied to a
+# record. Two reasons look identical in a raw log but mean opposite things:
+# "not-committed" is the legal first adoption, "ignored" means the gate is off.
+$gateLog = "$proj\.harness\metrics\gate.jsonl"
+# Local time, no "Z": a UTC suffix shifts the date forward by the offset and the
+# event falls outside today's exclusive window.
+$tsNow = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+$evt = @(
+    ('{"event":"assoc_skip","ts":"' + $tsNow + '","reason":"ignored"}'),
+    ('{"event":"assoc_skip","ts":"' + $tsNow + '","reason":"not-committed"}')
+) -join "`r`n"
+[System.IO.File]::AppendAllText($gateLog, $evt + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+$mj = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$jj = $mj | ConvertFrom-Json
+if ($jj.attributionSkipped -ne 2) { Write-Host "ASSOC SKIP NOT COUNTED: $($jj.attributionSkipped)" -ForegroundColor Red; $script:fail++ }
+if ($jj.attributionSkippedIgnored -ne 1) { Write-Host "IGNORED SUBTYPE NOT COUNTED: $($jj.attributionSkippedIgnored)" -ForegroundColor Red; $script:fail++ }
+$mt = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 | Out-String
+if ($mt -notmatch 'attribution skipped: 2 \(ignored \.harness: 1\)') { Write-Host "ATTRIBUTION LINE MISSING" -ForegroundColor Red; $script:fail++ }
+if ($mt -notmatch 'ignored: the gate is off by accident') { Write-Host "IGNORED VERDICT MISSING" -ForegroundColor Red; $script:fail++ }
+
 Step '_small.md L1 row is counted and lessons.md is generated'
 $smallDate = Get-Date -Format 'yyyy-MM-dd'
 $small = @(
