@@ -30,6 +30,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath $Root).Path
 
+# exit 0 = ignored, 1 = not ignored, anything else = cannot tell (treated as
+# "not ignored"; the git problem itself surfaces elsewhere). Under 'Stop' an
+# exit code of 1 would become a terminating error, so the preference is relaxed.
+function Test-GitIgnored {
+    param([string]$Rel)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git -C $root check-ignore -q -- $Rel 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 function Read-StagedDiff {
     param([string]$Path)
     $files = New-Object System.Collections.Generic.List[string]
@@ -105,6 +122,16 @@ foreach ($a in $diff.Added) {
 }
 
 if ($sqlLines.Count -eq 0) { Write-Host '[SKIP] no SQL detected in the staged source lines'; exit 0 }
+
+# If the record directory is ignored, no summary (and therefore no sql_review)
+# can ever be committed. Say that first: "create a summary" would send the user
+# to build a file that the repository will never accept.
+if (Test-GitIgnored '.harness/changes/__probe__') {
+    Write-Host '[FAIL] SQL changed, but .harness/changes is ignored by .gitignore.'
+    Write-Host '       This gate needs a tracked .harness/changes directory; a summary written there cannot be committed.'
+    Write-Host '       Remove the ignore pattern, then add the summary with its sql_review line.'
+    exit 1
+}
 
 # ---- candidates: this commit -> HARNESS_TASK -> newest on disk
 $candidates = New-Object System.Collections.Generic.List[string]

@@ -494,6 +494,24 @@ if ($gitDir) {
     }
 }
 
+# If the project opted out of the summary-order audit, say so: "all green" must
+# not imply the audit ran. An ignored record directory without the declaration
+# is reported too, because that configuration can never satisfy the gate.
+$recordsTracked = $true
+if ($cfg -and ($cfg.PSObject.Properties.Name -contains 'recordsTracked')) {
+    $recordsTracked = [bool]$cfg.recordsTracked
+}
+if (-not $recordsTracked) {
+    Add-Result 'gate' 'WARN' 'recordsTracked=false: the summary-order audit is off by declaration'
+} elseif (Get-Command git -ErrorAction SilentlyContinue) {
+    try {
+        & git -C $rootPath check-ignore -q -- '.harness/changes/__probe__' 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Add-Result 'gate' 'WARN' '.harness/changes is ignored by .gitignore: the summary-order audit cannot see committed records'
+        }
+    } catch { }
+}
+
 # ----------------------------------------------------------------- 6 runnable
 # The scanner must actually run HERE. Prefer PowerShell, fall back to the python
 # twin -- otherwise "0 FAIL" would just mean "this check never executed".

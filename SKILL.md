@@ -355,7 +355,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agents-delta.ps1
 
 要求**三个脚本都 0 FAIL**，把真实输出贴给用户。
 `verify-harness` 查结构（含常驻文件五块是否齐全、是否空心、有无模板占位符），
-`verify-grounding` 查"技能里写的路径/证据是不是真的"，外加覆盖度（`工程结构.md` 目录树仍含 `<` 会 FAIL，wiki 表仍是模板只 WARN），`agents-delta` 查重装差异。
+`verify-grounding` 查"技能里写的路径/证据是不是真的"，外加覆盖度（`工程结构.md` 目录树仍含 `<` 会 FAIL，wiki 表仍是模板只 WARN）与填充深度（rules / wiki 正文残留 `<...>` 会 FAIL，`TODO(待确认)` 放行），`agents-delta` 查重装差异。
 
 阶段门（**手动跑，不接 hook**——它要跑编译和测试，接进提交会拖慢每次 commit）：
 
@@ -403,7 +403,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
-- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent`），其余键保留，`-NoMergeKnown` 退回只打印差异
+- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked`），其余键保留，`-NoMergeKnown` 退回只打印差异
 - `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
 - `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING，都不写盘（合并后行数不设上限）；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
 - `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异

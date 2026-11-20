@@ -1,7 +1,18 @@
-HARNESS-BOOTSTRAP VERSION 1.31.5
+HARNESS-BOOTSTRAP VERSION 1.31.6
 
 changelog
 ---------
+1.31.6  (归因门禁不再被 .gitignore 静默关掉 / 填充深度)
+- 门禁：`audit-order` 在 `.harness/changes` 被 `.gitignore` 忽略时直接 FAIL 并给出两条出路；
+  新增 `recordsTracked`（默认 true），显式 false 才允许跳过，且 `verify-harness` 报 WARN
+- 门禁：`sql-review-gate`（ps1 / py）在「没有 summary」分支先判 ignore，
+  避免让人建一个永远进不了库的 summary
+- 门禁：`verify-grounding` 新增 `fill-depth`——已填项目的 rules / wiki 正文残留 `<...>`
+  直接 FAIL；`TODO(...)`、代码块与行内代码放行
+- 升级：`recordsTracked` 纳入自动合并键与 delta 报告，老项目升级后才真正生效
+- 测试：audit-order 新增「忽略目录 FAIL / 显式声明 SKIP」；skills-registry 新增
+  fill-depth 三条；test-update 断言新键被合并
+
 1.31.5  (覆盖度检查 / 单套跑)
 - 门禁：`verify-grounding` 新增 `coverage` 项。已填项目（AGENTS.md 无占位符且已有
   代码）的 `工程结构.md` 目录树仍含 `<` 直接 FAIL；`stack.json` 检出 orm / cache / mq

@@ -140,6 +140,59 @@ try {
     Remove-Item -LiteralPath $proj -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+Write-Host '=== ignored record directory ===' -ForegroundColor Cyan
+# A .gitignore entry for .harness/changes used to look exactly like "first
+# harness adoption", so the gate stayed green forever. It must now fail and
+# name the cause, and an explicit recordsTracked=false must turn it into a skip.
+$proj2 = Join-Path $env:TEMP ('hb-audit-ign-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    New-Item -ItemType Directory -Force -Path $proj2 | Out-Null
+    & git -C $proj2 init -q
+    & git -C $proj2 config user.email 'audit@test.local'
+    & git -C $proj2 config user.name 'audit test'
+    Set-Content -LiteralPath "$proj2\.gitignore" -Value '.harness/changes/' -Encoding UTF8
+    Set-Content -LiteralPath "$proj2\Bootstrap.java" -Value 'class Bootstrap { }' -Encoding ASCII
+    & git -C $proj2 add -A
+    & git -C $proj2 commit -q -m 'chore: bootstrap'
+    $b2 = ([string](& git -C $proj2 rev-parse HEAD | Select-Object -First 1)).Trim()
+    Set-Content -LiteralPath "$proj2\A.java" -Value 'class A { }' -Encoding ASCII
+    & git -C $proj2 add 'A.java'
+    & git -C $proj2 commit -q -m 'feat: code without a tracked record'
+    $oldTask2 = $env:HARNESS_TASK
+    Remove-Item Env:HARNESS_TASK -ErrorAction SilentlyContinue
+    try {
+        $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Root $proj2 -Base $b2 -Feature demo 2>&1 | Out-String
+        Check 'ignored changes directory fails instead of skipping' (($LASTEXITCODE -eq 1) -and ($out2 -match '\[FAIL\].*ignored'))
+        New-Item -ItemType Directory -Force -Path "$proj2\scripts" | Out-Null
+        Set-Content -LiteralPath "$proj2\scripts\harness-required.json" -Value '{"recordsTracked":false}' -Encoding UTF8
+        $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Root $proj2 -Base $b2 -Feature demo 2>&1 | Out-String
+        Check 'recordsTracked=false is an explicit skip' (($LASTEXITCODE -eq 0) -and ($out2 -match 'recordsTracked=false'))
+    } finally {
+        if ($oldTask2) { $env:HARNESS_TASK = $oldTask2 }
+    }
+} finally {
+    Remove-Item -LiteralPath $proj2 -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host '=== no records and no ignore: still a first adoption ===' -ForegroundColor Cyan
+# The fail-closed branch must not swallow a genuine first install: no .harness
+# at all and no .gitignore entry still has to skip, not fail.
+$proj3 = Join-Path $env:TEMP ('hb-audit-new-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    New-Item -ItemType Directory -Force -Path $proj3 | Out-Null
+    & git -C $proj3 init -q
+    & git -C $proj3 config user.email 'audit@test.local'
+    & git -C $proj3 config user.name 'audit test'
+    Set-Content -LiteralPath "$proj3\Bootstrap.java" -Value 'class Bootstrap { }' -Encoding ASCII
+    & git -C $proj3 add -A
+    & git -C $proj3 commit -q -m 'chore: bootstrap'
+    $b3 = ([string](& git -C $proj3 rev-parse HEAD | Select-Object -First 1)).Trim()
+    $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Root $proj3 -Base $b3 -Feature demo 2>&1 | Out-String
+    Check 'a real first adoption still skips' (($LASTEXITCODE -eq 0) -and ($out3 -match 'first harness adoption'))
+} finally {
+    Remove-Item -LiteralPath $proj3 -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host ''
 if ($fail -gt 0) {
     Write-Host "AUDIT ORDER TEST FAILED ($fail)" -ForegroundColor Red

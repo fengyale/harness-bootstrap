@@ -209,7 +209,7 @@ function Get-RequiredDelta {
         # Configuration blocks that the checkers read. A new script with an old
         # config silently skips its new check (check-summary returns early when
         # sqlReview / summaryContent is absent), so these must be named.
-        foreach ($key in @('sqlReview', 'summaryContent')) {
+        foreach ($key in @('sqlReview', 'summaryContent', 'recordsTracked')) {
             $srcHas = ($src.PSObject.Properties.Name -contains $key)
             $dstHas = ($dst.PSObject.Properties.Name -contains $key)
             if ($srcHas -and -not $dstHas) { $parts += ('add ' + $key + ' (new config block)') }
@@ -383,7 +383,9 @@ function Merge-RequiredJson {
     # sqlReview / summaryContent are the config behind the content checks. They
     # are new keys in 1.29-1.31; without them the new check-summary silently
     # returns early, so an upgrade would ship the script but not the gate.
-    foreach ($key in @('sqlReview', 'summaryContent')) {
+    # recordsTracked (1.31.6) does the same for audit-order: absent means true,
+    # but an explicit opt-out must survive the upgrade.
+    foreach ($key in @('sqlReview', 'summaryContent', 'recordsTracked')) {
         if (($src.PSObject.Properties.Name -contains $key) -and
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
             $cfg | Add-Member -NotePropertyName $key -NotePropertyValue $src.$key

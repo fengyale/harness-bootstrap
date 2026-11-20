@@ -16,7 +16,18 @@ itself and all .md files are skipped.
 import argparse
 import os
 import re
+import subprocess
 import sys
+
+
+def is_ignored(root, rel):
+    """True only when git explicitly reports the path as ignored."""
+    try:
+        r = subprocess.run(['git', '-C', root, 'check-ignore', '-q', '--', rel],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return r.returncode == 0
+    except Exception:
+        return False
 
 SQL_PATTERNS = [
     re.compile(r'\bselect\b.+?\bfrom\b', re.I),
@@ -133,6 +144,14 @@ def main():
     if not sql:
         print('[SKIP] no SQL detected in the staged source lines')
         return 0
+
+    # An ignored record directory makes every summary (and its sql_review)
+    # uncommittable; name the real cause before looking for one.
+    if is_ignored(root, '.harness/changes/__probe__'):
+        print('[FAIL] SQL changed, but .harness/changes is ignored by .gitignore.')
+        print('       This gate needs a tracked .harness/changes directory; a summary written there cannot be committed.')
+        print('       Remove the ignore pattern, then add the summary with its sql_review line.')
+        return 1
 
     candidates, in_commit = [], set()
     for f in files:

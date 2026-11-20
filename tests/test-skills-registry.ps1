@@ -180,6 +180,22 @@ $g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify
 Check 'template wiki table is reported as a warning' ($g -match 'WARN.*no real row')
 Check 'coverage warning does not fail the run' ($LASTEXITCODE -eq 0)
 
+Step 'fill-depth: a placeholder left in a rule fails'
+# rules/wiki are only scanned once the project claims to be filled (AGENTS.md
+# has no "<...>" and code exists). A leftover slot is a template, not a fact;
+# fenced code and inline code must stay legal so generics are not flagged.
+$phLine = '- name: <' + [char]0x5982 + ' PascalCase>'
+Add-Content -LiteralPath $structPath -Value $phLine -Encoding UTF8
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'leftover placeholder fails fill-depth' (($LASTEXITCODE -eq 1) -and ($g -match '\[FAIL\]\s+fill-depth'))
+$kept = @([System.IO.File]::ReadAllLines($structPath, [System.Text.Encoding]::UTF8) | Where-Object { $_ -ne $phLine })
+[System.IO.File]::WriteAllLines($structPath, $kept, (New-Object System.Text.UTF8Encoding($false)))
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'real content passes fill-depth' ($LASTEXITCODE -eq 0)
+Add-Content -LiteralPath $structPath -Value ('| a | `List<String>` | `' + [char]0x2026 + '` |') -Encoding UTF8
+$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+Check 'inline code is not a placeholder' ($LASTEXITCODE -eq 0)
+
 Step 'missing README is reported once'
 Remove-Item -LiteralPath $indexPath -Force
 $out = RunVerify

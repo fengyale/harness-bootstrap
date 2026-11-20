@@ -22,6 +22,8 @@
     6. coverage     a filled project must not keep the template's placeholder rows:
                     a placeholder structure tree is FAIL, a wiki table that is
                     still a template is WARN (needs .harness\stack.json)
+    7. fill-depth   a filled project must not keep "<...>" in rules/wiki prose;
+                    a TODO(...) marker is legal, fenced and inline code are skipped
 
   NEW PROJECT MODE
     Detected by .harness/project-brief.md. There is no code to cite yet, so a
@@ -628,6 +630,66 @@ if ($newProject -and -not $codeExists) {
                 $real = @(Get-SectionTableRows $bl2 $cacheHead | Where-Object { Test-RealTableRow $_ })
                 if ($real.Count -eq 0) { Add-Result 'coverage' 'WARN' 'business model: cache detected but the cache table has no real row' }
             }
+        }
+    }
+}
+
+# ----------------------------------------------------------------- 5 fill-depth
+# A rule or wiki page that still carries "<...>" is a template, not a fact: the
+# >=5-line check cannot see that, so a project could pass with the skeleton.
+# "TODO(...)" is the protocol's explicit deferral and stays legal. Fenced code
+# and inline code are skipped, and identifier-shaped tokens (<T>, <String>) are
+# code names rather than slots -- otherwise every generic would be a failure.
+function Test-ProsePlaceholder {
+    param([string]$Line)
+    # html comments and autolinks are ordinary markdown, not slots
+    $probe = $Line -replace '<!--.*?-->', ''
+    $probe = $probe -replace '`[^`]*`', ''
+    foreach ($m in [regex]::Matches($probe, '<([^<>]*)>')) {
+        $inner = $m.Groups[1].Value.Trim()
+        if ($inner -match '^[a-z][a-z0-9+.-]*:') { continue }
+        # generic parameters (<T>, <K>, <String>) and inline html tags are code
+        if ($inner -match '^[A-Z][A-Za-z0-9_]*$') { continue }
+        if ($inner -match '^(br|hr|b|i|em|strong|code|a|img|span|div|p|sup|sub)$') { continue }
+        return $true
+    }
+    return $false
+}
+if ($codeExists) {
+    $agentsDoc3 = Join-Path $rootPath 'AGENTS.md'
+    $agentsFilled3 = $false
+    if (Test-Path -LiteralPath $agentsDoc3) {
+        $agentsFilled3 = $true
+        $inFenceA = $false
+        foreach ($l in [System.IO.File]::ReadAllLines($agentsDoc3, [System.Text.Encoding]::UTF8)) {
+            if ($l -match '^\s*(```|~~~)') { $inFenceA = -not $inFenceA; continue }
+            if ($inFenceA) { continue }
+            # Same placeholder test as the files below: a bare "<br>" or a
+            # generic must not make the whole check silently skip.
+            if (Test-ProsePlaceholder $l) { $agentsFilled3 = $false; break }
+        }
+    }
+    if ($agentsFilled3) {
+        $hits = New-Object System.Collections.Generic.List[string]
+        foreach ($docDir in @('.harness\rules', '.harness\wiki')) {
+            $dp = Join-Path $rootPath ($docDir -replace '/', '\')
+            if (-not (Test-Path -LiteralPath $dp)) { continue }
+            foreach ($doc in @(Get-ChildItem -LiteralPath $dp -Filter *.md -File -Force -ErrorAction SilentlyContinue)) {
+                $inFence = $false
+                $ln = 0
+                foreach ($l in [System.IO.File]::ReadAllLines($doc.FullName, [System.Text.Encoding]::UTF8)) {
+                    $ln++
+                    if ($l -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
+                    if ($inFence) { continue }
+                    if (Test-ProsePlaceholder $l) { $hits.Add(($doc.Name + ':' + $ln)) }
+                }
+            }
+        }
+        if ($hits.Count -gt 0) {
+            $shown = @($hits | Select-Object -First 3)
+            Add-Result 'fill-depth' 'FAIL' ("{0} placeholder line(s) left in rules/wiki, first: {1}" -f $hits.Count, ($shown -join ', '))
+        } else {
+            Add-Result 'fill-depth' 'PASS' 'no template placeholders left in rules/wiki'
         }
     }
 }

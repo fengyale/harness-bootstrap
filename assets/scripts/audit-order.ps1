@@ -71,6 +71,48 @@ if (-not $top) {
 }
 $rootPath = $top
 
+# The summary-order gate is only real while .harness/changes is tracked. A
+# project that ignores the directory can never satisfy it, yet a missing tree
+# looked exactly like "first harness adoption" -- so the gate silently never
+# fired. recordsTracked=false is the one explicit way to opt out.
+function Get-RecordsTracked {
+    foreach ($p in @((Join-Path $rootPath 'scripts\harness-required.json'),
+                     (Join-Path $PSScriptRoot 'harness-required.json'))) {
+        if (-not (Test-Path -LiteralPath $p)) { continue }
+        try {
+            $cfg = (Get-Content -LiteralPath $p -Raw -Encoding UTF8) | ConvertFrom-Json
+            if ($cfg.PSObject.Properties.Name -contains 'recordsTracked') {
+                return [bool]$cfg.recordsTracked
+            }
+            return $true
+        } catch { return $true }
+    }
+    return $true
+}
+function Test-GitIgnored {
+    param([string]$Rel)
+    # exit 0 = ignored, 1 = not ignored, anything else = cannot tell. Under
+    # 'Stop' an exit code of 1 would surface as a terminating error, so the
+    # preference is relaxed around the call.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git -C $rootPath check-ignore -q -- $Rel 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+$recordsTracked = Get-RecordsTracked
+# The opt-out applies to the whole audit, not only to the ignored-directory
+# case: a project that keeps no records has nothing to attribute either way.
+if (-not $recordsTracked) {
+    Write-Host '[SKIP] recordsTracked=false: the summary-order audit is off by declaration' -ForegroundColor Yellow
+    exit 0
+}
+
 if (-not $Base) {
     GitCmd -GitArgs @('rev-parse', '--verify', '--quiet', 'origin/main') | Out-Null
     if ($LASTEXITCODE -eq 0) {
@@ -105,6 +147,16 @@ if (-not $Feature) {
 # a terminating NativeCommandError under $ErrorActionPreference = 'Stop').
 $baseTree = FirstLine -GitArgs @('rev-parse', '--verify', '--quiet', "${Base}:.harness/changes")
 if (-not $baseTree) {
+    # Distinguish "not adopted yet" from "adopted but invisible to git": an
+    # ignored directory looks identical to a first install, which is how this
+    # gate stayed green forever.
+    if (Test-GitIgnored '.harness/changes/__probe__') {
+        Write-Host '[FAIL] .harness/changes is ignored by .gitignore: the summary-order gate can never fire.' -ForegroundColor Red
+        Write-Host '       Remove the ignore pattern; the changes directory must be tracked for this audit to work.' -ForegroundColor Yellow
+        Write-Host '       If the project really does not keep records, declare "recordsTracked": false in' -ForegroundColor Yellow
+        Write-Host '       scripts/harness-required.json -- that skips the audit explicitly instead of silently.' -ForegroundColor Yellow
+        exit 1
+    }
     Write-Host "[SKIP] .harness/changes does not exist at base $Base; first harness adoption" -ForegroundColor Yellow
     exit 0
 }
