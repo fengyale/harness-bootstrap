@@ -61,6 +61,11 @@ $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', 'sql_review: 
 # A3+ needs a conclusion: fill the shortfall section (none markers are legal)
 $tpl = $tpl -replace '(?m)^- 本次暴露的短板：[^\r\n]*', '- 本次暴露的短板：无'
 $tpl = $tpl -replace '(?m)^- 已补的能力：[^\r\n]*', '- 已补的能力：无'
+# The review ledger is strict on a fresh install: fill the reviewer, the six
+# dimensions and replace the placeholder row with the no-issue row.
+$tpl = $tpl -replace '(?m)^- 评审人：[^\r\n]*', '- 评审人：expert-reviewer'
+$tpl = $tpl -replace '(?m)^- 六维结论：[^\r\n]*', '- 六维结论：结构 通过 / 红线 通过 / 性能 通过 / 安全 通过 / 一致性 通过 / 可测性 通过'
+$tpl = $tpl -replace '(?m)^\| `<P0/P1/P2>` \|.*$', '| - | - | 不适用 | - | 本次评审未发现问题 | 六维结论见上 | - |'
 # initial checks the three content sections: a filled field block alone is not
 # an analysis, so the fixture must fill them like a real one would.
 $tpl = $tpl -replace '(?m)^\| F1 \|.*$', '| F1 | demo feature | returns 200 | no retries |'
@@ -159,6 +164,100 @@ $j2 = $m2 | ConvertFrom-Json
 if ($j2.smallRecordErrors -lt 1) { Write-Host "MALFORMED SMALL ROWS NOT REPORTED" -ForegroundColor Red; $script:fail++ }
 if ($j2.tasks -ne 2) { Write-Host "MALFORMED SMALL ROWS CHANGED task count: $($j2.tasks)" -ForegroundColor Red; $script:fail++ }
 if (($j2.verdict -join "`n") -notmatch 'malformed') { Write-Host "MALFORMED SMALL ROWS NOT IN VERDICT" -ForegroundColor Red; $script:fail++ }
+
+Step 'review ledger: severity, fingerprint and close-out rules'
+# The review table is the machine-readable half of stage 6. Each probe rewrites
+# the no-issue row of the filled template, so the rest of the summary stays valid.
+$reviewDir = Join-Path $proj '.harness\changes\review-probe'
+function Set-ReviewProbe {
+    param([string]$Rows)
+    New-Item -ItemType Directory -Force -Path $reviewDir | Out-Null
+    $t = $tpl -replace '(?m)^\| - \| - \| 不适用 \|.*$', $Rows
+    Set-Content -LiteralPath (Join-Path $reviewDir 'summary.md') -Value $t -Encoding UTF8
+}
+function Invoke-ReviewProbe {
+    param([string]$ProbeStage)
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $reviewDir 'summary.md') -Stage $ProbeStage | Out-Null
+    return $LASTEXITCODE
+}
+
+$okP1 = '| P1 | 本次 | 已修 | demo-review | demo issue | demo.java:1 | fixed |'
+Set-ReviewProbe $okP1
+if ((Invoke-ReviewProbe 'review') -ne 0) { Write-Host "REVIEW REJECTED A VALID P1 ROW" -ForegroundColor Red; $script:fail++ }
+if ((Invoke-ReviewProbe 'final') -ne 0) { Write-Host "FINAL REJECTED A CLOSED P1 ROW" -ForegroundColor Red; $script:fail++ }
+
+# P0 without a fingerprint is not actionable.
+Set-ReviewProbe '| P0 | 本次 | 已修 | - | p0 without fingerprint | demo.java:2 | fixed |'
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "P0 WITHOUT A FINGERPRINT ACCEPTED" -ForegroundColor Red; $script:fail++ }
+
+# 未修 is legal at review time, illegal at close-out.
+Set-ReviewProbe '| P0 | 本次 | 未修 | demo-p0 | p0 open | demo.java:3 | pending |'
+if ((Invoke-ReviewProbe 'review') -ne 0) { Write-Host "REVIEW REJECTED A NOT-YET-FIXED ROW" -ForegroundColor Red; $script:fail++ }
+if ((Invoke-ReviewProbe 'final') -eq 0) { Write-Host "FINAL ACCEPTED A P0 THAT IS STILL OPEN" -ForegroundColor Red; $script:fail++ }
+
+# A P0 cannot be deferred.
+Set-ReviewProbe '| P0 | 本次 | 转待办 | demo-p0 | p0 deferred | demo.java:3 | later |'
+if ((Invoke-ReviewProbe 'final') -eq 0) { Write-Host "FINAL ACCEPTED A DEFERRED P0" -ForegroundColor Red; $script:fail++ }
+
+# P1 may be deferred, but only with a disposition.
+Set-ReviewProbe '| P1 | 本次 | 转待办 | demo-p1 | p1 deferred | demo.java:4 |  |'
+if ((Invoke-ReviewProbe 'final') -eq 0) { Write-Host "DEFERRED P1 WITHOUT A DISPOSITION ACCEPTED" -ForegroundColor Red; $script:fail++ }
+
+# Unknown severity and a wrong column count are format errors, strict or not.
+Set-ReviewProbe '| P9 | 本次 | 已修 | demo-p9 | bad severity | demo.java:5 | fixed |'
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "UNKNOWN SEVERITY ACCEPTED" -ForegroundColor Red; $script:fail++ }
+Set-ReviewProbe '| P1 | 本次 | 已修 | demo-cols | six columns | demo.java:6 |'
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "SIX-COLUMN ROW ACCEPTED" -ForegroundColor Red; $script:fail++ }
+
+# A row without a problem statement is not a finding; a blank no-issue row is
+# the same self-report the table exists to prevent.
+Set-ReviewProbe '| P1 | 本次 | 已修 | demo-empty-problem |  | demo.java:7 | fixed |'
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "EMPTY PROBLEM ACCEPTED" -ForegroundColor Red; $script:fail++ }
+Set-ReviewProbe '| - | - | 不适用 | - |  |  | - |'
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "EMPTY NO-ISSUE ROW ACCEPTED" -ForegroundColor Red; $script:fail++ }
+
+# Strict=true (fresh install) rejects a missing table; strict=false only warns.
+$noTable = $tpl
+$noTable = $noTable -replace '(?m)^\| 严重度 \| 范围 \|.*$', ''
+$noTable = $noTable -replace '(?m)^\| --- \| --- \| --- \| --- \| --- \| --- \| --- \|$', ''
+$noTable = $noTable -replace '(?m)^\| - \| - \| 不适用 \|.*$', ''
+New-Item -ItemType Directory -Force -Path $reviewDir | Out-Null
+Set-Content -LiteralPath (Join-Path $reviewDir 'summary.md') -Value $noTable -Encoding UTF8
+if ((Invoke-ReviewProbe 'review') -eq 0) { Write-Host "STRICT MODE ACCEPTED A MISSING REVIEW TABLE" -ForegroundColor Red; $script:fail++ }
+
+$cfgFile = "$proj\scripts\harness-required.json"
+$cfgText = [System.IO.File]::ReadAllText($cfgFile, [System.Text.Encoding]::UTF8)
+$cfgLoose = $cfgText | ConvertFrom-Json
+$cfgLoose.reviewLedgerStrict = $false
+[System.IO.File]::WriteAllText($cfgFile, (($cfgLoose | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+$looseCode = Invoke-ReviewProbe 'review'
+$looseOut = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $reviewDir 'summary.md') -Stage review 2>&1 | Out-String
+$cfgLoose.reviewLedgerStrict = $true
+[System.IO.File]::WriteAllText($cfgFile, (($cfgLoose | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+if ($looseCode -ne 0) { Write-Host "NON-STRICT MODE REJECTED A MISSING REVIEW TABLE" -ForegroundColor Red; $script:fail++ }
+if ($looseOut -notmatch '\[WARN\] review_ledger') { Write-Host "NON-STRICT MODE DID NOT WARN" -ForegroundColor Red; $script:fail++ }
+
+# L1 has no summary; the review stage must skip it.
+$l1Text = $noTable -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L1'
+Set-Content -LiteralPath (Join-Path $reviewDir 'summary.md') -Value $l1Text -Encoding UTF8
+if ((Invoke-ReviewProbe 'review') -ne 0) { Write-Host "L1 WAS NOT SKIPPED BY THE REVIEW STAGE" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath $reviewDir -Recurse -Force
+
+Step 'reviews.md aggregates the same fingerprint across tasks'
+$aggRow = '| P1 | 本次 | 已修 | demo-recurring | repeated finding | demo.java:1 | fixed |'
+foreach ($name in @('review-agg-a', 'review-agg-b')) {
+    $d = Join-Path $proj ('.harness\changes\' + $name)
+    New-Item -ItemType Directory -Force -Path $d | Out-Null
+    $t = $tpl -replace '(?m)^\| - \| - \| 不适用 \|.*$', $aggRow
+    Set-Content -LiteralPath (Join-Path $d 'summary.md') -Value $t -Encoding UTF8
+}
+$aggJson = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$aj = $aggJson | ConvertFrom-Json
+if ($aj.reviewTotals.P1 -lt 2) { Write-Host "REVIEW TOTALS NOT COUNTED: $($aj.reviewTotals.P1)" -ForegroundColor Red; $script:fail++ }
+$rv = Get-Content "$proj\.harness\reviews.md" -Raw -Encoding UTF8
+if ($rv -notmatch 'demo-recurring') { Write-Host "REVIEWS INDEX MISSING THE FINGERPRINT" -ForegroundColor Red; $script:fail++ }
+if ($rv -notmatch '\|\s*P1\s*\|\s*promote\s*\|\s*2\s*\|') { Write-Host "REVIEWS INDEX DID NOT MARK THE FINDING AS PROMOTE x2" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath (Join-Path $proj '.harness\changes\review-agg-a'), (Join-Path $proj '.harness\changes\review-agg-b') -Recurse -Force
 
 Step 'lesson gate: a repeated lesson must become a check'
 Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(

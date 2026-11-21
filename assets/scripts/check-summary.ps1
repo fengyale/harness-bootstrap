@@ -24,8 +24,17 @@
     initial  task start  : flow / loaded_skills / touched_modules, plus real
                            content in acceptance criteria, impact and task
                            breakdown (a table of placeholders is not content)
+    review   stage 6     : the review table under the review section only
+                           (P0/P1/P2 rows, fingerprints, evidence); a row that
+                           is not fixed yet is allowed here; nothing else runs
     final    task close  : the same, plus corrections / impl_corrections as real
                            numbers, lesson_id and sql_review
+
+  REVIEW LEDGER
+    The review conclusion table (7 columns) lives in harness-required.json as
+    reviewLedger, because the enum values are Chinese and this file is ASCII.
+    reviewLedgerStrict=true (fresh install) fails when the table is missing;
+    false (upgraded project) only warns. A malformed table always fails.
 
   EXIT CODE
     0 = all required fields valid / 1 = at least one field invalid
@@ -41,7 +50,7 @@ param(
     [string]$Root = (Get-Location).Path,
     [string]$Feature = '',
     [string]$File = '',
-    [ValidateSet('initial', 'final')]
+    [ValidateSet('initial', 'final', 'review')]
     [string]$Stage = 'final',
     [switch]$OnlySqlReview,
     [switch]$Quiet
@@ -99,6 +108,21 @@ function Get-FieldRaw {
     #                       captured raw starts with the value and ends with `
     #   field: `value`   -> the captured raw starts with `
     # Split on backticks and take the first non-empty piece covers both.
+    $raw = $m.Groups[1].Value.Trim()
+    $parts = @($raw -split '`' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
+    if ($parts.Count -gt 0) { return $parts[0] }
+    return $raw
+}
+
+# Labels whose name itself is Chinese (reviewer / six dimensions) have no ASCII
+# field name, so the Chinese label is followed by a full-width or ASCII colon.
+# Same backtick handling as Get-FieldRaw: only the first non-empty piece counts.
+function Get-LabelRaw {
+    param([string]$Name)
+    $n = [regex]::Escape($Name)
+    $rx = '(?m)^[ \t]*(?:[-*][ \t]+)?' + $n + '[ \t]*[:\uFF1A][ \t]*(.*)$'
+    $m = [regex]::Match($script:text, $rx)
+    if (-not $m.Success) { return $null }
     $raw = $m.Groups[1].Value.Trim()
     $parts = @($raw -split '`' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
     if ($parts.Count -gt 0) { return $parts[0] }
@@ -239,6 +263,34 @@ function Get-SqlCfg {
     return $null
 }
 
+# The review table is the machine-readable form of the review conclusion. Its
+# enum values are Chinese, so they live in harness-required.json and the script
+# only compares strings.
+$script:reviewCfg = $null
+$script:reviewStrict = $true
+if (Test-Path -LiteralPath $cfgPath) {
+    try {
+        $cfgAll = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        if ($cfgAll.PSObject.Properties['reviewLedger']) { $script:reviewCfg = $cfgAll.reviewLedger }
+        if ($cfgAll.PSObject.Properties['reviewLedgerStrict']) { $script:reviewStrict = [bool]$cfgAll.reviewLedgerStrict }
+    } catch { }
+}
+
+function Get-ReviewCfg {
+    param([string]$Name)
+    if (-not $script:reviewCfg) { return $null }
+    $p = $script:reviewCfg.PSObject.Properties[$Name]
+    if ($p) { return $p.Value }
+    return $null
+}
+
+function Get-ReviewList {
+    param([string]$Name)
+    $v = Get-ReviewCfg $Name
+    if ($null -eq $v) { return @() }
+    return @($v | ForEach-Object { [string]$_ })
+}
+
 function Assert-SqlReview {
     $sql = Get-FieldRaw 'sql_review'
     if (Test-Placeholder $sql) {
@@ -343,6 +395,147 @@ function Assert-SqlReview {
     }
 }
 
+# The review conclusion table is the machine-readable half of stage 6. A free
+# text conclusion could say "no problems" while the diff carried a P0; a fixed
+# table cannot, because the severity, fingerprint and evidence columns are
+# checked. L1 has no summary, so it is skipped; every other flow must carry a
+# well-formed table. Missing table follows reviewLedgerStrict (fresh install
+# fails, upgraded project warns); a malformed table always fails.
+function Assert-ReviewLedger {
+    param([string]$Mode)
+
+    $flowVal = Get-FieldRaw 'flow'
+    if ($flowVal -and $flowVal -match '^L1(\s|$|[\(\uFF08])') { return }
+
+    if (-not $script:reviewCfg) {
+        if ($script:reviewStrict) {
+            Add-Fail 'review_ledger' 'config missing (reviewLedger block absent from harness-required.json)'
+        } else {
+            Write-Host '[WARN] review_ledger: config missing; review table not checked' -ForegroundColor Yellow
+        }
+        return
+    }
+
+    $needles = @(Get-ReviewList 'section')
+    $body = $null
+    if ($needles.Count -gt 0) { $body = Get-SectionLines -Needles $needles }
+
+    $rows = @()
+    if ($null -ne $body) {
+        $afterSep = $false
+        foreach ($line in $body) {
+            $t = $line.Trim()
+            if ($t.Length -eq 0) { continue }
+            if ($t -notmatch '^\|') { continue }
+            if ($t -match '^\|?\s*:?-{2,}') { $afterSep = $true; continue }
+            # A row before the separator is the header row.
+            if (-not $afterSep) { continue }
+            $rows += $t
+        }
+    }
+
+    if ($rows.Count -eq 0) {
+        if ($script:reviewStrict) {
+            Add-Fail 'review_ledger' 'review table missing (add the 7-column table under the review section)'
+        } else {
+            Write-Host '[WARN] review_ledger: review table missing; skipped (reviewLedgerStrict=false)' -ForegroundColor Yellow
+        }
+        return
+    }
+
+    $reviewer = Get-LabelRaw ([string](Get-ReviewCfg 'reviewerField'))
+    if (Test-Placeholder $reviewer) {
+        Add-Fail 'review_ledger' 'reviewer field is empty or a placeholder'
+    }
+    $dimensions = Get-LabelRaw ([string](Get-ReviewCfg 'dimensionsField'))
+    if (Test-Placeholder $dimensions) {
+        Add-Fail 'review_ledger' 'six-dimension conclusion is empty or a placeholder'
+    }
+
+    $sevList = @(Get-ReviewList 'severities')
+    $scopeList = @(Get-ReviewList 'scopes')
+    $statusList = @(Get-ReviewList 'statuses')
+    $noSev = [string](Get-ReviewCfg 'noIssueSeverity')
+    $noScope = [string](Get-ReviewCfg 'noIssueScope')
+    $noStatus = [string](Get-ReviewCfg 'noIssueStatus')
+    $fpPattern = [string](Get-ReviewCfg 'fingerprintPattern')
+    $expectedCols = @(Get-ReviewList 'columns').Count
+    if ($expectedCols -le 0) { $expectedCols = 7 }
+
+    $findingCount = 0
+    $noIssueCount = 0
+    foreach ($row in $rows) {
+        # Escaped pipes (\|) belong to the cell text, so split with a lookbehind.
+        $cells = @([regex]::Split($row.Trim().Trim('|'), '(?<!\\)\|'))
+        if ($cells.Count -ne $expectedCols) {
+            Add-Fail 'review_ledger' ("a review row has $($cells.Count) column(s); expected $expectedCols")
+            continue
+        }
+        $vals = @()
+        foreach ($c in $cells) { $vals += (($c -replace '`', '').Trim()) }
+
+        $isPlaceholder = $false
+        foreach ($v in $vals) { if ($v.StartsWith('<')) { $isPlaceholder = $true; break } }
+        if ($isPlaceholder) {
+            Add-Fail 'review_ledger' 'table still has a template placeholder row'
+            continue
+        }
+
+        $sev = $vals[0]
+        $scope = $vals[1]
+        $status = $vals[2]
+        $fp = $vals[3]
+        $problem = $vals[4]
+        $evidence = $vals[5]
+        $disposition = $vals[6]
+
+        if ($sev -eq $noSev) {
+            $noIssueCount++
+            if ($scope -ne $noScope) { Add-Fail 'review_ledger' "no-issue row must use scope '$noScope'" }
+            if ($status -ne $noStatus) { Add-Fail 'review_ledger' "no-issue row must use status '$noStatus'" }
+            if ($fp -ne '-') { Add-Fail 'review_ledger' 'no-issue row must use - as the fingerprint' }
+            if (Test-Placeholder $problem) { Add-Fail 'review_ledger' 'no-issue row needs a problem statement (e.g. none found)' }
+            if (Test-Placeholder $evidence) { Add-Fail 'review_ledger' 'no-issue row needs evidence / a six-dimension reference' }
+            continue
+        }
+
+        $findingCount++
+        if (Test-Placeholder $problem) { Add-Fail 'review_ledger' 'a review row needs a problem statement' }
+        if ($sevList -notcontains $sev) { Add-Fail 'review_ledger' ("severity '$sev' is not one of: " + ($sevList -join ', ')) }
+        if ($scopeList -notcontains $scope) { Add-Fail 'review_ledger' ("scope '$scope' is not one of: " + ($scopeList -join ', ')) }
+        if ($statusList -notcontains $status) { Add-Fail 'review_ledger' ("status '$status' is not one of: " + ($statusList -join ', ')) }
+
+        if ($sev -eq 'P0' -or $sev -eq 'P1') {
+            # Parenthesize the command call: Test-Placeholder $fp -or ... would
+            # bind -or as a parameter name and silently skip the check.
+            if ((Test-Placeholder $fp) -or ($fpPattern -and $fp -notmatch $fpPattern)) {
+                Add-Fail 'review_ledger' "$sev requires a kebab-case fingerprint"
+            }
+            if (Test-Placeholder $evidence) {
+                Add-Fail 'review_ledger' "$sev requires evidence (file:line or a command)"
+            }
+        }
+
+        if ($Mode -eq 'final') {
+            $finalList = @()
+            if ($sev -eq 'P0') { $finalList = @(Get-ReviewList 'p0FinalStatuses') }
+            elseif ($sev -eq 'P1') { $finalList = @(Get-ReviewList 'p1FinalStatuses') }
+            elseif ($sev -eq 'P2') { $finalList = @(Get-ReviewList 'p2FinalStatuses') }
+            if ($finalList.Count -gt 0 -and $finalList -notcontains $status) {
+                Add-Fail 'review_ledger' ("$sev cannot end as '$status'; allowed: " + ($finalList -join ', '))
+            }
+            if (Test-Placeholder $disposition) {
+                Add-Fail 'review_ledger' 'every finding needs a disposition at close-out (fixed / where it moved / why accepted)'
+            }
+        }
+    }
+
+    if ($noIssueCount -gt 1) { Add-Fail 'review_ledger' 'the no-issue row appears more than once' }
+    if ($noIssueCount -gt 0 -and $findingCount -gt 0) {
+        Add-Fail 'review_ledger' 'a no-issue row cannot coexist with findings'
+    }
+}
+
 if ($OnlySqlReview) {
     Assert-SqlReview
     if ($fails.Count -gt 0) {
@@ -351,6 +544,17 @@ if ($OnlySqlReview) {
         exit 1
     }
     if (-not $Quiet) { Write-Host '[OK] sql_review content valid' }
+    exit 0
+}
+
+if ($Stage -eq 'review') {
+    Assert-ReviewLedger -Mode 'review'
+    if ($fails.Count -gt 0) {
+        foreach ($f in $fails) { Write-Host "[FAIL] $f" }
+        Write-Host "check-summary: $($fails.Count) fail(s)"
+        exit 1
+    }
+    if (-not $Quiet) { Write-Host '[OK] review ledger valid' }
     exit 0
 }
 
@@ -449,6 +653,7 @@ if ($Stage -eq 'final') {
     }
 
     Assert-SqlReview
+    Assert-ReviewLedger -Mode 'final'
 }
 
 # --------------------------------------------------------------------- report

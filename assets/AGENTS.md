@@ -141,6 +141,7 @@
 | `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体：每月体检或大改后委派 |
 | `.trae/agents/red-line-auditor.md` | 全库红线语义审计智能体：每周按熵管理周期表委派 |
 | `.harness/lessons.md` | 教训索引（`metrics.ps1` 自动刷新、团队共享）；写 `lesson_id` 前先查表 |
+| `.harness/reviews.md` | 评审发现索引（`metrics.ps1` 自动刷新、团队共享）；写 P0/P1 指纹前先查表，同一问题复用同一指纹 |
 | `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；**晋升必须带断言**：`id :: check=路径::说明`，检查脚本内要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`；缺一由 `metrics.ps1 -LessonGate` 判 FAIL |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
 | `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-MergeSkills` 用新版通用段并保留项目绑定（推荐）；`-UpdateSkills` 只替换未编译技能；`-ForceSkills` 强制覆盖 |
@@ -163,5 +164,6 @@
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，结论为「通过 / 已改写」时必须引用 `.harness/changes/` 下本特性 `sql-review/` 里真实存在的证据文件（EXPLAIN 或结果摘要），只写通过不引用路径会在阶段 10 FAIL；引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查——它们做完才知道。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**
+- **评审发现必须落表**：评审结论写进 `summary.md`「评审结论」表（严重度 / 范围 / 状态 / 指纹 / 问题 / 证据 / 处置）；P0 必须 `已修`，P1 必须有处置（`已修` / `转待办` / `接受`）；P0/P1 必须带 kebab-case 指纹，写前先查 `.harness/reviews.md` 复用同一指纹
 - **源码提交必须能归因到记录**：特性名按 `HARNESS_TASK=特性名` → `check-summary -Feature 特性名` 自动写入的 `.git/harness-current-task` → `.harness/changes/` 下唯一目录 的顺序解析，**与分支名无关**；HEAD 需已有该特性的 `summary.md`，或同提交带 summary / `_small.md` 行；L0 与一次性导入用 `HARNESS_ALLOW_NO_RECORD=1` 显式放行
 - **提交信息用中文**：格式为 `type(scope): 中文说明`，type 取 feat / fix / refactor / test / docs / chore；标题与正文用中文写清「为什么改」，代码、命令、路径、标识符保留原文。提交日志是团队要读的文档，不写英文句子

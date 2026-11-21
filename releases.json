@@ -1,5 +1,26 @@
 [
   {
+    "version": "1.31.16",
+    "title": "(评审 P0/P1 分级与台账：评审发现落表、可聚合、可门禁)",
+    "body": [
+      "- summary.md「评审结论」改为固定 7 列表（严重度 / 范围 / 状态 / 指纹 / 问题 /",
+      "  证据 / 处置），分级统一为 P0/P1/P2，状态 未修/已修/转待办/接受/不适用；",
+      "  ✅ 已确认合规只用于六维结论，不再当作严重度",
+      "- check-summary 新增 -Stage review 与 Assert-ReviewLedger：P0/P1 必须带 kebab-case",
+      "  指纹与证据，无问题行不能与发现混用；-Stage final 要求 P0 已修、P1 有处置；",
+      "  缺表由 reviewLedgerStrict 决定 FAIL 或 WARN（新装 true，升级 false），格式坏恒 FAIL",
+      "- stage-gate 阶段 6 增加 AUTO review-ledger，委派 check-summary -Stage review",
+      "- metrics 解析评审表并按指纹跨任务聚合，输出 review findings 并写 tracked 的",
+      "  .harness/reviews.md（tasks>=2 标 promote）；-LessonGate 无副作用",
+      "- harness-required.json 新增 reviewLedger / reviewLedgerStrict；update-harness 合并该块",
+      "  并把 strict 迁移为 false",
+      "- expert-reviewer / code-reviewer 输出同一张表；流程阶段 6 改「无未关闭 P0」、阶段 10",
+      "  加「P0 已修 / P1 有处置」；AGENTS.md 增加评审落表纪律与 reviews.md 索引",
+      "- 新增 5 条契约，契约数 62 → 67；技能总行数 1929 → 1935；回归补评审档位 / 指纹 /",
+      "  闭合 / 聚合断言"
+    ]
+  },
+  {
     "version": "1.31.15",
     "title": "(假绿灯止血：0 文件不再通过 / SQL 通过必须有证据 / 发布物清脏行)",
     "body": [

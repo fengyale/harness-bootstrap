@@ -426,8 +426,9 @@ Check 'dry-run reports required delta'     ($dry -match 'add required:')
 Check 'dry-run reports requiredAnyOf'      ($dry -match 'add requiredAnyOf:')
 Check 'dry-run reports required removal'   ($dry -match 'remove required:.*scripts/red-line-scan\.ps1')
 Check 'dry-run reports sqlGate delta'      ($dry -match 'add sqlGate: true')
-Check 'dry-run reports new config blocks'  (($dry -match 'add sqlReview') -and ($dry -match 'add summaryContent') -and ($dry -match 'add recordsTracked'))
+Check 'dry-run reports new config blocks'  (($dry -match 'add sqlReview') -and ($dry -match 'add summaryContent') -and ($dry -match 'add recordsTracked') -and ($dry -match 'add reviewLedger'))
 Check 'dry-run reports the strict migration default' ($dry -match 'add groundingStrict: false')
+Check 'dry-run reports the review ledger migration default' ($dry -match 'add reviewLedgerStrict: false')
 Check 'dry-run names keys outside the merge whitelist' (($dry -match 'by hand \(not in the merge whitelist\)') -and ($dry -match 'futureBlock'))
 Check 'a merged key is not reported as manual' ($dry -notmatch 'merge whitelist[^;]*sqlGate')
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
@@ -492,6 +493,10 @@ Check 'required JSON merged: recordsTracked added' ($mergedConfig.PSObject.Prope
 # Strict mode is a migration default: an upgraded project must keep WARN until
 # its older skills are re-anchored, otherwise the first verify goes red.
 Check 'required JSON merged: groundingStrict is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'groundingStrict' -and $mergedConfig.groundingStrict -eq $false)
+# The review ledger block is copied; strict is the same migration default so an
+# upgraded project without a review table only warns on its first run.
+Check 'required JSON merged: reviewLedger added' ($mergedConfig.PSObject.Properties.Name -contains 'reviewLedger')
+Check 'required JSON merged: reviewLedgerStrict is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'reviewLedgerStrict' -and $mergedConfig.reviewLedgerStrict -eq $false)
 Check 'summaryContent keeps the acceptance needles' (@($mergedConfig.summaryContent.acceptance).Count -gt 0)
 Check 'required JSON merged: project note kept' ($mergedConfig._note -eq 'old install')
 Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.required) -contains 'scripts/red-line-scan.ps1'))

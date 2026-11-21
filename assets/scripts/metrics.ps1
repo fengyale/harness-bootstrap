@@ -68,6 +68,101 @@ $promotedPath = Join-Path $rootPath '.harness\lessons-promoted.txt'
 $skillsRoot = Join-Path $rootPath '.harness\skills'
 $smallBad = 0
 
+# The review table's enum values are Chinese, so they live in
+# harness-required.json and this script only compares strings.
+$script:reviewCfg = $null
+$cfgPath = Join-Path $PSScriptRoot 'harness-required.json'
+if (Test-Path -LiteralPath $cfgPath) {
+    try {
+        $cfgAll = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        if ($cfgAll.PSObject.Properties['reviewLedger']) { $script:reviewCfg = $cfgAll.reviewLedger }
+    } catch { }
+}
+
+function Get-ReviewCfgList {
+    param([string]$Name)
+    if (-not $script:reviewCfg) { return @() }
+    $p = $script:reviewCfg.PSObject.Properties[$Name]
+    if (-not $p) { return @() }
+    return @($p.Value | ForEach-Object { [string]$_ })
+}
+
+# Body of a "## heading" section, up to the next heading of the same or a
+# higher level. Returns $null when no heading matches.
+function Get-SectionBodyLines {
+    param([string]$Text, [string[]]$Needles)
+    $lines = $Text -split "\r?\n"
+    $start = -1
+    $level = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $m = [regex]::Match($lines[$i], '^(#{2,3})\s+')
+        if (-not $m.Success) { continue }
+        foreach ($n in $Needles) {
+            if ($lines[$i] -match ('^#{2,3}\s+' + [regex]::Escape($n))) {
+                $start = $i
+                $level = $m.Groups[1].Length
+                break
+            }
+        }
+        if ($start -ge 0) { break }
+    }
+    if ($start -lt 0) { return $null }
+    $body = @()
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+        $h = [regex]::Match($lines[$i], '^(#+)\s')
+        if ($h.Success -and $h.Groups[1].Length -le $level) { break }
+        $body += $lines[$i]
+    }
+    return $body
+}
+
+# Review rows that are real findings: header, separator, template slots and the
+# no-issue row are skipped. check-summary decides validity; metrics only counts.
+function Get-ReviewRows {
+    param([string]$Text)
+    $rows = @()
+    if (-not $script:reviewCfg) { return $rows }
+    # L1 has no summary; a stray one must not contribute review rows.
+    if ($Text -match '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])flow:\s*`?\s*L1([ \t`]|$|[\(\uFF08])') { return $rows }
+    $needles = @(Get-ReviewCfgList 'section')
+    if ($needles.Count -eq 0) { return $rows }
+    $body = Get-SectionBodyLines -Text $Text -Needles $needles
+    if ($null -eq $body) { return $rows }
+    $noSev = '-'
+    $p = $script:reviewCfg.PSObject.Properties['noIssueSeverity']
+    if ($p) { $noSev = [string]$p.Value }
+    $sevList = @(Get-ReviewCfgList 'severities')
+    $afterSep = $false
+    foreach ($line in $body) {
+        $t = $line.Trim()
+        if ($t.Length -eq 0) { continue }
+        if ($t -notmatch '^\|') { continue }
+        if ($t -match '^\|?\s*:?-{2,}') { $afterSep = $true; continue }
+        if (-not $afterSep) { continue }
+        $cells = @([regex]::Split($t.Trim().Trim('|'), '(?<!\\)\|'))
+        if ($cells.Count -ne 7) { continue }
+        $vals = @()
+        foreach ($c in $cells) { $vals += (($c -replace '`', '').Trim()) }
+        $skip = $false
+        foreach ($v in $vals) { if ($v.StartsWith('<')) { $skip = $true; break } }
+        if ($skip) { continue }
+        if ($vals[0] -eq $noSev) { continue }
+        # A malformed summary is the gate's problem; the report must not turn an
+        # unknown severity into a bogus fingerprint row.
+        if ($sevList.Count -gt 0 -and $sevList -notcontains $vals[0]) { continue }
+        $rows += [pscustomobject]@{
+            Severity = $vals[0]
+            Scope = $vals[1]
+            Status = $vals[2]
+            Fingerprint = $vals[3]
+            Problem = $vals[4]
+            Evidence = $vals[5]
+            Disposition = $vals[6]
+        }
+    }
+    return $rows
+}
+
 # ------------------------------------------------------------- read once, filter later
 # Skill names appear in two shapes: "04-sql-review" in a summary and
 # "biz-dev/04-sql-review" in a path or index. Compare on the last path segment
@@ -187,6 +282,7 @@ function Get-SummaryTasks {
             Skills = $skills
             Lessons = $lessons
             LessonNotes = $lessonNotes
+            ReviewRows = @(Get-ReviewRows $text)
             HasCorrections = ($null -ne $corr)
             HasImpl = ($null -ne $impl)
             HasSkills = $hasSkillsField
@@ -300,6 +396,7 @@ function Get-SmallTasks {
             Lessons = $lessons
             LessonNotes = $lessonNotes
             Flow = 'L1'
+            ReviewRows = @()
             HasCorrections = ($null -ne $corr)
             HasImpl = ($null -ne $impl)
             HasSkills = $true
@@ -616,6 +713,92 @@ try {
     Write-Host ("[WARN] could not write lessons index {0}: {1}" -f $lessonsPath, $_.Exception.Message) -ForegroundColor Yellow
 }
 
+# Review findings are cumulative across sessions, like lessons: the fingerprint
+# is how a repeated finding is recognised. -LessonGate returns before this, so
+# the gate path stays side-effect free.
+$reviewStatuses = @(Get-ReviewCfgList 'openStatuses')
+$reviewTotals = [ordered]@{ P0 = 0; P1 = 0; P2 = 0 }
+$reviewMap = @{}
+foreach ($t in $allTasks) {
+    $seen = @{}
+    foreach ($r in @($t.ReviewRows)) {
+        if ($reviewTotals.Contains($r.Severity)) { $reviewTotals[$r.Severity] = $reviewTotals[$r.Severity] + 1 }
+        $fp = $r.Fingerprint
+        if (-not $fp -or $fp -eq '-') { continue }
+        if ($seen.ContainsKey($fp)) { continue }
+        $seen[$fp] = $true
+        if (-not $reviewMap.ContainsKey($fp)) {
+            $reviewMap[$fp] = [pscustomobject]@{
+                Fingerprint = $fp
+                Severity = $r.Severity
+                Tasks = 0
+                First = $null
+                Last = $null
+                Open = $false
+                Example = $r.Problem
+                ExampleDate = $null
+            }
+        }
+        $e = $reviewMap[$fp]
+        $e.Tasks = $e.Tasks + 1
+        if ($reviewStatuses -contains $r.Status) { $e.Open = $true }
+        if ($r.Severity -eq 'P0') { $e.Severity = 'P0' }
+        elseif ($r.Severity -eq 'P1' -and $e.Severity -ne 'P0') { $e.Severity = 'P1' }
+        elseif ($r.Severity -eq 'P2' -and -not $e.Severity) { $e.Severity = 'P2' }
+        if ($null -ne $t.Date) {
+            if ($null -eq $e.First -or $t.Date -lt $e.First) { $e.First = $t.Date }
+            if ($null -eq $e.Last -or $t.Date -gt $e.Last) { $e.Last = $t.Date }
+        }
+        if ($r.Problem -and ($null -eq $e.ExampleDate -or ($null -ne $t.Date -and $t.Date -ge $e.ExampleDate))) {
+            $e.Example = $r.Problem
+            $e.ExampleDate = $t.Date
+        }
+    }
+}
+
+$reviewRows = @()
+foreach ($fp in $reviewMap.Keys) {
+    $e = $reviewMap[$fp]
+    $status = if ($e.Tasks -ge 2) { 'promote' } elseif ($e.Open) { 'open' } else { 'watch' }
+    $first = if ($null -ne $e.First) { $e.First.ToString('yyyy-MM-dd') } else { '-' }
+    $last = if ($null -ne $e.Last) { $e.Last.ToString('yyyy-MM-dd') } else { '-' }
+    $example = if ($e.Example) { $e.Example -replace '\|', '/' } else { '-' }
+    $reviewRows += [pscustomobject]@{
+        Fingerprint = $fp
+        Severity = $e.Severity
+        Status = $status
+        Tasks = $e.Tasks
+        First = $first
+        Last = $last
+        Example = $example
+    }
+}
+$reviewRows = @($reviewRows | Sort-Object @{Expression = { $_.Tasks }; Descending = $true }, @{Expression = { $_.Fingerprint }; Descending = $false })
+
+# The index is tracked (.harness/reviews.md) so a team shares one fingerprint
+# vocabulary; writing it is best-effort and must never block the report.
+$reviewsPath = Join-Path $rootPath '.harness\reviews.md'
+$reviewLines = @(
+    '# Review findings index (generated by metrics.ps1)',
+    '',
+    '> Reuse the fingerprint when the same finding appears again; status=promote means it appeared in >= 2 tasks.',
+    '',
+    '| fingerprint | severity | status | tasks | first | last | example |',
+    '| --- | --- | --- | --- | --- | --- | --- |'
+)
+if ($reviewRows.Count -eq 0) {
+    $reviewLines += '| - | - | - | 0 | - | - | no review findings recorded yet |'
+}
+foreach ($row in $reviewRows) {
+    $reviewLines += ('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f $row.Fingerprint, $row.Severity, $row.Status, $row.Tasks, $row.First, $row.Last, $row.Example)
+}
+try {
+    [System.IO.File]::WriteAllText($reviewsPath, (($reviewLines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+} catch {
+    Write-Host ("[WARN] could not write review index {0}: {1}" -f $reviewsPath, $_.Exception.Message) -ForegroundColor Yellow
+}
+$reviewRecurring = @($reviewRows | Where-Object { $_.Tasks -ge 2 })
+
 # installed skills (for the "never loaded" signal that drives retirement)
 # Keep the age with each skill: the retirement verdict needs both the
 # observation window and the age of the skill itself.
@@ -839,6 +1022,11 @@ if ($Json) {
         lessons = $lessonCounts
         promoted = $promoted
         lessonIndex = $lessonsPath
+        reviewTotals = $reviewTotals
+        reviewRecurring = @($reviewRecurring | ForEach-Object {
+            [pscustomobject]@{ fingerprint = $_.Fingerprint; severity = $_.Severity; status = $_.Status; tasks = $_.Tasks }
+        })
+        reviewIndex = $reviewsPath
         smallRecordErrors = $smallBad
         days = $Days
         cutoff = $(if ($Days -gt 0) { $cutoff.ToString('yyyy-MM-dd') } else { $null })
@@ -900,6 +1088,13 @@ if (-not $Quiet) {
         foreach ($k in ($lessonCounts.Keys | Sort-Object)) {
             $mark = if ($promoted -contains $k) { '  (promoted)' } elseif ($lessonCounts[$k] -ge 2) { '  <- promote' } else { '' }
             Write-Host ("  {0,-32} {1}{2}" -f $k, $lessonCounts[$k], $mark)
+        }
+    }
+    Write-Host ("review findings: P0={0} P1={1} P2={2}" -f $reviewTotals['P0'], $reviewTotals['P1'], $reviewTotals['P2'])
+    if ($reviewRecurring.Count -gt 0) {
+        Write-Host "recurring review findings (>=2 tasks):"
+        foreach ($r in $reviewRecurring) {
+            Write-Host ("  {0,-36} {1}  ({2})" -f $r.Fingerprint, $r.Tasks, $r.Status)
         }
     }
     Write-Host ("-" * 70)

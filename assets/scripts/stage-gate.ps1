@@ -85,8 +85,9 @@ $stageDefs = @(
     )
     New-Stage '6' 'code review' @(
         @{ Id='review-recorded'; Kind='AUTO';  Text='summary.md has a review conclusion' },
+        @{ Id='review-ledger';   Kind='AUTO';  Text='summary.md review table is well-formed (P0/P1 have fingerprints and evidence)' },
         @{ Id='shortfall-listed'; Kind='AUTO'; Text='summary.md states which missing capability was added (A3+)' },
-        @{ Id='review-report';   Kind='HUMAN'; Text='no open RED issue' },
+        @{ Id='review-report';   Kind='HUMAN'; Text='no open P0 issue' },
         @{ Id='six-dimensions';  Kind='HUMAN'; Text='all review dimensions were concluded' }
     )
     New-Stage '7' 'merge (quality gate)' @(
@@ -313,6 +314,11 @@ function Test-Criterion {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
             if (Test-SectionHeading -Text $summary -Needles $S.review) { return @{ Ok=$true; Detail=$M.present } }
             return @{ Ok=$false; Detail='no review conclusion section' }
+        }
+        'review-ledger' {
+            # Delegated to check-summary -Stage review: the review stage allows a
+            # row that is not fixed yet, final decides whether every P0/P1 closes.
+            return Test-SummaryFields -FeatureName $FeatureName -ProjectRoot $ProjectRoot -GateStage 'review'
         }
         'shortfall-listed' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }

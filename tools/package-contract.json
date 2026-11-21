@@ -92,8 +92,8 @@
     {
       "id": "summary-stage-param",
       "file": "assets/scripts/check-summary.ps1",
-      "pattern": "ValidateSet\\('initial', 'final'\\)",
-      "why": "initial / final 两档是 pre-commit 与阶段 10 分工的唯一实现点。"
+      "pattern": "ValidateSet\\('initial', 'final', 'review'\\)",
+      "why": "initial / review / final 三档是 pre-commit、阶段 6、阶段 10 分工的唯一实现点。"
     },
     {
       "id": "agents-field-split",
@@ -414,6 +414,36 @@
       "file": "references/平台适配.md",
       "patterns": [".agents/skills", ".codebuddy/skills", "不代建非当前平台"],
       "why": "多平台入口是生成物、不入库；协议必须写明只建当前平台、其余给命令，否则安装会替用户铺一堆用不上的平台目录。"
+    },
+    {
+      "id": "reviewer-skill-ledger",
+      "file": "assets/.harness/skills/main-dev/expert-reviewer/SKILL.md",
+      "patterns": ["\\| 严重度 \\| 范围 \\| 状态 \\| 指纹 \\| 问题 \\| 证据 \\| 处置 \\|", "P0", "P1", "P2"],
+      "why": "评审输出必须是 summary.md 的固定 7 列表；只写自由文本时 P0/P1 无法机器区分。"
+    },
+    {
+      "id": "code-reviewer-ledger",
+      "file": "assets/.trae/agents/code-reviewer.md",
+      "patterns": ["\\| 严重度 \\| 范围 \\| 状态 \\| 指纹 \\| 问题 \\| 证据 \\| 处置 \\|", "P0", "P1", "P2"],
+      "why": "评审子智能体与技能必须输出同一张表，否则委派评审的意见仍不会落到 KPI 台账。"
+    },
+    {
+      "id": "summary-review-table",
+      "file": "assets/.harness/changes/_template/summary.md",
+      "patterns": ["\\| 严重度 \\| 范围 \\| 状态 \\| 指纹 \\| 问题 \\| 证据 \\| 处置 \\|", "\\| - \\| - \\| 不适用 \\| - \\| 本次评审未发现问题 \\| 六维结论见上 \\| - \\|"],
+      "why": "模板必须给出表头与无问题行；否则每个项目都会自创格式，check-summary 无法校验。"
+    },
+    {
+      "id": "review-ledger-config",
+      "file": "assets/scripts/harness-required.json",
+      "patterns": ["\"reviewLedgerStrict\"", "\"reviewLedger\""],
+      "why": "评审词表含中文枚举，必须外置在 JSON，脚本才能保持纯 ASCII 并共用同一套状态。"
+    },
+    {
+      "id": "review-ledger-index",
+      "file": "assets/scripts/metrics.ps1",
+      "pattern": "\\.harness\\\\reviews\\.md",
+      "why": "评审发现必须跨任务沉淀到 tracked 的 .harness/reviews.md，否则指纹只活在单个 summary 里。"
     }
   ]
 }

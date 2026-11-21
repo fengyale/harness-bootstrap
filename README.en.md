@@ -47,14 +47,14 @@ Output:
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    25 template skill(s) carry balanced package/project blocks
-[PASS] contract   62 rule/script/doc contract(s) hold
+[PASS] contract   67 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-The 62 contracts check one thing, whether the same rule reads identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is how this category usually breaks.
+The 67 contracts check one thing, whether the same rule reads identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is how this category usually breaks.
 
 Run the behavioural tests:
 
@@ -228,7 +228,7 @@ The case is a 12-module Java system with 182 legacy violations and 2 test files.
 
 ## Difference from template packs
 
-A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 62 cross-file contracts and behavioural tests.
+A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 67 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

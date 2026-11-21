@@ -36,6 +36,11 @@ $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])lesson_id:[^\r\n]*', 'lesson_id: -'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', 'sql_review: no SQL change'
 $tpl = $tpl -replace '(?m)^- 本次暴露的短板：[^\r\n]*', '- 本次暴露的短板：无'
 $tpl = $tpl -replace '(?m)^- 已补的能力：[^\r\n]*', '- 已补的能力：无'
+# The review table is strict on a fresh install: fill the reviewer, the six
+# dimensions and one closed P1 row so stage 6 and -Stage final can pass.
+$tpl = $tpl -replace '(?m)^- 评审人：[^\r\n]*', '- 评审人：expert-reviewer'
+$tpl = $tpl -replace '(?m)^- 六维结论：[^\r\n]*', '- 六维结论：结构 通过 / 红线 通过 / 性能 通过 / 安全 通过 / 一致性 通过 / 可测性 通过'
+$tpl = $tpl -replace '(?m)^\| `<P0/P1/P2>` \|.*$', '| P1 | 本次 | 已修 | demo-review | demo issue | demo.java:1 | fixed |'
 $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2 (standard)'
 # initial now checks content, not just field names: fill the three sections the
 # same way a real analysis would, otherwise every fixture below is a placeholder.
