@@ -340,14 +340,24 @@ function Test-Criterion {
             return @{ Ok=$false; Detail=("repeated lesson without a check: " + $first) }
         }
         'corrections-attributed' {
-            # The template already says "corrections >= 1 requires a real id"; without
-            # this check a summary could report corrections and attribute none, and
-            # the lesson counter (the input to the lesson gate) would stay empty.
+            # Accepted shapes: a bare "corrections: 3" and the template's
+            # labelled "- <label>:`corrections: 3`". The old anchored regex only
+            # matched the bare shape, so every summary copied from the template
+            # silently skipped this gate. The pattern below is the same one
+            # check-summary.ps1 uses (Get-FieldRaw), so the two cannot diverge.
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
-            $cm = [regex]::Match($summary, '(?m)^\s*[-*]?\s*corrections:\s*(\d+)')
+            $rx = '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])corrections:\s*([^\r\n]*)'
+            $cm = [regex]::Match($summary, $rx)
             if (-not $cm.Success) { return @{ Ok=$true; Detail='no corrections field' } }
-            if ([int]$cm.Groups[1].Value -le 0) { return @{ Ok=$true; Detail='no corrections to attribute' } }
-            if ($summary -match '(?m)^\s*[-*]?\s*lesson_id:\s*[A-Za-z0-9]') {
+            $raw = $cm.Groups[1].Value.Trim()
+            $parts = @($raw -split '`' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
+            $val = if ($parts.Count -gt 0) { $parts[0] } else { $raw }
+            if ($val -notmatch '^(\d+)') { return @{ Ok=$true; Detail='corrections value is not numeric yet' } }
+            if ([int]$matches[1] -le 0) { return @{ Ok=$true; Detail='no corrections to attribute' } }
+            $lr = '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])lesson_id:\s*`?\s*([^`\r\n]+)'
+            $lm = [regex]::Match($summary, $lr)
+            $lid = if ($lm.Success) { $lm.Groups[1].Value.Trim() } else { '' }
+            if ($lid -match '^[A-Za-z0-9]') {
                 return @{ Ok=$true; Detail='corrections attributed to a lesson id' }
             }
             return @{ Ok=$false; Detail='corrections > 0 but no lesson_id; attribute it so the lesson can be promoted' }
@@ -513,6 +523,9 @@ foreach ($d in $targets) {
         Write-Host "           2b) also fill flow (L1/L2/L3), loaded_skills and touched_modules (write none when empty)" -ForegroundColor Yellow
         Write-Host ("           3) run scripts\check-summary.ps1 -Feature {0} -Stage initial" -f $featLabel) -ForegroundColor Yellow
         Write-Host "           4) commit that record on its own, then start coding" -ForegroundColor Yellow
+        # Step 5 removes the "which command now?" guesswork that made the first
+        # OPEN take four invocations.
+        Write-Host ("           5) re-run this command: scripts\stage-gate.ps1 -Stage 1 -Feature {0}" -f $featLabel) -ForegroundColor Yellow
     }
 
     Write-Host ("-" * 70)

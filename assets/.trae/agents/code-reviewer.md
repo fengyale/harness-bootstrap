@@ -25,10 +25,12 @@ tools: read, grep, glob, shell
 
 调用你时必须提供，缺一项就要求补齐，**不要凭印象评审**：
 
-1. **变更范围**：变更文件列表，或 `git diff` / `git diff --cached` 的输出
+1. **变更范围**：变更文件列表，或 `git diff -- <文件>` / `git diff --cached -- <文件>` 的输出
 2. `.harness/changes/<特性名>/summary.md`（对照"应该做什么"与验收标准）
 3. L1 改动：`.harness/changes/_small.md` 里的声明行
 4. 若无 summary 且不是 L0 / L1：直接判定"记录缺失"，退回阶段 1，不做评审
+
+**范围纪律**：只评审给定范围内的改动。工作区里其它已存在的修改（`.gitignore`、临时 SQL 等）单独列为「非本次改动」，**不计入结论、不算 🔴**；如果调用方给的是整仓 diff，先要求按文件收敛范围。
 
 ## 执行步骤
 

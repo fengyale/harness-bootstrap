@@ -574,6 +574,44 @@ if ($ruleAloneCode -eq 0) {
     Write-Host 'ok: the rule change alone is allowed'
 } else { Write-Host 'BAD: a standalone rule change was blocked' -ForegroundColor Red; $fail++ }
 
+# A summary copied from the template writes "- <label>:`corrections: 2`".
+# The old anchored regex only matched a bare "corrections: 2", so the
+# corrections-attributed row passed while check-summary failed the same rule
+# under summary-fields-final. Assert the row itself, not just the exit code.
+Step 'stage 10: template-shaped corrections are attributed'
+$sumPath = "$proj\.harness\changes\demo\summary.md"
+$sumOrig = [System.IO.File]::ReadAllText($sumPath, [System.Text.Encoding]::UTF8)
+$sumMut = $sumOrig -replace '(?m)(?<![A-Za-z0-9_\-])corrections:\s*0(?=`|\r?$)', 'corrections: 2'
+$sumMut = ($sumMut -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_\-])lesson_id:' }) -join "`r`n"
+[System.IO.File]::WriteAllText($sumPath, $sumMut, (New-Object System.Text.UTF8Encoding($false)))
+$savedEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$s10 = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 10 -Feature demo 2>&1 | Out-String
+$ErrorActionPreference = $savedEap
+if ($s10 -match 'corrections-attributed') {
+    if ($s10 -match '(?m)^\s*\[FAIL\].*corrections-attributed|corrections-attributed.*FAIL') {
+        Write-Host 'ok: template-shaped corrections without a lesson_id fail the row'
+    } else {
+        Write-Host 'BAD: corrections-attributed passed on the template shape' -ForegroundColor Red
+        $fail++
+    }
+} else {
+    Write-Host 'BAD: stage 10 did not report the corrections-attributed row' -ForegroundColor Red
+    $fail++
+}
+$sumFixed = $sumMut + "`r`n- lesson_id: demo-lesson`r`n"
+[System.IO.File]::WriteAllText($sumPath, $sumFixed, (New-Object System.Text.UTF8Encoding($false)))
+$ErrorActionPreference = 'Continue'
+$s10b = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 10 -Feature demo 2>&1 | Out-String
+$ErrorActionPreference = $savedEap
+if ($s10b -match '(?m)^\s*\[PASS\].*corrections-attributed|corrections-attributed.*PASS') {
+    Write-Host 'ok: a real lesson_id clears the row'
+} else {
+    Write-Host 'BAD: corrections-attributed did not pass with a lesson_id' -ForegroundColor Red
+    $fail++
+}
+[System.IO.File]::WriteAllText($sumPath, $sumOrig, (New-Object System.Text.UTF8Encoding($false)))
+
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }
 Write-Host "GATE-AUTO FAILURES: $fail" -ForegroundColor Red

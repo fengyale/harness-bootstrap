@@ -32,10 +32,10 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 
 <!-- harness:package:begin body-2 -->
 ## 模式（跨技术栈不变）
+、lk;l;/
+### 第 0 步：先证明记录已存在（动任何**写操作**之前）
 
-### 第 0 步：先证明记录已存在（动任何代码之前）
-
-**已经读过业务代码、Grep 过实现，第 0 步就已经晚了**——档位和影响面无法事后追认。先跑命令，再读代码。
+允许先做**只读探索**（读代码、Grep、看接口）来确认档位与影响面；但一旦开始写代码 / 生成文件，必须先贴出 `DECLARE`。**读完代码再补声明，等于事后追认**——所以探索完、动笔前，跑一次：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 1 -Feature 特性名
@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 | 命令结果 | 下一步 |
 | --- | --- |
 | `READY` 且输出 `DECLARE: record=...` | 记录已在盘，进入步骤 1 |
-| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：写 summary 三节 → `check-summary.ps1 -Feature 特性名 -Stage initial` → 单独提交一次 → 再回来 |
+| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：复制**整个** `_template/summary.md`（保留第二阶段字段位）并写三节 → `check-summary.ps1 -Feature 特性名 -Stage initial` → 单独提交一次 → 再回来 |
 | 档位 `L1` | 先在 `.harness/changes/_small.md` 追加一行，和代码一起提交 |
 | 档位 `L0` | 声明「L0：纯文档 / 注释 / 格式，无记录」，再改 |
 
@@ -60,7 +60,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 2. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
 3. 写最小可用改动；跨模块改动写进 `summary.md` 影响面
 4. 编译；编译不过先修编译，不"先放着"
-5. 自测：跑必跑命令，并手工走一遍失败路径
+5. 自测：跑必跑命令，并手工走一遍失败路径；**前端改动至少对每个改动文件跑 `node --check`**（项目有 lint / 类型检查就按项目命令跑）
 6. 红线自查
 
 ### 三类改动怎么下手
