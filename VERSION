@@ -1,7 +1,18 @@
-HARNESS-BOOTSTRAP VERSION 1.31.11
+HARNESS-BOOTSTRAP VERSION 1.31.12
 
 changelog
 ---------
+1.31.12  (删掉会随升级永久留在技能里的"骨架"说明)
+- 18 个技能模板在 `harness:package` 块里写着「本文件是骨架：`slot:` 注释必须
+  在安装时用项目事实替换…」。这句是给**编译时**看的，但 package 块安装时原样
+  复制、升级时整体替换，编译完成后它仍在，且指向的 slot 注释早已不存在——
+  技能读起来像没编译完
+- 删除 18 处说明；`coding-skill` / `expert-reviewer` 保留其后的「目标」行，
+  `request-analysis` 把目标并回同一行；技能总行数 1961 → 1930
+- `verify-package` 的 `markers` 新增断言：package 块内出现该说明即 FAIL，
+  防止复制模板时再次带回来
+- 已装项目升级到本版后，`-MergeSkills` 会用新 package 块覆盖，说明随之消失
+
 1.31.11  (升级会迁移旧 description 的"跳过需求分析"授权)
 - 1.31.8 从 `coding-skill` 技能模板删掉了「需求已明确…」这句，但 `-MergeSkills` 按设计
   保留磁盘 frontmatter，存量项目升级后这句仍然留在 description 里——模型据此

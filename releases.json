@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.31.12",
+    "title": "(删掉会随升级永久留在技能里的「骨架」说明)",
+    "body": [
+      "- 18 个技能模板的 package 块里写着「本文件是骨架…」，安装时原样复制、升级时整体",
+      "  替换，编译完成后仍在，且指向的 slot 注释早已不存在：技能读起来像没编译完",
+      "- 删除 18 处说明（coding-skill / expert-reviewer 保留「目标」行，request-analysis",
+      "  并回同一行），技能总行数 1961 → 1930",
+      "- verify-package 的 markers 新增断言：package 块内出现该说明即 FAIL，防止回带",
+      "- 已装项目升级后用新 package 块覆盖，说明随之消失"
+    ]
+  },
+  {
     "version": "1.31.11",
     "title": "(升级会迁移旧 description 的「跳过需求分析」授权)",
     "body": [

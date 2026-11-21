@@ -202,6 +202,7 @@ if (Test-Path -LiteralPath $tplSkills) {
         $slotInPkg = 0
         $anchorInPkg = 0
         $angleInPkg = 0
+        $skeletonInPkg = 0
         $prjN = 0
         $bad = 0
         foreach ($line in $lines) {
@@ -247,6 +248,11 @@ if (Test-Path -LiteralPath $tplSkills) {
                 # upgrade copies the block into every project verbatim, so the
                 # blank survives forever and reads like an unfilled template.
                 if ($line -notmatch '<!--' -and $line -match '<[^<>\r\n]+>' -and $line -notmatch '<br\s*/?>') { $angleInPkg++ }
+                # An install-time note ("this file is a skeleton") is copied into
+                # every project and never removed, so after compilation the skill
+                # reads as unfinished and points at slot comments that are gone.
+                $skeletonWord = -join @([char]0x672C, [char]0x6587, [char]0x4EF6, [char]0x662F, [char]0x9AA8, [char]0x67B6)
+                if ($line.Contains($skeletonWord)) { $skeletonInPkg++ }
             }
         }
         if ($stack.Count -gt 0) {
@@ -263,6 +269,10 @@ if (Test-Path -LiteralPath $tplSkills) {
         }
         if ($angleInPkg -gt 0) {
             Add-Result 'markers' 'FAIL' "${rel}: $angleInPkg angle-bracket blank(s) inside a package block; upgrade copies the block into every project, so the blank never gets filled (use a neutral word instead)"
+            $bad++
+        }
+        if ($skeletonInPkg -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $skeletonInPkg install-time skeleton note(s) inside a package block; the note is copied into every compiled skill and reads as stale after the slots are filled"
             $bad++
         }
         # A template with only package blocks has nowhere for the installer to put
