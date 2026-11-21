@@ -664,21 +664,25 @@ function Merge-SkillBlocks {
             if ($srcEnd + 1 -le $outLines.Count - 1) { $merged += $outLines[($srcEnd + 1)..($outLines.Count - 1)] }
             $outLines = $merged
 
-            # "xu qiu yi ming que, ..." built from code points: this file must
-            # stay pure ASCII (PS 5.1 parses a BOM-less .ps1 as ANSI).
+            # Two sentences are built from code points: this file must stay pure
+            # ASCII (PS 5.1 parses a BOM-less .ps1 as ANSI). Only the stale
+            # sentence is replaced, so a project prefix such as "layering by
+            # module" is kept instead of being overwritten by template wording.
             $staleDesc = -join @(
                 [char]0x9700, [char]0x6C42, [char]0x5DF2, [char]0x660E, [char]0x786E, [char]0x3001,
                 [char]0x9700, [char]0x8981, [char]0x5199, [char]0x6216, [char]0x6539, [char]0x4EE3,
                 [char]0x7801, [char]0x65F6, [char]0x4F7F, [char]0x7528, [char]0x3002
             )
-            $srcDescLine = $null
-            for ($i = 1; $i -lt $srcEnd; $i++) {
-                if ($srcLines[$i] -match '^description:') { $srcDescLine = $srcLines[$i]; break }
-            }
-            if ($srcDescLine) {
+            $newClause = -join @(
+                [char]0x52A8, [char]0x4EE3, [char]0x7801, [char]0x524D, [char]0x4F7F, [char]0x7528,
+                [char]0xFF0C, [char]0x5148, [char]0x6309, [char]0x7B2C, ' 0 ',
+                [char]0x6B65, [char]0x786E, [char]0x8BA4, [char]0x53D8, [char]0x66F4,
+                [char]0x8BB0, [char]0x5F55, [char]0x5DF2, [char]0x843D, [char]0x76D8, [char]0x3002
+            )
+            if ($staleDesc) {
                 for ($i = 0; $i -lt $outLines.Count; $i++) {
                     if ($outLines[$i] -match '^description:' -and $outLines[$i].Contains($staleDesc)) {
-                        $outLines[$i] = $srcDescLine
+                        $outLines[$i] = $outLines[$i].Replace($staleDesc, $newClause)
                         $descMigrated = 1
                         break
                     }

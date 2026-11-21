@@ -1,7 +1,22 @@
-HARNESS-BOOTSTRAP VERSION 1.31.12
+HARNESS-BOOTSTRAP VERSION 1.31.13
 
 changelog
 ---------
+1.31.13  (三个子智能体可用化：可发现 / 有触发点 / 不越界)
+- 三个 agent 模板缺 `name` / `description` frontmatter，平台只能靠人点名，等于
+  "装了但不可发现"。补齐 frontmatter（含触发词与 tools），并删掉只在安装时有
+  意义的"生成说明"
+- 内容补强：何时用 / 何时不用、输入契约、只读边界、证据纪律、降级路径、
+  输出模板；`code-reviewer` 明确六维与 🔴 阻断口径，`consistency-verifier` 补
+  死链与术语漂移，`red-line-auditor` 补"本次新增 / 历史遗留"分流与口径冲突
+- 触发点落地（此前只有文件索引）：流程第 6 步写明"有 `code-reviewer` 优先委派"；
+  熵管理周期表每周接 `red-line-auditor`、每月接 `consistency-verifier`；
+  `AGENTS.md` 的必上技能与索引同步写明
+- `verify-harness`：已装 agent 定义里残留 `<...>` 项目占位时给 WARN（升级不会覆盖
+  已有 agent 文件，只能靠提示发现旧副本）
+- 1.31.11 的 description 迁移改为**只替换旧句**，保留项目自己写的前缀
+  （此前会整行换成模板文案）
+
 1.31.12  (删掉会随升级永久留在技能里的"骨架"说明)
 - 18 个技能模板在 `harness:package` 块里写着「本文件是骨架：`slot:` 注释必须
   在安装时用项目事实替换…」。这句是给**编译时**看的，但 package 块安装时原样

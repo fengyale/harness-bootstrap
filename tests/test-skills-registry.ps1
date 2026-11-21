@@ -299,6 +299,32 @@ $out = RunVerify
 Check 'missing index file is reported' ($out -match 'missing \.harness/skills/README\.md')
 Check 'one message instead of one per skill' (-not ($out -match 'not listed in \.harness/skills/README\.md'))
 
+# A copied agent template with an unfilled project path points at a directory
+# that does not exist. The package now ships neutral wording, but an upgrade
+# never overwrites an existing agent file, so the stale copy must surface.
+Step 'agent definitions: template placeholders are a WARN'
+$agentDir = "$proj\.trae\agents"
+New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+$agentFile = "$agentDir\code-reviewer.md"
+[System.IO.File]::WriteAllLines($agentFile, @(
+    '---',
+    'name: code-reviewer',
+    'description: demo reviewer',
+    '---',
+    '',
+    '# demo',
+    '',
+    '| doc | authority |',
+    '| --- | --- |',
+    '| interfaces | <interface dir> |'
+), (New-Object System.Text.UTF8Encoding($false)))
+$out = RunVerify
+Check 'placeholder agent is a WARN' (($out -match 'WARN\]\s+agents.*placeholders') -and ($out -match 'code-reviewer\.md'))
+$fixed = @([System.IO.File]::ReadAllLines($agentFile, [System.Text.Encoding]::UTF8) | ForEach-Object { $_ -replace '<interface dir>', 'src/main/java' })
+[System.IO.File]::WriteAllLines($agentFile, $fixed, (New-Object System.Text.UTF8Encoding($false)))
+$out = RunVerify
+Check 'filling the placeholder clears the warn' (-not ($out -match 'placeholders'))
+
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'SKILLS REGISTRY TEST OK' -ForegroundColor Green; exit 0 }
 Write-Host "SKILLS REGISTRY TEST FAILED: $fail check(s)" -ForegroundColor Red

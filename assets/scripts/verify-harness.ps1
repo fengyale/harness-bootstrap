@@ -837,6 +837,33 @@ if ($agentsSections.Count -gt 0 -and (Test-Path -LiteralPath $agentsPath)) {
     }
 }
 
+# Installed platform subagents. Earlier templates carried <...> project paths
+# that nobody filled, so the agent kept pointing at a directory that does not
+# exist. The package now uses neutral wording; an upgrade never overwrites an
+# existing agent file, so a WARN is the only way to surface the stale copy.
+$agentPlaceholderFiles = @()
+foreach ($agentDir in @('.trae\agents', '.claude\agents', '.codebuddy\agents')) {
+    $ad = Join-Path $rootPath $agentDir
+    if (-not (Test-Path -LiteralPath $ad)) { continue }
+    foreach ($af in @(Get-ChildItem -LiteralPath $ad -Filter '*.md' -File -Force)) {
+        $lines = [System.IO.File]::ReadAllLines($af.FullName, [System.Text.Encoding]::UTF8)
+        $inFence = $false
+        $hit = $false
+        foreach ($line in $lines) {
+            if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
+            if ($inFence) { continue }
+            # Output templates use <feature> etc. inside inline code; those are
+            # runtime substitutions, not project facts.
+            $stripped = $line -replace '`[^`]*`', ''
+            if ($stripped -match '<[^<>\r\n]+>') { $hit = $true; break }
+        }
+        if ($hit) { $agentPlaceholderFiles += ($agentDir + '\' + $af.Name) }
+    }
+}
+if ($agentPlaceholderFiles.Count -gt 0) {
+    Add-Result 'agents' 'WARN' ('installed agent definition(s) still carry <...> placeholders: ' + ($agentPlaceholderFiles -join ', ') + '; merge the current template (it uses neutral wording) or fill them')
+}
+
 # ----------------------------------------------------------------- 11 metrics
 $changesRoot = Join-Path $rootPath '.harness\changes'
 if (Test-Path -LiteralPath $changesRoot) {

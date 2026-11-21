@@ -178,6 +178,28 @@ if ($contract) {
             $miss++
         }
     }
+    # Agent definitions are discovered through their frontmatter. A template
+    # without name/description is invisible to the platform -- that is how the
+    # three subagents ended up "installed but only callable by hand".
+    $agentTplDir = Join-Path $packageRoot 'assets\.trae\agents'
+    if (Test-Path -LiteralPath $agentTplDir) {
+        foreach ($af in @(Get-ChildItem -LiteralPath $agentTplDir -Filter '*.md' -File -Force)) {
+            $head = [System.IO.File]::ReadAllLines($af.FullName, [System.Text.Encoding]::UTF8)
+            $hasName = $false
+            $hasDesc = $false
+            if ($head.Count -gt 0 -and $head[0].Trim() -eq '---') {
+                for ($i = 1; $i -lt $head.Count; $i++) {
+                    if ($head[$i].Trim() -eq '---') { break }
+                    if ($head[$i] -match '^name:\s*\S') { $hasName = $true }
+                    if ($head[$i] -match '^description:\s*\S') { $hasDesc = $true }
+                }
+            }
+            if (-not $hasName -or -not $hasDesc) {
+                Add-Result 'structure' 'FAIL' ("agent template needs name/description frontmatter: assets/.trae/agents/" + $af.Name)
+                $miss++
+            }
+        }
+    }
     if ($miss -eq 0) { Add-Result 'structure' 'PASS' 'required files present, package-only files absent' }
 }
 

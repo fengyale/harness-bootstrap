@@ -232,7 +232,8 @@ if (-not (Test-Path -LiteralPath $marker)) {
 - **不要复制全部平台目录**：是哪个平台就建哪个入口，其余一律不建
 - `scripts\` / `.harness\` **可能已存在**：输出里的每一条 `[SKIP] conflict` 都要**逐条列给用户**，按 3.2 冲突策略**读后合并，不覆盖**；忽略 SKIP 等于默默丢掉已有规则
 - **agents 目录同理**：`.trae\agents` 已存在就 SKIP 并读后合并；Claude 项目拷到 `.claude\agents`，CodeBuddy 拷到 `.codebuddy\agents`（Markdown 兼容）；
-  Codex 用 `.codex\agents\*.toml`，需按 TOML 重写；未知平台不装，按清单模式手工评审（不要假装子智能体存在）
+  Codex 用 `.codex\agents\*.toml`，需按 TOML 重写；未知平台不装，按清单模式手工评审（不要假装子智能体存在）。
+  三个 agent 模板已带 `name` / `description` frontmatter（平台可直接发现）且不含项目占位符，**复制即用，不需要编译**；升级不会覆盖已有的 agent 文件，要跟进新版模板就逐份合并或删掉后重拷
 - **技能模板不进项目**：`.harness\skills\<分类>\<技能>\` 在第 2 步由启用集编译生成；
   第 0 步只复制 `skills\README.md` 索引。需要骨架时从 `$PKG\assets\.harness\skills\<分类>\<技能>\SKILL.md` 读取后改写
 - 后面所有命令都假设 `scripts\` 在项目根；跳过这一步，下一步会直接失败

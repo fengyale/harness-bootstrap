@@ -137,9 +137,9 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `.trae/agents/code-reviewer.md` | 代码评审智能体（独立上下文，多维度分级评审） |
-| `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体 |
-| `.trae/agents/red-line-auditor.md` | 全库红线扫描智能体 |
+| `.trae/agents/code-reviewer.md` | 代码评审智能体（独立上下文）：合并前优先委派，结论并入 `summary.md` 评审结论 |
+| `.trae/agents/consistency-verifier.md` | 代码 ↔ 文档漂移检测智能体：每月体检或大改后委派 |
+| `.trae/agents/red-line-auditor.md` | 全库红线语义审计智能体：每周按熵管理周期表委派 |
 | `.harness/lessons.md` | 教训索引（`metrics.ps1` 自动刷新、团队共享）；写 `lesson_id` 前先查表 |
 | `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；**晋升必须带断言**：`id :: check=路径::说明`，检查脚本内要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`；缺一由 `metrics.ps1 -LessonGate` 判 FAIL |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
@@ -159,7 +159,7 @@
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。
 - **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行，**提交时 pre-commit 按实际 diff 核对，超过 1 文件或 30 行会被拒绝**；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/` 下的特性目录（目录名即特性名），运行 `check-summary.ps1 -Feature 特性名 -Stage initial` 通过后**单独提交一次**（只含 `.harness/` 下文件），再改代码——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交，因为 git 只能看提交顺序、看不到编辑顺序。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
-- **必上技能**：收到需求先加载 `request-analysis`；**动代码前先跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名` 并把 `DECLARE` 行贴进回复**（出现 `[HINT]` 说明记录缺失，先补记录），再加载 `coding-skill`；合并前加载 `expert-reviewer`
+- **必上技能**：收到需求先加载 `request-analysis`；**动代码前先跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名` 并把 `DECLARE` 行贴进回复**（出现 `[HINT]` 说明记录缺失，先补记录），再加载 `coding-skill`；合并前加载 `expert-reviewer`，平台装了 `code-reviewer` 子智能体时**优先委派它**做独立评审
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` 由 `stage-gate` 阶段 10 查——它们做完才知道。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**

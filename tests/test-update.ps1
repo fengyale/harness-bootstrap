@@ -597,10 +597,18 @@ Check 'merge: project block kept' ($mergeAfter -match 'ProjectCache')
 Check 'merge: project-only block kept' ($mergeAfter -match 'keep-me')
 Check 'merge: project description kept' ($mergeAfter -match 'description: project-tuned description')
 
-# The stale clause is the only frontmatter text -MergeSkills may rewrite.
+# The stale clause is the only frontmatter text -MergeSkills may rewrite; the
+# project prefix must survive.
+$newClause = -join @(
+    [char]0x52A8, [char]0x4EE3, [char]0x7801, [char]0x524D, [char]0x4F7F, [char]0x7528,
+    [char]0xFF0C, [char]0x5148, [char]0x6309, [char]0x7B2C, ' 0 ',
+    [char]0x6B65, [char]0x786E, [char]0x8BA4, [char]0x53D8, [char]0x66F4,
+    [char]0x8BB0, [char]0x5F55, [char]0x5DF2, [char]0x843D, [char]0x76D8, [char]0x3002
+)
 $staleAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-stale\SKILL.md", [System.Text.Encoding]::UTF8)
 Check 'stale: package text refreshed' ($staleAfter -match 'new-stale-package')
-Check 'stale: description migrated to the template one' ($staleAfter -match 'description: template description')
+Check 'stale: description migrated to the new clause' ($staleAfter.Contains($newClause))
+Check 'stale: project prefix kept' ($staleAfter -match 'description: project-tuned start ')
 Check 'stale: old clause gone' ($staleAfter -notmatch [regex]::Escape($staleDesc))
 Check 'stale: project binding kept' ($staleAfter -match 'StaleCache')
 

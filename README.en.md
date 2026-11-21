@@ -184,6 +184,7 @@ Three things keep it from turning into luck.
 - **The index is explicit**: the file index and mandatory-skill list in `AGENTS.md` pin down which document a task type must read
 - **Triggering is platform-native**: skill bodies are not resident; only a matching `description` loads them, which is why descriptions must use the user's own words and must not overlap
 - **Loading is recorded**: `loaded_skills` / `load_skip_reason` are required `summary.md` fields, and `metrics.ps1` computes the load rate — so "it did not trigger when it should" becomes measurable
+- **Review can use an independent context**: when the platform has subagents, stage 6 delegates to `code-reviewer` first (it never saw the implementation, only the result); periodic work delegates to `red-line-auditor` (weekly semantic red-line audit) and `consistency-verifier` (monthly doc ↔ code check). Platforms without an agents directory fall back to checklist mode instead of pretending an agent exists
 
 On platforms without auto-discovery, this degrades to `.harness/skills/README.md` as the index plus a mandatory-reading list in the resident file: reliability comes from writing it down, not from platform matching.
 

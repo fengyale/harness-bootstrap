@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.31.13",
+    "title": "(三个子智能体可用化：可发现 / 有触发点 / 不越界)",
+    "body": [
+      "- 三个 agent 模板补 name / description / tools frontmatter（此前平台无法发现，只能人点名），",
+      "  并删掉只在安装时有意义的「生成说明」",
+      "- 内容补强：何时用 / 何时不用、输入契约、只读边界、证据纪律、降级路径、输出模板",
+      "- 触发点落地：流程第 6 步「有 code-reviewer 优先委派」；熵管理周期表每周接",
+      "  red-line-auditor、每月接 consistency-verifier；AGENTS.md 的必上技能与索引同步",
+      "- verify-harness：已装 agent 定义残留 <...> 项目占位时 WARN",
+      "- 1.31.11 的 description 迁移改为只替换旧句，保留项目自定义前缀"
+    ]
+  },
+  {
     "version": "1.31.12",
     "title": "(删掉会随升级永久留在技能里的「骨架」说明)",
     "body": [
