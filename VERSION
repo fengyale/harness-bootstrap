@@ -1,7 +1,18 @@
-HARNESS-BOOTSTRAP VERSION 1.31.14
+HARNESS-BOOTSTRAP VERSION 1.31.15
 
 changelog
 ---------
+1.31.15  (假绿灯止血：0 文件不再通过 / SQL 通过必须有证据 / 发布物清脏行)
+- `red-line-scan.ps1`：`-Files` 按逗号拆分（`powershell -File` 下逗号不会自动成数组）；
+  显式列表 0 个可扫描文件 exit 1；部分缺失输出 `[WARN]` 后继续扫描存在的文件
+- `check-summary.ps1`：`sql_review` 结论为「通过 / 已改写」时必须引用至少一个真实存在的
+  `.harness/...` 证据路径；`no SQL change` 等 none 标记仍放行，非通过结论不要求证据
+- `stage-gate.ps1`：`shortfall-listed` 失败时列出配置的 none 标记（无 / N/A / none）
+- `coding-skill` 模板删除误入的乱码行 `、lk;l;/`；技能总行数 1930 → 1929
+- `tests/regression.ps1` 增加回归断言：逗号拆分 / 0 文件 FAIL / 部分缺失 WARN /
+  SQL 通过无证据 FAIL / shortfall 提示含标记
+- 不含 P0/P1 评审分级与评审台账（另开 1.31.16）
+
 1.31.14  (按真实任务复盘修门禁口径与三处摩擦点)
 - `stage-gate` 的 `corrections-attributed` 用锚定裸字段正则，模板写法
   「- 纠正次数：`corrections: 2`」永远匹配不到：该行恒 PASS，真正拦住它的是

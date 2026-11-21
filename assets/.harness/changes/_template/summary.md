@@ -28,7 +28,7 @@
 ## 第二阶段：收尾（阶段 5–10 再填）
 
 - 教训编号：`lesson_id: <kebab-case 如 xml-dollar-brace> -- <一句话摘要>`（`corrections ≥ 1` 时必填具体 id；没有教训写 `-`）
-- SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 语法 / 结构 / 绑定 / 结果 / 计划 / 结论；无 SQL 写"无 SQL 变更")`
+- SQL 评审：`sql_review: TODO(涉及 SQL 时必填：表名 / 语法 / 结构 / 绑定 / 结果 / 计划 / 结论；结论为「通过 / 已改写」时必须引用 .harness/changes/ 下本特性 sql-review/ 目录里真实存在的证据文件（EXPLAIN 或结果摘要）；无 SQL 写"无 SQL 变更")`
 - 纠正次数：`corrections: <N>`（收尾时按实际填；不是先写 0 再改，写之前在对话里数一遍）
 - 实现层纠正：`impl_corrections: <N>`（属于实现细节的纠正数；没有就填 0，不能大于 `corrections`）
 

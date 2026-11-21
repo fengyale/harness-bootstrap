@@ -34,6 +34,13 @@ foreach ($h in @('pre-commit','post-commit','pre-merge-commit')) {
     if (Test-Path "$proj\.git\hooks\$h") { Write-Host "hook ok: $h" } else { Write-Host "HOOK MISSING: $h" -ForegroundColor Red; $script:fail++ }
 }
 
+# --- the shipped template must not carry a stray garbage line. Read it as
+# UTF-8 (the file has Chinese text) and assert the junk string is gone, so a
+# bad edit cannot ride into a release again.
+Step 'coding-skill template carries no stray garbage line'
+$codingSkill = [System.IO.File]::ReadAllText("$pkg\assets\.harness\skills\main-dev\coding-skill\SKILL.md", [System.Text.Encoding]::UTF8)
+if ($codingSkill.Contains('lk;l')) { Write-Host "CODING-SKILL TEMPLATE CONTAINS A STRAY 'lk;l' LINE" -ForegroundColor Red; $script:fail++ }
+
 # --- a passing scan event is what stage 4/7 read (no full scan is run)
 New-Item -ItemType Directory -Force -Path "$proj\.harness\metrics" | Out-Null
 $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -194,6 +201,11 @@ Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEn
 Step 'sql_review: a pass verdict cannot hide unverified layers'
 $sumPath = "$proj\.harness\changes\demo\summary.md"
 $sumOrig = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+# A pass verdict now has to cite an artefact that exists on disk, so the fixture
+# writes one where the template says it belongs.
+$sqlEvDir = "$proj\.harness\changes\demo\sql-review"
+New-Item -ItemType Directory -Force -Path $sqlEvDir | Out-Null
+Set-Content -LiteralPath "$sqlEvDir\explain.txt" -Value 'INDEX RANGE SCAN' -Encoding ASCII
 function Set-SqlReview {
     param([string]$Value)
     $t = $sumOrig -replace '(?m)(?<![A-Za-z0-9_\-])sql_review:[^\r\n]*', $Value
@@ -202,9 +214,13 @@ function Set-SqlReview {
 Set-SqlReview 'sql_review: demo.t · 语法 未验证(no sandbox) · 结构 未验证 · 绑定 未验证 · 结果 未验证 · 计划 未跑 · 结论 通过'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "CONTRADICTORY SQL REVIEW ACCEPTED" -ForegroundColor Red; $script:fail++ }
-Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(fixture) · 计划 type=ref · 结论 通过'
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/explain.txt) · 计划 type=ref · 结论 通过'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "CONSISTENT SQL REVIEW REJECTED" -ForegroundColor Red; $script:fail++ }
+# "pass" written by hand with no locatable artefact is self-report, not evidence.
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验 · 计划 type=ref · 结论 通过'
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "SQL PASS WITHOUT AN EVIDENCE PATH ACCEPTED" -ForegroundColor Red; $script:fail++ }
 # A cited evidence path is a claim: it must exist on disk.
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/missing.txt) · 计划 未跑 · 结论 待 DBA'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
@@ -226,7 +242,19 @@ Set-Content -LiteralPath "$skillDir\SKILL.md" -Value $skillText2 -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "DECLARED DATA SOURCE REJECTED" -ForegroundColor Red; $script:fail++ }
 Remove-Item -LiteralPath $skillDir -Recurse -Force
+Remove-Item -LiteralPath $sqlEvDir -Recurse -Force
 Set-Content -LiteralPath $sumPath -Value $sumOrig -Encoding UTF8
+
+Step 'shortfall failure lists the accepted none markers'
+$sfSrc = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+# Plain prose: no .harness/ or scripts/ path and none of the configured markers.
+$sfProse = "## 待补短板" + "`r`n" + "需要补一个规则" + "`r`n" + "还在排期"
+$sfText = $sfSrc -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', $sfProse
+Set-Content -LiteralPath $sumPath -Value $sfText -Encoding UTF8
+$sfOut = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 6 -Feature demo 2>&1 | Out-String
+if ($LASTEXITCODE -eq 0) { Write-Host "SHORTFALL PROSE ACCEPTED" -ForegroundColor Red; $script:fail++ }
+if (($sfOut -notmatch 'none') -or ($sfOut -notmatch 'N/A') -or ($sfOut -notmatch '无')) { Write-Host "SHORTFALL DETAIL DOES NOT LIST THE CONFIGURED MARKERS" -ForegroundColor Red; $script:fail++ }
+Set-Content -LiteralPath $sumPath -Value $sfSrc -Encoding UTF8
 
 Step 'A3+ spoof must fail'
 $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
@@ -235,6 +263,26 @@ $s2 = $s2 + "`r`n待补短板一节省略，结论已写在别处。`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $s2 -Encoding UTF8
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 6 -Feature demo | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "spoof correctly rejected" } else { Write-Host "SPOOF ACCEPTED" -ForegroundColor Red; $script:fail++ }
+
+Step 'red-line-scan -Files splits a comma list'
+Set-Content -LiteralPath "$proj\a.java" -Value 'class A { void f() { throw new RuntimeException("x"); } }' -Encoding ASCII
+Set-Content -LiteralPath "$proj\b.java" -Value 'class B { void f() { throw new RuntimeException("x"); } }' -Encoding ASCII
+$rlBoth = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'a.java,b.java' 2>&1 | Out-String
+if ($LASTEXITCODE -ne 1) { Write-Host "COMMA LIST DID NOT FAIL: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
+if (($rlBoth -notmatch 'a\.java') -or ($rlBoth -notmatch 'b\.java')) { Write-Host "COMMA LIST DID NOT SCAN BOTH FILES" -ForegroundColor Red; $script:fail++ }
+
+Step 'red-line-scan fails closed on an explicit list with 0 files'
+$rlNone = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'missing1.java,missing2.java' 2>&1 | Out-String
+if ($LASTEXITCODE -ne 1) { Write-Host "0-FILE EXPLICIT LIST PASSED: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
+if ($rlNone -notmatch '\[FAIL\]') { Write-Host "0-FILE EXPLICIT LIST DID NOT PRINT [FAIL]" -ForegroundColor Red; $script:fail++ }
+if ($rlNone -match '\[OK\]') { Write-Host "0-FILE EXPLICIT LIST STILL PRINTED [OK]" -ForegroundColor Red; $script:fail++ }
+
+Step 'red-line-scan warns about missing paths but still scans the rest'
+$rlPart = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'a.java,missing.java' 2>&1 | Out-String
+if ($LASTEXITCODE -ne 1) { Write-Host "PARTIAL LIST DID NOT FAIL: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
+if ($rlPart -notmatch '\[WARN\]') { Write-Host "PARTIAL LIST DID NOT PRINT [WARN]" -ForegroundColor Red; $script:fail++ }
+if ($rlPart -notmatch 'missing\.java') { Write-Host "PARTIAL LIST DID NOT NAME THE SKIPPED PATH" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath "$proj\a.java", "$proj\b.java" -Force
 
 Step 'uninstall removes all three hooks'
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\uninstall-harness.ps1" -Root $proj | Out-Null

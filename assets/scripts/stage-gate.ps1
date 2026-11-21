@@ -323,7 +323,10 @@ function Test-Criterion {
             if ($null -eq $body) { return @{ Ok=$false; Detail='no shortfall section (which missing capability was added)' } }
             if (Test-HasAny -Text $body -Needles $RULES.noneMarkers) { return @{ Ok=$true; Detail=$M.present } }
             if ($body -match '(\.harness|scripts)[\\/]') { return @{ Ok=$true; Detail=$M.present } }
-            return @{ Ok=$false; Detail='shortfall section does not name the added capability (write its path, or a none marker)' }
+            # List the configured markers instead of "a none marker": the failure
+            # is only actionable if it says what would have been accepted.
+            $markerList = @($RULES.noneMarkers | Where-Object { $_ } | ForEach-Object { [string]$_ }) -join ' / '
+            return @{ Ok=$false; Detail=("shortfall section does not name the added capability (write its .harness/ or scripts/ path, or one of: " + $markerList + ")") }
         }
         'distill-recorded' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }

@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.31.15",
+    "title": "(假绿灯止血：0 文件不再通过 / SQL 通过必须有证据 / 发布物清脏行)",
+    "body": [
+      "- red-line-scan：-Files 按逗号拆分（powershell -File 下逗号不会自动成数组）；",
+      "  显式列表 0 个可扫描文件 exit 1；部分缺失输出 [WARN] 后继续扫描存在的文件",
+      "- check-summary：sql_review 结论为「通过 / 已改写」时必须引用至少一个真实存在的",
+      "  .harness/... 证据路径；no SQL change 等 none 标记仍放行，非通过结论不要求证据",
+      "- stage-gate：shortfall-listed 失败时列出配置的 none 标记（无 / N/A / none）",
+      "- coding-skill 模板删除误入的乱码行；技能总行数 1930 → 1929",
+      "- tests/regression 增加回归断言；不含 P0/P1 评审分级与台账（另开 1.31.16）"
+    ]
+  },
+  {
     "version": "1.31.14",
     "title": "(按真实任务复盘修门禁口径与三处摩擦点)",
     "body": [

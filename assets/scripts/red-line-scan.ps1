@@ -27,12 +27,19 @@
 
   WHOLE-FILE FILTER MODE (every line of the listed files is scanned)
     powershell ... -File scripts\red-line-scan.ps1 -Files a.java,b.kt
+    powershell ... -File scripts\red-line-scan.ps1 -Files "src\a.java, src\b.java"
     git diff --cached --name-only --diff-filter=ACM | powershell ... -FilesFromStdin
+    Under -File the comma list arrives as one string and is split here, so the
+    comma form and a PowerShell array behave the same.
     Use this for a deliberate full review of a few files, not for routine
     incremental checks: historical violations in those files will be reported.
+    An explicit list fails closed: missing paths are reported as [WARN] and the
+    paths that do exist are still scanned, but a list that resolves to 0
+    scannable files exits 1 -- "0 files scanned" is not a pass.
 
   EXIT CODE
-    0 = clean, 1 = violations found (usable as a gate)
+    0 = clean (or a diff with no added line), 1 = violations found or an
+    explicit file list that resolved to 0 scannable files
 
   NOTE
     Dirs named .harness / .trae are excluded by default: the specification docs
@@ -175,23 +182,54 @@ if ($FilesFromStdin) {
     $Files = @($stdin -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
 }
 
-if ($Files -and $Files.Count -gt 0) {
-    # Explicit list = whole-file filter. Missing paths are skipped on purpose --
-    # a commit can legitimately contain deletions and renames. For added-lines
-    # only, use -DiffFile / -DiffFromStdin above.
+# "-File script.ps1 -Files a.java,b.java" binds the list as ONE string (the
+# shell does not split commas), so normalize every element here: commas,
+# whitespace, surrounding single/double quotes. Both the comma form and a
+# PowerShell array then behave the same. Diff mode already produced exact
+# paths from the diff, so it is left untouched.
+if (-not $useIndex) {
+    $Files = @($Files | ForEach-Object {
+        foreach ($piece in ($_ -split ',')) {
+            $v = $piece.Trim().Trim([char]0x27, [char]0x22)
+            if ($v -ne '') { $v }
+        }
+    })
+}
 
-    $allFiles = @()
-    foreach ($f in $Files) {
+# Explicit enumeration = the caller named the files (-Files, even as an empty
+# string, or -FilesFromStdin). Diff mode is excluded on purpose: its file set
+# comes from the staged diff, and a docs-only commit legitimately scans 0
+# source files. An explicit list that resolves to nothing, however, must not
+# degrade into a full scan or a green "0 files scanned".
+$explicitList = $PSBoundParameters.ContainsKey('Files') -or $FilesFromStdin
+
+$allFiles = @()
+$missingPaths = New-Object System.Collections.Generic.List[string]
+
+if ($explicitList -or $Files.Count -gt 0) {
+    # Whole-file filter. Missing paths are skipped so a commit can still carry
+    # deletions and renames, but they are reported (explicit mode) instead of
+    # silently shrinking the scan surface.
+    foreach ($f in @($Files)) {
         $p = $f
         if (-not [System.IO.Path]::IsPathRooted($p)) { $p = Join-Path $rootPath $p }
-        if (-not (Test-Path -LiteralPath $p)) { continue }
+        if (-not (Test-Path -LiteralPath $p)) { if ($explicitList) { $missingPaths.Add($f) }; continue }
         $item = Get-Item -LiteralPath $p -ErrorAction SilentlyContinue
-        if (-not $item -or $item.PSIsContainer) { continue }
+        if (-not $item -or $item.PSIsContainer) { if ($explicitList) { $missingPaths.Add($f) }; continue }
         if (Test-Selected $item) { $allFiles += $item }
     }
 } else {
     $allFiles = @(Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force -ErrorAction SilentlyContinue |
         Where-Object { Test-Selected $_ })
+}
+
+if ($explicitList -and $missingPaths.Count -gt 0 -and -not $Quiet) {
+    Write-Host ("[WARN] red-line scan skipped " + $missingPaths.Count + " missing path(s): " + ($missingPaths -join ', ')) -ForegroundColor Yellow
+}
+
+if ($explicitList -and $allFiles.Count -eq 0) {
+    Write-Host "[FAIL] red-line scan: 0 files scanned from the explicit file list; a list that scans nothing is not a pass" -ForegroundColor Red
+    exit 1
 }
 
 # ---- scan -----------------------------------------------------------------

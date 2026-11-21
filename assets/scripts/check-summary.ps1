@@ -256,6 +256,12 @@ function Assert-SqlReview {
     $passVerdicts = @(Get-SqlCfg 'passVerdicts')
     if (-not $keys) { return }
 
+    # A pass verdict is a claim about work that was done: it must point at an
+    # artefact a reviewer can open. Record the .harness/... references once, so
+    # the verdict check and the existence check below cannot disagree.
+    $evidenceMatches = @([regex]::Matches($sql, '\.harness[\\/][^\s\u00B7,;:()\[\]]+'))
+    $hasEvidence = ($evidenceMatches.Count -gt 0)
+
     # The conclusion template separates the parts with a middle dot.
     $segs = @($sql -split '[\u00B7|]' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
     $vals = @{}
@@ -268,9 +274,11 @@ function Assert-SqlReview {
     }
 
     $verdict = [string]$vals['verdict']
+    $verdictIsPass = $false
     if ($verdict) {
         $isPass = $false
         foreach ($p in $passVerdicts) { if ($p -and $verdict.Contains([string]$p)) { $isPass = $true; break } }
+        $verdictIsPass = $isPass
         if ($isPass) {
             foreach ($name in @('syntax', 'structure', 'binding', 'result', 'plan')) {
                 $v = [string]$vals[$name]
@@ -284,9 +292,17 @@ function Assert-SqlReview {
         }
     }
 
+    # "pass" written by hand is self-report, not evidence. The EXPLAIN output or
+    # the query-result summary belongs under the feature's sql-review/ folder,
+    # and the review must cite it; a non-pass verdict (e.g. pending DBA) is not
+    # required to cite anything.
+    if ($verdictIsPass -and -not $hasEvidence) {
+        Add-Fail 'sql_review' 'verdict claims a pass but cites no .harness evidence path; write the EXPLAIN / query result summary under .harness/changes/<feature>/sql-review/ and reference it'
+    }
+
     # A referenced path is a claim: the evidence must actually be on disk.
     $rootFull = $rootPath.TrimEnd('\')
-    foreach ($m in [regex]::Matches($sql, '\.harness[\\/][^\s\u00B7,;:()\[\]]+')) {
+    foreach ($m in $evidenceMatches) {
         $rel = $m.Value -replace '/', '\'
         if (-not (Test-Path -LiteralPath (Join-Path $rootFull $rel))) {
             Add-Fail 'sql_review' ("references a missing evidence path: " + $m.Value)
