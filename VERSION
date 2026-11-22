@@ -1,7 +1,17 @@
-HARNESS-BOOTSTRAP VERSION 1.31.18
+HARNESS-BOOTSTRAP VERSION 1.31.19
 
 changelog
 ---------
+1.31.19  (终态、模板裁剪、四指标与规划脚本)
+- P1 终态：summary 新增 delivery_status（已交付未提交 / 已提交未部署 / 已部署 / 不适用）；已部署必须有带日期的部署记录；升级项目 deliveryStatusStrict=false，补完第一条后手动开
+- P1 模板裁剪：删除需求概述 / 与已有特性关系；业务影响合并为影响面；L2 可删缓存 / 消息 / 部署记录；旧 summary 的「业务影响」仍被接受
+- P1 跨仓：linked_records（repo:path 或 URL；无跨仓写 -；整行缺失视为单仓）；证据目录约定 .harness/changes/<feature>/evidence/
+- P2 四指标：一次通过率 / 门禁往返 / lead time / 复用率；无数据标 n/a 或 unknown，不造数；metrics -SelfTest 接入 test-probe
+- P2 自动定档：suggest-flow.ps1，按 diff 给 L0-L3 + 预填 flow/touched_modules；非 git / 空 stdin 不再误报 L0；mapper XML / SQL 不再误判 L1
+- P2 harness plan：harness-plan.ps1，按需求给模块卡 / 技能 / 门禁 / 表 / 接口；占位符不输出，SQL / 上线词不再误加门禁
+- 对抗审查修复：linked_records 可选与断言一致；影响面占位符按冒号后的值判；部署记录必须带日期；metrics 单提交窗口扩展；lead time 不出现负值；AGENTS / 流程规范登记两个新脚本
+- .ps1 计数 29→31；技能总行数不变 1935
+
 1.31.18  (修复 test-update 的 CI 编码断言)
 - 修复 test-update 在 CI 上的中文规则文件名断言：runner 控制台把 .harness\rules\SQL评审规范.md 显示成 SQL????.md，改为匹配 ASCII 路径 .harness\rules\*.md 与 SQL*.md
 - 1.31.17 的并行 run-all / 唯一 TestRoot / 同进程调用 / tools/release.ps1 不变
