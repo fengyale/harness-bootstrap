@@ -1,123 +1,155 @@
 [
   {
+    "version": "1.31.17",
+    "title": "(测试提速与 release.ps1)",
+    "body": [
+      "- run-all 并行：六套唯一 -TestRoot，墙钟从 sum 变 max；本机 6 并发 807s（旧 1901.7s，约 13.5 分钟）",
+      "- 开发期用 -Changed / -Suite；全量只在打包前跑一次，不再“先单跑再全量”",
+      "- 目标脚本加 -NoExit + Complete-Harness；测试用 test-lib.ps1 同进程调用，保留 -File parity",
+      "- 串行实测：gate-auto 834.6→616.1s、test-skills-registry 453.1→159.8s、",
+      "  regression 258.0→55.8s、test-update 271.8→31.1s",
+      "- 新增 tools/release.ps1：版本/计数同步、verify、run-all 一次、zip、无 BOM 提交消息；",
+      "  默认不 commit/tag/push/publish；-Commit/-Tag/-Publish 显式开启",
+      "- release.ps1 增加分支/脏树/tag 指向校验；-Publish 前要求远端 tag 已指向 HEAD",
+      "- .ps1 计数 27→29（release.ps1 + test-lib.ps1）；技能总行数不变 1935",
+      "- 不含 gate-auto 的单进程 pre-commit（hook 仍是主要成本，按需另开）"
+    ]
+  },
+  {
     "version": "1.31.16",
     "title": "(评审 P0/P1 分级与台账：评审发现落表、可聚合、可门禁)",
     "body": [
-      "- summary.md「评审结论」改为固定 7 列表（严重度 / 范围 / 状态 / 指纹 / 问题 /",
-      "  证据 / 处置），分级统一为 P0/P1/P2，状态 未修/已修/转待办/接受/不适用；",
-      "  ✅ 已确认合规只用于六维结论，不再当作严重度",
-      "- check-summary 新增 -Stage review 与 Assert-ReviewLedger：P0/P1 必须带 kebab-case",
-      "  指纹与证据，无问题行不能与发现混用；-Stage final 要求 P0 已修、P1 有处置；",
-      "  缺表由 reviewLedgerStrict 决定 FAIL 或 WARN（新装 true，升级 false），格式坏恒 FAIL",
-      "- stage-gate 阶段 6 增加 AUTO review-ledger，委派 check-summary -Stage review",
-      "- metrics 解析评审表并按指纹跨任务聚合，输出 review findings 并写 tracked 的",
-      "  .harness/reviews.md（tasks>=2 标 promote）；-LessonGate 无副作用",
-      "- harness-required.json 新增 reviewLedger / reviewLedgerStrict；update-harness 合并该块",
-      "  并把 strict 迁移为 false",
-      "- expert-reviewer / code-reviewer 输出同一张表；流程阶段 6 改「无未关闭 P0」、阶段 10",
-      "  加「P0 已修 / P1 有处置」；AGENTS.md 增加评审落表纪律与 reviews.md 索引",
-      "- 新增 5 条契约，契约数 62 → 67；技能总行数 1929 → 1935；回归补评审档位 / 指纹 /",
-      "  闭合 / 聚合断言"
+      "- 新增评审台账：`summary.md`「评审结论」改为固定 7 列表（严重度 / 范围 / 状态 /",
+      "  指纹 / 问题 / 证据 / 处置），分级统一为 P0/P1/P2，状态为 未修/已修/转待办/接受/不适用；",
+      "  `✅ 已确认合规` 只用于六维结论，不再当作严重度",
+      "- `check-summary.ps1` 新增 `-Stage review` 与 `Assert-ReviewLedger`：P0/P1 必须带",
+      "  kebab-case 指纹与证据，无问题行不能与发现混用；`-Stage final` 要求 P0 已修、P1 有处置；",
+      "  缺表由 `reviewLedgerStrict` 决定 FAIL 或 WARN（新装 true，升级 false），格式坏恒 FAIL",
+      "- `stage-gate.ps1` 阶段 6 增加 AUTO `review-ledger`，委派 `check-summary -Stage review`",
+      "- `metrics.ps1` 解析评审表，按指纹跨任务聚合，输出 review findings 并写 tracked 的",
+      "  `.harness/reviews.md`（tasks≥2 标 promote）；`-LessonGate` 无副作用",
+      "- `harness-required.json` 新增 `reviewLedger` 词表与 `reviewLedgerStrict`；",
+      "  `update-harness.ps1` 合并该块并把 strict 迁移为 `false`",
+      "- `expert-reviewer` / `code-reviewer` 输出同一张表；流程规范阶段 6 改「无未关闭 P0」、",
+      "  阶段 10 加「P0 已修 / P1 有处置」；`AGENTS.md` 增加评审落表纪律与 `reviews.md` 索引",
+      "- 新增 5 条契约（评审表头 ×2 / 模板无问题行 / 台账配置 / reviews 索引），契约数 62 → 67；",
+      "  技能总行数 1929 → 1935；回归新增评审档位、指纹、闭合与聚合断言"
     ]
   },
   {
     "version": "1.31.15",
     "title": "(假绿灯止血：0 文件不再通过 / SQL 通过必须有证据 / 发布物清脏行)",
     "body": [
-      "- red-line-scan：-Files 按逗号拆分（powershell -File 下逗号不会自动成数组）；",
-      "  显式列表 0 个可扫描文件 exit 1；部分缺失输出 [WARN] 后继续扫描存在的文件",
-      "- check-summary：sql_review 结论为「通过 / 已改写」时必须引用至少一个真实存在的",
-      "  .harness/... 证据路径；no SQL change 等 none 标记仍放行，非通过结论不要求证据",
-      "- stage-gate：shortfall-listed 失败时列出配置的 none 标记（无 / N/A / none）",
-      "- coding-skill 模板删除误入的乱码行；技能总行数 1930 → 1929",
-      "- tests/regression 增加回归断言；不含 P0/P1 评审分级与台账（另开 1.31.16）"
+      "- `red-line-scan.ps1`：`-Files` 按逗号拆分（`powershell -File` 下逗号不会自动成数组）；",
+      "  显式列表 0 个可扫描文件 exit 1；部分缺失输出 `[WARN]` 后继续扫描存在的文件",
+      "- `check-summary.ps1`：`sql_review` 结论为「通过 / 已改写」时必须引用至少一个真实存在的",
+      "  `.harness/...` 证据路径；`no SQL change` 等 none 标记仍放行，非通过结论不要求证据",
+      "- `stage-gate.ps1`：`shortfall-listed` 失败时列出配置的 none 标记（无 / N/A / none）",
+      "- `coding-skill` 模板删除误入的乱码行 `、lk;l;/`；技能总行数 1930 → 1929",
+      "- `tests/regression.ps1` 增加回归断言：逗号拆分 / 0 文件 FAIL / 部分缺失 WARN /",
+      "  SQL 通过无证据 FAIL / shortfall 提示含标记",
+      "- 不含 P0/P1 评审分级与评审台账（另开 1.31.16）"
     ]
   },
   {
     "version": "1.31.14",
     "title": "(按真实任务复盘修门禁口径与三处摩擦点)",
     "body": [
-      "- stage-gate 的 corrections-attributed 原用锚定裸字段正则，模板写法「- 纠正次数：",
-      "  `corrections: 2`」匹配不到：该行恒 PASS（真正拦住它的是 summary-fields-final →",
-      "  check-summary）。现与 check-summary 共用宽松解析（标签 + 反引号都认）",
-      "- [HINT] 补第 5 步「复用命令」；coding-skill 第 0 步改为「动任何写操作之前」，",
-      "  允许只读探索定档，禁止读完代码再补 DECLARE，并补前端 node --check",
+      "- `stage-gate` 的 `corrections-attributed` 用锚定裸字段正则，模板写法",
+      "  「- 纠正次数：`corrections: 2`」永远匹配不到：该行恒 PASS，真正拦住它的是",
+      "  `summary-fields-final` → `check-summary`。现改为与 `check-summary` 相同的宽松",
+      "  解析（标签 + 反引号都认），两处不再分叉",
+      "- `[HINT]` 补第 5 步「复用命令」，首次 OPEN 不再靠猜下一条命令",
+      "- `coding-skill` 第 0 步改为「动任何**写操作**之前」：允许只读探索定档，禁止读",
+      "  完代码再补 DECLARE；并补前端最低验证 `node --check`",
       "- 流程 §1.1 澄清 L3 边界：前端 + 对应后端接口的同一特性不算跨模块；契约不变的",
-      "  新增可选参数 / 只读查询可按 L2；改必填性 / 返回结构 / 状态码或碰公共层 / 迁移才判 L3",
-      "- 模板注明复制整个 summary（保留第二阶段）；loaded_skills 记录全流程、收尾前复核",
-      "- code-reviewer 增加范围纪律：只评给定范围，范围外改动单列不计入结论",
-      "- 平台适配新增多仓库（前后端分仓）安装方案与代价"
+      "  新增可选参数 / 只读查询可按 L2；改必填性、返回结构、状态码或碰公共层 / 迁移才判 L3",
+      "- 模板说明「复制整个 summary，不要只写三节」；`loaded_skills` 注明记录全流程、",
+      "  收尾前复核",
+      "- `code-reviewer` 增加范围纪律：只评给定范围，范围外工作区改动单列不计入结论",
+      "- `references/平台适配.md` 新增多仓库（前后端分仓）安装方案与代价"
     ]
   },
   {
     "version": "1.31.13",
     "title": "(三个子智能体可用化：可发现 / 有触发点 / 不越界)",
     "body": [
-      "- 三个 agent 模板补 name / description / tools frontmatter（此前平台无法发现，只能人点名），",
-      "  并删掉只在安装时有意义的「生成说明」",
-      "- 内容补强：何时用 / 何时不用、输入契约、只读边界、证据纪律、降级路径、输出模板",
-      "- 触发点落地：流程第 6 步「有 code-reviewer 优先委派」；熵管理周期表每周接",
-      "  red-line-auditor、每月接 consistency-verifier；AGENTS.md 的必上技能与索引同步",
-      "- verify-harness：已装 agent 定义残留 <...> 项目占位时 WARN",
-      "- 1.31.11 的 description 迁移改为只替换旧句，保留项目自定义前缀"
+      "- 三个 agent 模板缺 `name` / `description` frontmatter，平台只能靠人点名，等于",
+      "  \"装了但不可发现\"。补齐 frontmatter（含触发词与 tools），并删掉只在安装时有",
+      "  意义的\"生成说明\"",
+      "- 内容补强：何时用 / 何时不用、输入契约、只读边界、证据纪律、降级路径、",
+      "  输出模板；`code-reviewer` 明确六维与 🔴 阻断口径，`consistency-verifier` 补",
+      "  死链与术语漂移，`red-line-auditor` 补\"本次新增 / 历史遗留\"分流与口径冲突",
+      "- 触发点落地（此前只有文件索引）：流程第 6 步写明\"有 `code-reviewer` 优先委派\"；",
+      "  熵管理周期表每周接 `red-line-auditor`、每月接 `consistency-verifier`；",
+      "  `AGENTS.md` 的必上技能与索引同步写明",
+      "- `verify-harness`：已装 agent 定义里残留 `<...>` 项目占位时给 WARN（升级不会覆盖",
+      "  已有 agent 文件，只能靠提示发现旧副本）",
+      "- 1.31.11 的 description 迁移改为**只替换旧句**，保留项目自己写的前缀",
+      "  （此前会整行换成模板文案）"
     ]
   },
   {
     "version": "1.31.12",
-    "title": "(删掉会随升级永久留在技能里的「骨架」说明)",
+    "title": "(删掉会随升级永久留在技能里的\"骨架\"说明)",
     "body": [
-      "- 18 个技能模板的 package 块里写着「本文件是骨架…」，安装时原样复制、升级时整体",
-      "  替换，编译完成后仍在，且指向的 slot 注释早已不存在：技能读起来像没编译完",
-      "- 删除 18 处说明（coding-skill / expert-reviewer 保留「目标」行，request-analysis",
-      "  并回同一行），技能总行数 1961 → 1930",
-      "- verify-package 的 markers 新增断言：package 块内出现该说明即 FAIL，防止回带",
-      "- 已装项目升级后用新 package 块覆盖，说明随之消失"
+      "- 18 个技能模板在 `harness:package` 块里写着「本文件是骨架：`slot:` 注释必须",
+      "  在安装时用项目事实替换…」。这句是给**编译时**看的，但 package 块安装时原样",
+      "  复制、升级时整体替换，编译完成后它仍在，且指向的 slot 注释早已不存在——",
+      "  技能读起来像没编译完",
+      "- 删除 18 处说明；`coding-skill` / `expert-reviewer` 保留其后的「目标」行，",
+      "  `request-analysis` 把目标并回同一行；技能总行数 1961 → 1930",
+      "- `verify-package` 的 `markers` 新增断言：package 块内出现该说明即 FAIL，",
+      "  防止复制模板时再次带回来",
+      "- 已装项目升级到本版后，`-MergeSkills` 会用新 package 块覆盖，说明随之消失"
     ]
   },
   {
     "version": "1.31.11",
-    "title": "(升级会迁移旧 description 的「跳过需求分析」授权)",
+    "title": "(升级会迁移旧 description 的\"跳过需求分析\"授权)",
     "body": [
-      "- 1.31.8 从 coding-skill 模板删掉了「需求已明确…」，但 -MergeSkills 按设计保留磁盘",
-      "  frontmatter，存量项目升级后这句仍在：模型据此跳过 request-analysis，summary 链路也断",
-      "- update-harness：仅 -MergeSkills 且 description 命中旧文案时替换为模板 description，",
-      "  并在 MERGE 明细里写 stale pre-1.31.8 description clause replaced；其他自定义保持不动",
-      "- 测试：merge-stale fixture 覆盖 dry-run 点名、apply 迁移、旧句消失、project 块保留、",
-      "  未命中旧句的自定义 description 不被改写",
-      "- 文档：README 中英 / SKILL.md / 说明页 / 质量分级 同步该迁移语义"
+      "- 1.31.8 从 `coding-skill` 技能模板删掉了「需求已明确…」这句，但 `-MergeSkills` 按设计",
+      "  保留磁盘 frontmatter，存量项目升级后这句仍然留在 description 里——模型据此",
+      "  跳过 `request-analysis`，summary 链路也随之断掉",
+      "- `update-harness.ps1`：仅在 `-MergeSkills` 且 description 命中那句旧文案时，换成",
+      "  模板的新 description，并在 MERGE 明细里写明 \"stale pre-1.31.8 description clause",
+      "  replaced\"；其他项目自改的 description 保持不动",
+      "- 测试：新增 merge-stale fixture，断言 dry-run 点名、apply 迁移、旧句消失、",
+      "  project 块保留，以及未命中旧句的自定义 description 不被改写"
     ]
   },
   {
     "version": "1.31.10",
     "title": "(文档对齐 1.31.6–1.31.9 的机制)",
     "body": [
-      "- 说明页：验收步骤从「三个脚本」改为两个自检脚本 + 阶段门，并补上 1.31.5–1.31.9",
-      "  新增的检查（skills-index / fill-depth / coverage / 空 project 块）",
-      "- 说明页：升级步骤补白名单外键的 by hand 提示与 groundingStrict 迁移语义；",
-      "  升级后验证补 skills-index 的 WARN → -Write 处置",
-      "- 模板 AGENTS.md：门禁表补 sync-skills-index 与两个自检脚本，audit-order 注明",
-      "  「记录目录被 ignore 时 FAIL」",
-      "- SKILL.md：升级边界补 groundingStrict（新装 true / 升级固定 false）",
-      "- README 中英：升级段补白名单外键与 groundingStrict；升级后验证补",
-      "  skills-index 的 WARN → -Write；文件索引补「技能清单同步」；修掉英文版残留的",
-      "  MANUAL above 120 lines（1.31.4 已取消合并后的行数上限）",
-      "- 维护者文档：发布清单新增「改过技能目录先跑 sync-skills-index -Write」"
+      "- 说明页：验收步骤从\"三个脚本\"改为两个自检脚本 + 阶段门，并补上 1.31.5–1.31.9",
+      "  新增的检查（`skills-index` / `fill-depth` / `coverage` / 空 project 块）；",
+      "  升级步骤补白名单外键的 \"by hand\" 提示与 `groundingStrict` 迁移语义；",
+      "  升级后验证补 `skills-index` 的 WARN→`-Write` 处置",
+      "- 模板 `assets/AGENTS.md`：门禁表补 `sync-skills-index.ps1` 与两个自检脚本，",
+      "  `audit-order` 注明\"记录目录被 ignore 时 FAIL\"；不在表里写尖括号占位",
+      "- `SKILL.md`：升级边界补 `groundingStrict`（新装 true / 升级固定 false）",
+      "- `README.md` / `README.en.md`：升级段补白名单外键与 `groundingStrict`；升级后验证补",
+      "  `skills-index` 的 WARN→`-Write`；文件索引补\"技能清单同步\"；并修掉英文版残留的",
+      "  \"MANUAL above 120 lines\"（1.31.4 已取消合并后的行数上限）",
+      "- 维护者文档：发布清单新增\"改过技能目录先跑 `sync-skills-index -Write`\"，",
+      "  文件索引补 `sync-skills-index.ps1`"
     ]
   },
   {
     "version": "1.31.9",
     "title": "(去掉假信号：自报口径写实 / 白名单漏键可见 / 重复表收敛)",
     "body": [
-      "- 度量：metrics 的 skill load rate 改为 skill load rate (self-reported)。",
-      "  该数字来自 summary.md 的自报字段，不是观测值",
-      "- 升级：harness-required.json 里出现不在合并白名单的键时，dry-run 明确写",
-      "  add <key> by hand。此前新键会被静默丢弃，新脚本读不到就空跑",
-      "- 规则：缓存与一致性.md §4 的手段表收敛为指针（指向技能 Step 4），只保留",
+      "- 度量：`metrics` 的 \"skill load rate\" 改为 \"skill load rate (self-reported)\"。",
+      "  该数字来自 `summary.md` 的自报字段，不是观测值；原文案会让人误以为有遥测",
+      "- 升级：`harness-required.json` 里出现**不在合并白名单**的键时，dry-run 明确写",
+      "  `add <key> by hand`。此前新键会被静默丢弃，新脚本读不到就空跑",
+      "- 规则：`缓存与一致性.md` §4 的手段表收敛为指针（指向技能 Step 4），只保留",
       "  🔴 降级三条。同一张表曾有两份副本，措辞已开始分叉",
-      "- 技能索引：.harness/skills/README.md 纠正「清单由 .trae/skills 决定」的错误说法",
-      "  （目录才是真源，.trae 只是入口），分类标题去掉会漂移的 6/14/5 计数",
-      "- 文档：三处「承诺 > 实际」改为写实——load_skip_reason 仅在 loaded_skills: none",
-      "  时必填且 metrics 不读它；stale 对近 14 天加载过的技能是 FAIL；wiki 环境事实",
+      "- 技能索引：`.harness/skills/README.md` 纠正\"清单由 `.trae/skills` 决定\"的错误说法",
+      "  （目录才是真源，`.trae` 只是入口），分类标题去掉会漂移的 6/14/5 计数",
+      "- 文档：三处\"承诺 > 实际\"改为写实——`load_skip_reason` 仅在 `loaded_skills: none`",
+      "  时必填且 `metrics` 不读它；`stale` 对近 14 天加载过的技能是 FAIL；wiki 环境事实",
       "  只校验占位符与证据路径，语义真假由评审兜底"
     ]
   },
@@ -125,57 +157,61 @@
     "version": "1.31.8",
     "title": "(定版前修复：门禁降级 / 空壳技能 / 探测幂等)",
     "body": [
-      "- 门禁：pre-commit 拒绝「red-line-rules.json 与源码同一提交」。此前一次 git add",
+      "- 门禁：pre-commit 拒绝「`red-line-rules.json` 与源码同一提交」。此前一次 `git add`",
       "  可以把规则表调弱并同时提交违规代码，扫描读到弱表直接放过——实测可绕过",
-      "- 门禁：技能 project 块没有任何项目事实时 FAIL（不再依赖 groundingStrict）。",
-      "  此前删掉 slot: 注释即可让空壳技能全绿，双所有权在存量项目上等于零执行",
-      "- 探测：probe-project 的目录跳过表与扩展名直方图合并为一份，默认输出目录",
-      "  baseline/ 也在内；此前第二次运行会把自己的产物统计进去，直方图与 codeExists 漂移",
-      "- 自检：verify-package 新增「package 块内不得有尖括号占位」；4 个技能里的",
-      "  <特性> / <module> 改成中性名",
-      "- 度量：metrics.ps1 解析 assoc_skip，按 reason 区分 ignored（门禁等于关掉）与",
-      "  not-committed（首次接入）；新增 attribution skipped 行与两个 JSON 字段",
-      "- 判定：ignored 时结论直说 the gate is off by accident，且在没有 commit 事件时也输出",
-      "- 测试：regression 断言计数与结论；gate-auto 断言规则表 + 源码同提交被拦、",
-      "  单独提交放行；skills-registry 断言空 project 块 FAIL、填一条事实后放行；",
-      "  test-probe 断言二次运行不把自身产物计入直方图"
+      "- 门禁：技能 project 块**没有任何项目事实**时 FAIL（不再依赖 `groundingStrict`）。",
+      "  此前删掉 `slot:` 注释即可让空壳技能全绿，双所有权在存量项目上等于零执行",
+      "- 探测：`probe-project` 的目录跳过表与扩展名直方图合并为一份，默认输出目录",
+      "  `baseline/` 也在内；此前第二次运行会把自己的产物统计进去，直方图与 `codeExists` 漂移",
+      "- 自检：`verify-package` 新增「package 块内不得有尖括号占位」（升级会把该块原样",
+      "  写回项目，占位符永远填不上）；4 个技能里的 `<特性>` / `<module>` 改成中性名",
+      "- 度量：`metrics.ps1` 解析 gate 日志里的 `assoc_skip` 事件，按 reason 区分",
+      "  `ignored`（`.harness/changes` 被 ignore，门禁等于关掉）与 `not-committed`",
+      "  （首次接入，合法）；文本输出新增 `attribution skipped` 行，`-Json` 新增",
+      "  `attributionSkipped` / `attributionSkippedIgnored`",
+      "- 判定：`ignored` 时在结论里直说\"the gate is off by accident\"，不再与首次接入",
+      "  混为一谈；该结论在\"没有 commit 事件\"时也会输出，避免 hook 未装时整段静默",
+      "- 测试：regression 断言两个计数与 ignored 结论；gate-auto 断言「规则表 + 源码",
+      "  同提交被拦、规则表单独提交放行」；skills-registry 断言「空 project 块 FAIL、",
+      "  填一条事实后放行」；test-probe 断言二次运行不把自己的产物计入直方图"
     ]
   },
   {
     "version": "1.31.7",
     "title": "(决策点填充 / 技能索引单一真源)",
     "body": [
-      "- 探测：probe-project 新增 probe-facts.json——实体 / Controller 映射 / Topic /",
-      "  缓存 Key / 表名的待确认草稿，每类上限 60 条，超出标 truncated",
-      "- 索引：新增 sync-skills-index.ps1，技能清单由实际目录生成到 .harness/skills/README.md",
-      "  与 AGENTS.md 的标记块；verify-harness 新增 skills-index（缺标记 WARN，漂移 FAIL）",
-      "- 技能：crud-scaffold / pagination-query / mq-messaging / transaction-consistency /",
-      "  excel-import-export / db-migration 补决策表 + 形状 + 自检骨架，B+ 从 4 个增至 10 个",
-      "- 技能：coding-skill 把「先证明记录已存在」前移为第 0 步（先跑 stage-gate -Stage 1",
-      "  并贴 DECLARE 行，再读代码），description 去掉「需求已明确」这句跳过授权",
-      "- 门禁：stage-gate 在 summary-exists 失败时打印 [HINT] 指名加载 request-analysis",
-      "  并给 4 步动作；阶段 1/3 通过时打印可直接粘贴的 DECLARE 行（记录 / 档位 / 下一步）",
-      "- 门禁：pre-commit 在 HEAD 无 .harness/changes 时区分「首次接入」与「.gitignore 忽略」，",
-      "  后者告警并写 assoc_skip，不再静默放行",
-      "- 门禁：verify-grounding 新增 groundingStrict（新装 true、升级合并 false）；",
-      "  stale 在最近 14 天加载过时升 FAIL；metrics 复盘把 stale 一并列进结论",
-      "- 文档：新增 references/示例-填充完成度.md（合成示例，只校准密度）",
-      "- 测试：新增 test-probe（第 6 套）；skills-registry 补索引漂移断言；",
-      "  test-update 断言 groundingStrict 合并为 false；gate-auto 补 DECLARE / [HINT] /",
-      "  忽略目录告警三条断言"
+      "- 探测：`probe-project.ps1` 新增 `probe-facts.json`——实体 / Controller 映射 /",
+      "  Topic / 缓存 Key / 表名的待确认草稿，每类上限 60 条，超出标 truncated",
+      "- 索引：新增 `sync-skills-index.ps1`，技能清单由实际目录生成到",
+      "  `.harness/skills/README.md` 与 `AGENTS.md` 的标记块；`verify-harness` 新增",
+      "  `skills-index`（缺标记 WARN，漂移 FAIL）",
+      "- 技能：01-crud-scaffold / 02-pagination-query / 04-mq-messaging /",
+      "  05-transaction-consistency / 08-excel-import-export / 09-db-migration",
+      "  补\"决策表 + 形状 + 自检\"骨架，B+ 从 4 个增至 10 个",
+      "- 技能：`coding-skill` 把\"先证明记录已存在\"前移为第 0 步（先跑 `stage-gate -Stage 1`",
+      "  并贴 `DECLARE` 行，再读代码），description 去掉\"需求已明确\"这句跳过授权",
+      "- 门禁：`stage-gate` 在 `summary-exists` 失败时打印 `[HINT]` 指名加载 `request-analysis`",
+      "  并给 4 步动作；阶段 1/3 通过时打印可直接粘贴的 `DECLARE` 行（记录 / 档位 / 下一步）",
+      "- 门禁：pre-commit 在 HEAD 无 `.harness/changes` 时区分\"首次接入\"与\"`.gitignore` 忽略\"，",
+      "  后者告警并写 `assoc_skip`，不再静默放行",
+      "- 门禁：`verify-grounding` 新增 `groundingStrict`（新装 true、升级合并 false）；",
+      "  `stale` 在\"最近 14 天加载过\"时升 FAIL；`metrics` 复盘把 stale 一并列进结论",
+      "- 文档：新增 `references/示例-填充完成度.md`（合成示例，只校准密度）",
+      "- 测试：新增 `tests/test-probe.ps1`（第 6 套）；skills-registry 补索引漂移断言；",
+      "  test-update 断言 groundingStrict 合并为 false"
     ]
   },
   {
     "version": "1.31.6",
     "title": "(归因门禁不再被 .gitignore 静默关掉 / 填充深度)",
     "body": [
-      "- 门禁：audit-order 在 .harness/changes 被 .gitignore 忽略时直接 FAIL，并给出两条出路；",
-      "  新增 recordsTracked（默认 true），显式 false 才允许跳过，且 verify-harness 报 WARN",
-      "- 门禁：sql-review-gate（ps1 / py）在「没有 summary」分支先判 ignore，",
+      "- 门禁：`audit-order` 在 `.harness/changes` 被 `.gitignore` 忽略时直接 FAIL 并给出两条出路；",
+      "  新增 `recordsTracked`（默认 true），显式 false 才允许跳过，且 `verify-harness` 报 WARN",
+      "- 门禁：`sql-review-gate`（ps1 / py）在「没有 summary」分支先判 ignore，",
       "  避免让人建一个永远进不了库的 summary",
-      "- 门禁：verify-grounding 新增 fill-depth——已填项目的 rules / wiki 正文残留 <...>",
-      "  直接 FAIL；TODO(...)、代码块与行内代码放行",
-      "- 升级：recordsTracked 纳入自动合并键与 delta 报告，老项目升级后才真正生效",
+      "- 门禁：`verify-grounding` 新增 `fill-depth`——已填项目的 rules / wiki 正文残留 `<...>`",
+      "  直接 FAIL；`TODO(...)`、代码块与行内代码放行",
+      "- 升级：`recordsTracked` 纳入自动合并键与 delta 报告，老项目升级后才真正生效",
       "- 测试：audit-order 新增「忽略目录 FAIL / 显式声明 SKIP」；skills-registry 新增",
       "  fill-depth 三条；test-update 断言新键被合并"
     ]
@@ -184,12 +220,12 @@
     "version": "1.31.5",
     "title": "(覆盖度检查 / 单套跑)",
     "body": [
-      "- 门禁：verify-grounding 新增 coverage 项。已填项目（AGENTS.md 无占位符且已有代码）",
-      "  的工程结构.md 目录树仍含 < 直接 FAIL；stack.json 检出 orm / cache / mq 而对应",
-      "  wiki 表仍是模板时只 WARN；新项目无代码时整段跳过",
-      "- 不做数量对账：probe-project 并不统计实体 / Topic / 端点数，行数比对只会奖励凑行数",
-      "- 测试：run-all 新增 -Suite（只跑一套，约 1–3 分钟）与每套耗时表；",
-      "  test-skills-registry 断言占位目录树 FAIL、填好后 exit 0",
+      "- 门禁：`verify-grounding` 新增 `coverage` 项。已填项目（AGENTS.md 无占位符且已有",
+      "  代码）的 `工程结构.md` 目录树仍含 `<` 直接 FAIL；`stack.json` 检出 orm / cache / mq",
+      "  而对应 wiki 表仍是模板时只 WARN；新项目无代码时整段跳过",
+      "- 不做数量对账：`probe-project` 并不统计实体 / Topic / 端点，行数比对只会奖励凑行数",
+      "- 测试：`run-all` 新增 `-Suite`（只跑一套，约 1–3 分钟）与每套耗时表；",
+      "  test-skills-registry 断言「占位目录树 FAIL、填好后 exit 0」",
       "- 文档：接地协议校验项补第 7 条；质量分级 / SKILL.md / README 同步"
     ]
   },
@@ -197,13 +233,14 @@
     "version": "1.31.4",
     "title": "(技能不再限长 / 做法骨架分两层)",
     "body": [
-      "- 门禁：verify-grounding 删除技能行数硬限（>120 行 FAIL），改为 >250 行 WARN。",
+      "- 门禁：`verify-grounding` 删除技能行数硬限（>120 行 FAIL），改为 >250 行 WARN。",
       "  技能按需加载，复杂技能本来就长；限长会逼着把做法塞回常驻的规则层",
-      "- 升级：update-harness -MergeSkills 不再因合并结果超 120 行标 MANUAL",
-      "- 技能：redis-cache 补做法骨架（判断表 / 读写路径形状 / 三类故障处置），",
+      "- 升级：`update-harness -MergeSkills` 不再因合并结果超 120 行标 MANUAL",
+      "- 技能：`redis-cache` 补做法骨架（该不该缓存的判断表、读/写路径形状、三类故障处置），",
       "  项目 API 与真实代码留在 project 块的 slot + E2 锚点",
-      "- 规则：编码规范缓存节的完整方法对换成 8 行边界示例，做法指向技能",
-      "- 文档：规则与技能写法新增「技能正文的两层骨架」；四处行数条款同步删除",
+      "- 规则：`编码规范.md` 缓存节的完整方法对换成 8 行边界示例，做法指向技能（层级别纠正）",
+      "- 文档：规则与技能写法新增「技能正文的两层骨架」；技能编译协议 / 接地协议 /",
+      "  维护与体检 / SKILL.md / README 同步删除行数条款",
       "- 测试：test-update 改为断言「超过 120 行仍然 MERGE」，防止限长规则悄悄回来"
     ]
   },
@@ -211,10 +248,11 @@
     "version": "1.31.3",
     "title": "(升级补齐新配置块)",
     "body": [
-      "- 升级：update-harness 合并 harness-required.json 时补上 sqlReview 与",
-      "  summaryContent。这两个 1.29–1.31 新增的配置块此前不会合并，老项目升级后",
-      "  拿到新脚本却缺配置，check-summary 提前 return，内容校验静默空跑",
-      "- 升级：dry-run 的 delta 明确列出 add sqlReview / add summaryContent",
+      "- 升级：`update-harness` 合并 `harness-required.json` 时补上 `sqlReview` 与",
+      "  `summaryContent`。1.29–1.31 新增的这两个配置块此前不会合并，老项目升级后",
+      "  拿到新脚本、却因缺配置让 `check-summary` 提前 return——内容校验变成静默空跑",
+      "- 升级：dry-run 的 delta 会明确列出 `add sqlReview` / `add summaryContent`，",
+      "  不再只报 required / requiredAnyOf / sqlGate",
       "- 测试：test-update 断言两块被合并、dry-run 报告它们"
     ]
   },
@@ -222,12 +260,14 @@
     "version": "1.31.2",
     "title": "(文档对齐 1.31 行为 / 发版流程写实)",
     "body": [
-      "- 质量分级：check-summary 写明 initial 查三节内容、final 查收尾计数；",
-      "  install-git-hooks 补 L1 声明核对；audit-order 改为按显式声明 /",
-      "  harness-current-task / trailer / 唯一记录解析，删掉会过期的场景计数",
-      "- CONTRIBUTING：发布流程补 package-zip 与 zip 内容核对；写明 tag 需单独推送，",
+      "- 质量分级：check-summary 写明 initial 查三节内容、final 查收尾计数；install-git-hooks",
+      "  补 L1 声明核对；audit-order 改为按显式声明 / harness-current-task / trailer /",
+      "  唯一记录解析，并删掉会过期的\"7 个场景\"计数",
+      "- CONTRIBUTING 发布流程：补 package-zip 与 zip 内容核对；写明 tag 要单独推，",
       "  publish-releases.py 只建 Release、不建 tag、不传 zip，--from 可安全重跑",
-      "- 案例页：中英文版本标记补到 1.31.2（1.31.1 漏改）"
+      "- 案例页：中英文那句\"包本身已迭代到\"补到 1.31.2（1.31.1 漏改，仍是 1.31.0）",
+      "- 维护者本地文档（不入库）同步：发布清单加 tag / Release 两步，常见红补\"技能",
+      "  总行数 / 契约 pattern / 批量写丢 BOM\"三类，已知坑补并发写覆盖与归因顺序"
     ]
   },
   {
@@ -236,56 +276,63 @@
     "body": [
       "- 门禁：源码归因删除对分支名的依赖。之前只认 feature/fix/hotfix/bugfix 前缀，",
       "  main / dev 上整条检查静默跳过，等于从未执行。现在按 -Feature -> HARNESS_TASK ->",
-      "  .git/harness-current-task（check-summary 通过后自动写入）-> Harness-Task: trailer",
-      "  -> 记录树（区间内新增的唯一记录 / 唯一变更目录）解析",
+      "  .git/harness-current-task（check-summary 通过后自动写入）-> 提交信息里的",
+      "  Harness-Task: trailer -> 记录树（区间内新增的唯一记录 / 唯一变更目录）解析",
       "- 门禁：无法归因不再静默。hook 写 gate.jsonl 的 assoc_skip 事件；CI 输出",
-      "  [SKIP] N of M source commit(s) could not be attributed",
+      "  [SKIP] N of M source commit(s) could not be attributed，并给出两种修法",
       "- 测试：audit-order 覆盖「默认分支 + 单记录必须被审计」与 trailer 归属；",
       "  gate-auto 断言默认分支下不产生 assoc_skip",
       "- 文档：AGENTS.md / 开发流程规范 / changes/README 统一为「分支命名自由，",
-      "  门禁不读分支名」"
+      "  门禁不读分支名」；CI 审计的 -Feature 说明同步"
     ]
   },
   {
     "version": "1.31.0",
     "title": "(编码前验内容 / L1 声明按真实 diff 核对)",
     "body": [
-      "- 门禁：check-summary -Stage initial 不再只查字段名——验收标准、业务影响、",
-      "  任务拆分三节必须是真的内容，留模板占位符直接 FAIL",
-      "- 分工：corrections / impl_corrections 移到 -Stage final；开工时不可能知道，",
-      "  先填只能是假数，改为收尾一次填对并校验 impl <= corr",
-      "- 门禁：pre-commit 新增 L1 声明核对。暂存 _small.md 即视为声明 L1，按真实",
-      "  numstat 比对：超过 1 个源文件或 30 行直接拒绝，并提示改走 summary",
-      "- 技能：coding-skill 第 1 步换成 stage-gate -Stage 3 一条命令，定档公式写死",
-      "  「1 文件 + <=30 行 + 不碰公共层/DB/配置/接口 = L1」",
-      "- 文档与契约：AGENTS.md、开发流程规范、hooks 说明、README、说明页同步",
-      "- 测试：regression 覆盖占位内容被拒 / 缺收尾计数时 initial 通过 final 拒绝；",
-      "  gate-auto 覆盖两文件标 L1 被拒 / 单文件 40 行标 L1 被拒"
+      "- 门禁：`check-summary -Stage initial` 不再只查字段名——验收标准、业务影响、",
+      "  任务拆分三节必须是真的内容，留模板占位符直接 FAIL。这一条对应「字段填满、",
+      "  内容还是模板」仍能开工的漏项",
+      "- 分工：`corrections` / `impl_corrections` 移到 `-Stage final`。它们在开工时",
+      "  不可能知道，先填只能是假数；现在改为收尾一次填对，`impl ≤ corr` 同时校验",
+      "- 门禁：pre-commit 新增 L1 声明核对。暂存 `_small.md` 即视为声明 L1，脚本按",
+      "  真实 `--numstat` 比对：超过 1 个源文件或 30 行直接拒绝，并提示改走 summary。",
+      "  事前不可能知道真实大小，所以校验点放在提交时，不给小改增加负担",
+      "- 技能：`coding-skill` 第 1 步换成一条可失败的命令（`stage-gate -Stage 3`），",
+      "  定档公式写死「1 文件 + ≤30 行 + 不碰公共层/DB/配置/接口 = L1」；",
+      "  `request-analysis` 同步要求三节内容",
+      "- 文档：AGENTS.md、开发流程规范、hooks 说明、README、README.en、说明页同步；",
+      "  contract `agents-field-split` 的匹配串随之更新",
+      "- 测试：regression 新增「占位内容被拒」「缺收尾计数时 initial 通过、final 拒绝」；",
+      "  gate-auto 新增「两文件标 L1 被拒」「单文件 40 行标 L1 被拒」"
     ]
   },
   {
     "version": "1.30.2",
     "title": "(文档去 AI 味 / 升级段落拆条)",
     "body": [
-      "- README / README.en：开头不再用「不是A，也不是B」的否定排比；六类失败、",
-      "  契约说明、证据、和模板包的区别改成直述，三条对仗合并成一段",
-      "- 升级边界的超长段落拆成六条要点，删掉与上一段重复的 -MergeSkills 解释",
-      "- SKILL.md 开头改成「先看清项目，再从零设计」，去掉模板化断言",
-      "- 说明页与接地协议、落地策略的同类句式同步；只动措辞，机制与数字不变"
+      "- README / README.en：开头不再用\"不是A，也不是B\"的否定排比；六类失败、契约说明、",
+      "  证据、和模板包的区别等段落改成直述；\"模板包的区别\"三条对仗合并成一段",
+      "- 升级边界的超长段落拆成六条要点，删掉与上一段重复的 `-MergeSkills` 解释",
+      "- SKILL.md 开头改成\"先看清项目，再从零设计\"，去掉模板化的断言句",
+      "- 说明页：交付物卡片与教训提示不再用\"不是…而是…\"；接地协议、落地策略的口径同步",
+      "- 只动措辞，机制、契约、命令与数字不变"
     ]
   },
   {
     "version": "1.30.1",
     "title": "(包布局 templates → assets / references 只嵌一层)",
     "body": [
-      "- 布局：仓库与发布包的产品目录由 templates/ 改为 assets/；SKILL.md、",
-      "  update-harness、package-zip、verify-package、契约文件与测试同步",
-      "- 兼容：新版 update-harness 仍认旧的 templates/ 布局并提示一次；从 1.30.0",
-      "  及更早升级的首跳需直接运行新包内的脚本（见 SKILL.md 2.4）",
-      "- 引用：references/ 内部去掉 13 处文件间跳转，统一写成《主题》，一律回到",
-      "  SKILL.md 第四部分的路由表读取，不再出现 A → B → C 的链",
+      "- 布局：仓库与发布包的产品目录由 `templates/` 改为 `assets/`；SKILL.md 安装",
+      "  步骤、update-harness、package-zip、verify-package、契约文件与测试同步",
+      "- 兼容：新版 `update-harness.ps1` 仍认旧的 `templates/` 布局并提示一次，避免",
+      "  已装 1.30.0 及更早的项目在第一次升级时卡住；从旧版升级的首跳需直接运行新包",
+      "  内的脚本，这一点写进 SKILL.md 2.4",
+      "- 引用：`references/` 内部去掉 13 处文件间跳转，统一写成《主题》，一律回到",
+      "  SKILL.md 第四部分的路由表读取，不再出现 A 指向 B、B 指向 C 的链",
       "- 发布包：白名单化，只收 SKILL.md / VERSION / LICENSE / references / assets；",
-      "  docs、tests、tools、.github、README、releases.json 不再分发（1.69 MB → 317 KB）",
+      "  docs（含 3.4 MB mermaid vendor）、tests、tools、.github、README、releases.json",
+      "  不再随安装包分发，产物 146 文件 1.69 MB → 96 文件 317 KB",
       "- 测试：test-update 新增「旧 templates/ 布局仍可升级」用例"
     ]
   },
@@ -293,54 +340,69 @@
     "version": "1.30.0",
     "title": "(检查必须声明会因什么失败 / 数据源不许凭空出现)",
     "body": [
-      "- 自进化：-LessonGate 要求检查文件除 # lesson: <id> 外，还要有",
-      "  # fails-when: <什么改动会让它变红>，让「覆盖」变成可复现的声明",
-      "- 门禁：check-summary -Stage final 校验 sql_review 写到的数据源必须在",
-      "  编译后的 sql-review「数据源与方言」绑定里；未登记直接 FAIL",
-      "- 文档：SQL评审规范 / AGENTS.md / lessons-promoted.txt 同步；README、",
-      "  README.en 与 docs 说明页同步 1.29–1.30 的门禁口径",
-      "- 测试：regression 覆盖缺 fails-when 与未登记数据源（补绑定后通过）"
+      "- 自进化：`-LessonGate` 要求检查文件除了 `# lesson: <id>`，还要有",
+      "  `# fails-when: <什么改动会让它变红>`。语义相关性仍然靠人判断，但\"这条",
+      "  检查覆盖那条教训\"从此带一个可复现的声明，评审者照着改就能验",
+      "- 门禁：`check-summary -Stage final` 校验 sql_review 里写到的数据源必须",
+      "  出现在编译后 `sql-review` 技能的「数据源与方言」绑定里；用了没登记的源",
+      "  （如 sql_review 写 THIRD_ORACLE、绑定只有四个源）直接 FAIL，先把绑定补全",
+      "- 文档：SQL评审规范、AGENTS.md、lessons-promoted.txt 同步这两条；README /",
+      "  README.en / docs 说明页同步 1.29–1.30 的门禁口径（四层矛盾、证据路径、",
+      "  数据源绑定、fails-when）；沿用 1.29.0 的「只拦自相矛盾，不逼人造假」边界",
+      "- 测试：regression 新增「检查缺 fails-when 拒绝」「未登记数据源拒绝 /",
+      "  补上绑定后通过」两族用例"
     ]
   },
   {
     "version": "1.29.0",
     "title": "(sql_review 内容门禁 / 定档口径统一)",
     "body": [
-      "- 门禁：check-summary -Stage final 不再只判 sql_review 非空——结论写「通过/",
-      "  已改写」而四层或计划仍写「未验证/未跑」时 FAIL；引用的 .harness 证据路径",
-      "  必须存在。允许「未验证 + 待 DBA」，只拦自相矛盾",
-      "- 门禁：sql-review-gate 在提交 SQL 时用同一套校验（-OnlySqlReview），矛盾",
-      "  结论进不了 index",
-      "- 定档：request-analysis 的 L2/L3 与开发流程规范对齐（L3 纳入 SQL）",
-      "- 流程：涉及 SQL 的改动合并前跑 -Stage 10；AGENTS.md 与规范同步",
-      "- 阶段 10：新增 HUMAN 项 checks-really-fail（打开检查确认它会因该教训失败）",
-      "- 体检：技能按节号引用规则、而项目那份缺该小节时 WARN（规则是项目资产）",
-      "- 测试：regression 覆盖矛盾结论 / 一致结论 / 证据路径缺失三种情形"
+      "- 门禁：`check-summary.ps1 -Stage final` 不再只判 sql_review 非空——结论写",
+      "  「通过 / 已改写」而四层或计划里仍有「未验证 / 未跑」时直接 FAIL；值里",
+      "  引用的 `.harness` 证据路径必须真实存在。结论模板允许「未验证 + 待 DBA」，",
+      "  所以规则只拦自相矛盾，不逼人造假",
+      "- 门禁：`sql-review-gate.ps1` 在提交 SQL 时调用同一套校验（-OnlySqlReview），",
+      "  矛盾结论进不了 index，不必等到阶段 10",
+      "- 定档：request-analysis 的 L2/L3 判据与 开发流程规范 对齐（L2 明确无",
+      "  SQL/DDL/迁移，L3 纳入 SQL），不再出现「单文件 SQL = L2」的漏档",
+      "- 流程：涉及 SQL 的改动，合并前就要跑 `-Stage 10`（原来只在收尾手动跑）；",
+      "  AGENTS.md 与开发流程规范同步这句话",
+      "- 阶段 10：新增 HUMAN 项 checks-really-fail——晋升过的检查必须被打开确认",
+      "  「重新引入该教训时会失败」，语义相关性由此变成要留证据的动作",
+      "- 体检：verify-harness 新增 rules 检查，技能按节号引用规则文件而项目那份",
+      "  缺该小节时 WARN（规则是项目资产，升级不覆盖，需要人工合并）",
+      "- 测试：regression 覆盖「四层未验证 + 结论通过」「一致结论」「证据路径缺失」",
+      "  三种情形"
     ]
   },
   {
     "version": "1.28.1",
     "title": "(断言必须能追溯到那条教训)",
     "body": [
-      "- 收紧：-LessonGate 还要求检查文件里出现该 lesson id（注释即可），",
-      "  指向无关脚本直接 FAIL，让「这条测试覆盖那条教训」可审计",
+      "- 收紧：`-LessonGate` 不只看检查文件存在，还要求文件里出现该 lesson id",
+      "  （注释即可，如 `# lesson: dup-lesson`）。指向一个无关脚本会直接 FAIL，",
+      "  让\"这条测试覆盖那条教训\"变成可审计的字符串，而不是凭口头声明",
       "- 说明：id 只是审计锚点，不是相关性证明；晋升前仍需评审者打开检查脚本",
-      "  确认它会因该教训变红（可用 code-reviewer / consistency-verifier）",
-      "- 测试：regression 增加「检查文件未提及 id → 拒绝」用例"
+      "  确认它会因该教训而变红（模板已写明，可用 code-reviewer /",
+      "  consistency-verifier 智能体执行）",
+      "- 测试：regression 增加\"检查文件未提及 id → 拒绝\"用例"
     ]
   },
   {
     "version": "1.28.0",
     "title": "(教训必须变成断言 / 红线按栈判定)",
     "body": [
-      "- 自进化：metrics.ps1 -LessonGate 要求重复 ≥2 次的教训必须晋升为可失败的",
-      "  检查，格式 id :: check=路径::说明；路径必须是存在的 .ps1/.py、不得越界，",
-      "  写文档/目录/缺失文件都 FAIL。-Json -LessonGate 输出机器可读结果",
-      "- 入口：stage-gate 阶段 10 新增 lessons-asserted 与 corrections-attributed",
-      "  （corrections ≥ 1 必须带 lesson_id）；verify-harness 的 lessons 检查同源",
-      "- 红线按栈：red-line-rules.json 每条规则新增 stack 字段；非 Java 项目仍挂",
-      "  Java 专用规则时 WARN，若一条适用规则都没有则 FAIL",
-      "- 测试：regression 覆盖未晋升 / 带检查 / 缺文件 / 文档路径 / 目录五种情形"
+      "- 自进化闭环：`metrics.ps1 -LessonGate` 要求\"重复 ≥2 次的教训\"必须晋升为",
+      "  可失败的检查：格式 `id :: check=路径::说明`，路径必须是存在的 `.ps1/.py`",
+      "  且不得越出项目根；只写 id、写文档路径、写目录、文件缺失都判 FAIL",
+      "- 入口：`stage-gate` 阶段 10 新增 lessons-asserted 与 corrections-attributed",
+      "  （`corrections ≥ 1` 必须带真实 `lesson_id`，否则收尾不通过）；verify-harness",
+      "  的 lessons 检查调用同一脚本，两处口径不会漂",
+      "- 红线按栈：`red-line-rules.json` 每条规则新增 stack 字段（java / any）；",
+      "  verify-harness 读 `.harness/stack.json`，非 Java 项目仍挂 Java 专用规则时",
+      "  WARN，若一条适用规则都没有则 FAIL（等于没有红线门禁）",
+      "- 测试：regression 覆盖未晋升 / 已带检查 / 检查文件缺失 / 文档路径 / 目录",
+      "  五种情形；`-Json -LessonGate` 输出机器可读结果"
     ]
   },
   {
@@ -348,28 +410,34 @@
     "title": "(全部技能可增量合并)",
     "body": [
       "- 结构：24 个模板技能补齐 package/project 区块（此前只有 14-sql-review），",
-      "  项目绑定与证据锚点放进 project 块；-MergeSkills 从此对所有已装技能生效，",
-      "  旧的无标记安装仍按标题认领，不丢项目小节",
-      "- 文案：骨架说明里的字面 slot 注释改为普通注释，避免区块化后被判成",
-      "  「槽位落在 package 块内」",
-      "- 自检：模板技能没有 project 块（无处放项目事实）直接 FAIL",
+      "  项目绑定与证据锚点放进 project 块。升级 -MergeSkills 从此对所有已装技能",
+      "  生效，不再只能手工并；旧的无标记安装仍按标题认领，不丢项目小节",
+      "- 文案：模板骨架说明里的字面 `<!-- slot:… -->` 改为 `slot:` 注释，否则",
+      "  区块化后会被判成\"槽位落在 package 块内\"",
+      "- 自检：模板技能若没有 project 块（无处放项目事实）直接 FAIL",
       "- 文档：质量分级技能行数与 README 的 markers 计数同步为 25"
     ]
   },
   {
     "version": "1.27.3",
-    "title": "(五角色审查：把「看起来有」改成「真的挡得住」)",
+    "title": "(五角色审查：把\"看起来有\"改成\"真的挡得住\")",
     "body": [
-      "- 修复：AGENTS.md 的「先定档再落盘」行含尖括号占位符，属于已知行合并",
-      "  范围，升级会把它写回项目并让 verify 必红；现已去掉",
-      "- 修复：agents-delta 只认 Markdown 标题，而模板用加粗的「必跑命令」",
-      "  标签，全新安装必报 MISSING 并 exit 1；现两种形式都认",
-      "- 修复：red-line-scan 被换成 exit 0 时 verify 仍判 runnable PASS；现按",
-      "  长度与扫描输出行判空壳并 FAIL，smoke 增加反向探针",
-      "- 修复：模板技能零标记时 markers 仍 PASS；质量分级.md 缺失被静默跳过",
-      "- 升级：PENDING 技能不刷新包文本却显示升级成功；审计行新增 pending: N",
-      "- 平台：Claude 改为「一律产出 AGENTS.md + 一行 @AGENTS.md 的 CLAUDE.md」；",
-      "  卸载清理四个平台入口；CodeBuddy 子代理纳入升级"
+      "- 修复（升级会写回占位符）：AGENTS.md 的「先定档再落盘」行含 <特性>，",
+      "  它属于已知行合并范围，会把尖括号写回项目并让 verify 必红；去掉尖括号",
+      "- 修复（安装即失败）：agents-delta 只认 Markdown 标题，而模板用",
+      "  **必跑命令** 加粗标签，导致全新安装必报 [MISSING] 并 exit 1；现两种",
+      "  形式都认，并补断言",
+      "- 修复（门禁可被一次提交关停）：red-line-scan.ps1 被换成 exit 0 时，",
+      "  verify-harness 仍判 runnable PASS；现按长度与扫描输出行判空壳并 FAIL，",
+      "  smoke 增加反向探针",
+      "- 修复（自检死断言）：模板技能一个标记都没有时 markers 仍 PASS；现直接",
+      "  FAIL。references/质量分级.md 纳入必需文件，缺失不再静默跳过",
+      "- 修复（升级状态不透明）：PENDING 技能不会刷新包文本却显示升级成功；",
+      "  审计行新增 pending: N，并在有 PENDING 时打印 WARN",
+      "- 修复（平台）：Claude 的 CLAUDE.md 与 verify 只认 AGENTS.md 冲突，改为",
+      "  「一律产出 AGENTS.md，CLAUDE.md 仅一行 @AGENTS.md」；卸载清理四个平台",
+      "  的技能入口；CodeBuddy 子代理纳入升级",
+      "- 测试：agents-delta 接受加粗标签、pending 计数入审计行两条断言"
     ]
   },
   {
@@ -377,23 +445,24 @@
     "title": "(改名技能升级路径修复)",
     "body": [
       "- 修复：update-harness 按 frontmatter name 匹配到改名技能后，用",
-      "  Substring(根目录长度) 反推相对路径；CI 的 %TEMP% 是 8.3 短名，",
-      "  而 Get-ChildItem 返回长名，切片落在目录中间（roj\\.harness\\...），",
-      "  合并结果写到错误位置，改名技能升级静默失效。现按 .harness\\skills\\",
-      "  固定布局锚定",
+      "  Substring(根目录长度) 反推相对路径；CI 的 %TEMP% 是 8.3 短名",
+      "  （C:\\Users\\RUNNER~1\\...），而 Get-ChildItem 返回长名，两者长度不同，",
+      "  切片落在目录中间（roj\\.harness\\...），合并结果写到错误位置，导致",
+      "  改名技能升级静默失效。现改为按 .harness\\skills\\ 固定布局锚定",
+      "- 测试：改名技能的四条断言在 CI 上就是该缺陷的回归用例，修复后转绿",
       "- CI：行为测试失败时把全部 FAIL 行写进 ::error:: 注解，公开 run 页面",
-      "  无需登录即可定位失败原因"
+      "  无需登录即可定位（此前只看到 \"Process completed with exit code 1.\"）"
     ]
   },
   {
     "version": "1.27.1",
     "title": "(升级占位符误判修复)",
     "body": [
-      "- 修复：Templates 的 R5/R6 检查格、记录关联行、提交信息行原先用尖括号",
-      "  包住说明文字；升级 MERGE 会把它们写回项目，被 verify-harness 判为",
-      "  「模板占位符残留」而 FAIL，且重跑只会再写回一次。现保留 scoped 文案，",
-      "  只去掉尖括号",
-      "- 测试：test-update.ps1 增加断言，锁住「合并进项目的行不含占位符」"
+      "- 修复：templates/AGENTS.md 与 templates/.harness/rules/编码规范.md 的",
+      "  R5/R6 检查格、记录关联行、提交信息行原先用 <...> 包住说明文字；升级",
+      "  MERGE 会把它们写回项目，被 verify-harness 判为「模板占位符残留」而",
+      "  FAIL，且重跑只会再写回一次。现保留 scoped 文案、只去掉尖括号",
+      "- 测试：test-update.ps1 增加 4 条断言，锁住「合并进项目的行不含占位符」"
     ]
   },
   {
