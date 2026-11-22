@@ -57,8 +57,15 @@ param(
     [string[]]$ExcludeDir = @('.git', 'node_modules', 'target', 'dist', 'build', 'out', 'coverage', '.harness', '.trae', '.idea'),
     [string[]]$Rules,
     [switch]$ListRules,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -81,7 +88,7 @@ if (-not $ruleSet -or $ruleSet.Count -eq 0) { throw "No rules defined in $RulesF
 
 if ($ListRules) {
     $ruleSet | Select-Object id, name, include, hint | Format-Table -AutoSize -Wrap
-    exit 0
+    Complete-Harness 0
 }
 
 if ($Rules) {
@@ -160,7 +167,7 @@ if ($DiffFromStdin -or $DiffFile) {
     $useIndex = $true
     if ($addedLines.Count -eq 0) {
         if (-not $Quiet) { Write-Host "[OK] red-line scan passed: no added line in diff" -ForegroundColor Green }
-        exit 0
+        Complete-Harness 0
     }
     $Files = @($addedLines.Keys)
 }
@@ -229,7 +236,7 @@ if ($explicitList -and $missingPaths.Count -gt 0 -and -not $Quiet) {
 
 if ($explicitList -and $allFiles.Count -eq 0) {
     Write-Host "[FAIL] red-line scan: 0 files scanned from the explicit file list; a list that scans nothing is not a pass" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 
 # ---- scan -----------------------------------------------------------------
@@ -322,7 +329,7 @@ if ($violations.Count -eq 0) {
     if (-not $Quiet) {
         Write-Host "[OK] red-line scan passed: 0 violation ($($allFiles.Count) files scanned)" -ForegroundColor Green
     }
-    exit 0
+    Complete-Harness 0
 }
 
 Write-Host "[FAIL] red-line scan found $($violations.Count) violation(s):" -ForegroundColor Red
@@ -341,4 +348,4 @@ foreach ($group in ($violations | Group-Object Rule)) {
 
 Write-Host "Red lines are zero-tolerance: STOP -> FIX -> re-verify from the affected stage." -ForegroundColor Red
 Write-Host "(See AGENTS.md 'red lines' and the encoding spec's 'red line summary'.)"
-exit 1
+Complete-Harness 1

@@ -54,8 +54,15 @@ param(
     [switch]$Compare,
     [switch]$Json,
     [switch]$Quiet,
-    [switch]$LessonGate
+    [switch]$LessonGate,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
@@ -666,8 +673,8 @@ if ($LessonGate) {
             Write-Host 'lesson gate: every repeated lesson has a registered check' -ForegroundColor Green
         }
     }
-    if ($bad.Count -gt 0) { exit 1 }
-    exit 0
+    if ($bad.Count -gt 0) { Complete-Harness 1 }
+    Complete-Harness 0
 }
 
 # Write the lessons lookup table. The script stays pure ASCII; the note values
@@ -1046,7 +1053,7 @@ if ($Json) {
         verdict = $verdict
     }
     $out | ConvertTo-Json -Depth 6
-    exit 0
+    Complete-Harness 0
 }
 
 if (-not $Quiet) {
@@ -1101,4 +1108,4 @@ if (-not $Quiet) {
     foreach ($v in $verdict) { Write-Host ("  - " + $v) }
     Write-Host ""
 }
-exit 0
+Complete-Harness 0

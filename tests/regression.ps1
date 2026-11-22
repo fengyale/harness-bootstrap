@@ -1,11 +1,17 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿param([string]$TestRoot = '')
+$ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\regression')
+}
 $pkg  = Split-Path -Parent $PSScriptRoot
-$proj = Join-Path $env:TEMP 'hb-install-test\proj2'
+$proj = Join-Path $TestRoot 'proj2'
 $fail = 0
+. (Join-Path $PSScriptRoot 'test-lib.ps1')
 
 function Step([string]$Name) { Write-Host ""; Write-Host "=== $Name ===" -ForegroundColor Cyan }
 
-if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
+if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $TestRoot | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
 Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
 
@@ -76,9 +82,14 @@ $tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
 Step 'check-summary initial / final'
+# CLI parity: the first run keeps a real -File call, and the in-process run of
+# the same input must agree on the exit code.
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage initial
 if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL FAILED" -ForegroundColor Red; $script:fail++ }
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final
+$cliInitialCode = $LASTEXITCODE
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'initial' } | Out-Null
+if ($LASTEXITCODE -ne $cliInitialCode) { Write-Host "IN-PROCESS INITIAL DISAGREES WITH -File" -ForegroundColor Red; $script:fail++ }
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "FINAL FAILED" -ForegroundColor Red; $script:fail++ }
 
 Step 'initial validates content, not the close-out counts'
@@ -93,7 +104,7 @@ $bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_sk
 $bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: demo'
 $bad = $bad -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2'
 Set-Content -LiteralPath (Join-Path $badDir 'summary.md') -Value $bad -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $badDir 'summary.md') -Stage initial | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $badDir 'summary.md'); Stage = 'initial' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "INITIAL ACCEPTED A SUMMARY WITH PLACEHOLDER CONTENT" -ForegroundColor Red; $script:fail++ }
 
 # Corrections are only knowable at close-out, so their absence must not block
@@ -102,20 +113,20 @@ $noCounts = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])corrections:[^\r\n]*', '' -rep
 $countDir = Join-Path $proj '.harness\changes\no-counts'
 New-Item -ItemType Directory -Force -Path $countDir | Out-Null
 Set-Content -LiteralPath (Join-Path $countDir 'summary.md') -Value $noCounts -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $countDir 'summary.md') -Stage initial | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $countDir 'summary.md'); Stage = 'initial' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL REJECTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $countDir 'summary.md') -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $countDir 'summary.md'); Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
 # These two fixtures are probes, not tasks: leaving them in .harness/changes
 # would add demo-lesson to the lesson counter and break stage 10 below.
 Remove-Item -LiteralPath $badDir, $countDir -Recurse -Force
 
 Step 'stage-gate -All'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -All -Feature demo
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; All = $true; Feature = 'demo' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "STAGE GATE FAILED" -ForegroundColor Red; $script:fail++ }
 
 Step 'metrics -Days 14 -Compare'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Compare
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Compare = $true } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "METRICS FAILED" -ForegroundColor Red; $script:fail++ }
 
 Step 'assoc_skip events are counted and the ignored case is called out'
@@ -131,11 +142,11 @@ $evt = @(
     ('{"event":"assoc_skip","ts":"' + $tsNow + '","reason":"not-committed"}')
 ) -join "`r`n"
 [System.IO.File]::AppendAllText($gateLog, $evt + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
-$mj = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$mj = Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Json = $true } | Out-String
 $jj = $mj | ConvertFrom-Json
 if ($jj.attributionSkipped -ne 2) { Write-Host "ASSOC SKIP NOT COUNTED: $($jj.attributionSkipped)" -ForegroundColor Red; $script:fail++ }
 if ($jj.attributionSkippedIgnored -ne 1) { Write-Host "IGNORED SUBTYPE NOT COUNTED: $($jj.attributionSkippedIgnored)" -ForegroundColor Red; $script:fail++ }
-$mt = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 | Out-String
+$mt = Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14 } | Out-String
 if ($mt -notmatch 'attribution skipped: 2 \(ignored \.harness: 1\)') { Write-Host "ATTRIBUTION LINE MISSING" -ForegroundColor Red; $script:fail++ }
 if ($mt -notmatch 'ignored: the gate is off by accident') { Write-Host "IGNORED VERDICT MISSING" -ForegroundColor Red; $script:fail++ }
 
@@ -147,7 +158,7 @@ $small = @(
     ('| {0} | small-demo | L1 | none | 1 | 0 | small-lesson -- 小改 | demo | 小改 |' -f $smallDate)
 ) -join "`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value $small -Encoding UTF8
-$m = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$m = Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Json = $true } | Out-String
 $j = $m | ConvertFrom-Json
 if ($j.tasks -ne 2) { Write-Host "SMALL RECORD NOT COUNTED: tasks=$($j.tasks)" -ForegroundColor Red; $script:fail++ }
 if (-not $j.lessons.'small-lesson') { Write-Host "SMALL LESSON NOT COUNTED" -ForegroundColor Red; $script:fail++ }
@@ -159,7 +170,7 @@ Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
     '| | broken | L1 | none | 1 | 0 | bad | demo | short |',
     '| 2026-11-05 | short | L1 | none | 1 | 0 |'
 ) -Encoding UTF8
-$m2 = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$m2 = Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Json = $true } | Out-String
 $j2 = $m2 | ConvertFrom-Json
 if ($j2.smallRecordErrors -lt 1) { Write-Host "MALFORMED SMALL ROWS NOT REPORTED" -ForegroundColor Red; $script:fail++ }
 if ($j2.tasks -ne 2) { Write-Host "MALFORMED SMALL ROWS CHANGED task count: $($j2.tasks)" -ForegroundColor Red; $script:fail++ }
@@ -177,7 +188,7 @@ function Set-ReviewProbe {
 }
 function Invoke-ReviewProbe {
     param([string]$ProbeStage)
-    & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $reviewDir 'summary.md') -Stage $ProbeStage | Out-Null
+    Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $reviewDir 'summary.md'); Stage = $ProbeStage } | Out-Null
     return $LASTEXITCODE
 }
 
@@ -231,7 +242,7 @@ $cfgLoose = $cfgText | ConvertFrom-Json
 $cfgLoose.reviewLedgerStrict = $false
 [System.IO.File]::WriteAllText($cfgFile, (($cfgLoose | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 $looseCode = Invoke-ReviewProbe 'review'
-$looseOut = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -File (Join-Path $reviewDir 'summary.md') -Stage review 2>&1 | Out-String
+$looseOut = Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $reviewDir 'summary.md'); Stage = 'review' } | Out-String
 $cfgLoose.reviewLedgerStrict = $true
 [System.IO.File]::WriteAllText($cfgFile, (($cfgLoose | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 if ($looseCode -ne 0) { Write-Host "NON-STRICT MODE REJECTED A MISSING REVIEW TABLE" -ForegroundColor Red; $script:fail++ }
@@ -251,7 +262,7 @@ foreach ($name in @('review-agg-a', 'review-agg-b')) {
     $t = $tpl -replace '(?m)^\| - \| - \| 不适用 \|.*$', $aggRow
     Set-Content -LiteralPath (Join-Path $d 'summary.md') -Value $t -Encoding UTF8
 }
-$aggJson = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 14 -Json | Out-String
+$aggJson = Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Json = $true } | Out-String
 $aj = $aggJson | ConvertFrom-Json
 if ($aj.reviewTotals.P1 -lt 2) { Write-Host "REVIEW TOTALS NOT COUNTED: $($aj.reviewTotals.P1)" -ForegroundColor Red; $script:fail++ }
 $rv = Get-Content "$proj\.harness\reviews.md" -Raw -Encoding UTF8
@@ -264,34 +275,34 @@ Add-Content -LiteralPath "$proj\.harness\changes\_small.md" -Value @(
     ('| {0} | dup-a | L1 | none | 1 | 0 | dup-lesson -- first | demo | a |' -f $smallDate),
     ('| {0} | dup-b | L1 | none | 1 | 0 | dup-lesson -- second | demo | b |' -f $smallDate)
 ) -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A REPEATED LESSON WITHOUT A CHECK" -ForegroundColor Red; $script:fail++ }
 # Existence is not relevance: the check file must name the lesson it covers.
 Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', '# fails-when: a summary records the same lesson id twice and this suite must exit 1', 'exit 0') -Encoding ASCII
 Add-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value 'dup-lesson :: check=scripts/check-dup.ps1::duplicate lesson blocked' -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "LESSON GATE REJECTED A REGISTERED CHECK" -ForegroundColor Red; $script:fail++ }
 # A check that never mentions the id is an unrelated script, not evidence.
 $lp = Get-Content "$proj\.harness\lessons-promoted.txt" -Raw -Encoding UTF8
 $lpWrong = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/red-line-scan.ps1'
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lpWrong.TrimEnd() -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A CHECK THAT DOES NOT NAME THE LESSON" -ForegroundColor Red; $script:fail++ }
 # Naming the lesson is not enough either: the check must declare what makes it red.
 Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', 'exit 0') -Encoding ASCII
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A CHECK WITHOUT fails-when" -ForegroundColor Red; $script:fail++ }
 Set-Content -LiteralPath "$proj\scripts\check-dup.ps1" -Value @('# lesson: dup-lesson', '# fails-when: a summary records the same lesson id twice and this suite must exit 1', 'exit 0') -Encoding ASCII
 # A promoted lesson that points at a file which does not exist is not evidence.
 $lp = $lp -replace 'check=scripts/check-dup\.ps1', 'check=scripts/does-not-exist.ps1'
 Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "LESSON GATE ACCEPTED A MISSING CHECK FILE" -ForegroundColor Red; $script:fail++ }
 # A doc or a directory proves nothing; only an executable check counts.
 foreach ($bad in @('.harness/lessons.md', '.harness')) {
     $lp = $lp -replace 'check=scripts/check-dup\.ps1', ('check=' + $bad)
     Set-Content -LiteralPath "$proj\.harness\lessons-promoted.txt" -Value $lp.TrimEnd() -Encoding UTF8
-    & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -LessonGate | Out-Null
+    Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; LessonGate = $true } | Out-Null
     if ($LASTEXITCODE -eq 0) { Write-Host ("LESSON GATE ACCEPTED A NON-EXECUTABLE CHECK: " + $bad) -ForegroundColor Red; $script:fail++ }
     $lp = $lp -replace ('check=' + [regex]::Escape($bad)), 'check=scripts/check-dup.ps1'
 }
@@ -311,18 +322,18 @@ function Set-SqlReview {
     Set-Content -LiteralPath $sumPath -Value $t -Encoding UTF8
 }
 Set-SqlReview 'sql_review: demo.t · 语法 未验证(no sandbox) · 结构 未验证 · 绑定 未验证 · 结果 未验证 · 计划 未跑 · 结论 通过'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "CONTRADICTORY SQL REVIEW ACCEPTED" -ForegroundColor Red; $script:fail++ }
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/explain.txt) · 计划 type=ref · 结论 通过'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "CONSISTENT SQL REVIEW REJECTED" -ForegroundColor Red; $script:fail++ }
 # "pass" written by hand with no locatable artefact is self-report, not evidence.
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验 · 计划 type=ref · 结论 通过'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "SQL PASS WITHOUT AN EVIDENCE PATH ACCEPTED" -ForegroundColor Red; $script:fail++ }
 # A cited evidence path is a claim: it must exist on disk.
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/missing.txt) · 计划 未跑 · 结论 待 DBA'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "MISSING SQL EVIDENCE ACCEPTED" -ForegroundColor Red; $script:fail++ }
 # The review may only use data sources the compiled skill declares.
 $skillDir = "$proj\.harness\skills\biz-dev\14-sql-review"
@@ -334,11 +345,11 @@ $skillText = @(
 ) -join "`r`n"
 Set-Content -LiteralPath "$skillDir\SKILL.md" -Value $skillText -Encoding UTF8
 Set-SqlReview 'sql_review: THIRD_ORACLE.v_mz_hzcfxx · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(fixture) · 计划 未跑 · 结论 待 DBA'
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "UNDECLARED DATA SOURCE ACCEPTED" -ForegroundColor Red; $script:fail++ }
 $skillText2 = $skillText -replace 'oracle_main / his_mssql', 'oracle_main / his_mssql / THIRD_ORACLE'
 Set-Content -LiteralPath "$skillDir\SKILL.md" -Value $skillText2 -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final | Out-Null
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "DECLARED DATA SOURCE REJECTED" -ForegroundColor Red; $script:fail++ }
 Remove-Item -LiteralPath $skillDir -Recurse -Force
 Remove-Item -LiteralPath $sqlEvDir -Recurse -Force
@@ -350,7 +361,7 @@ $sfSrc = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
 $sfProse = "## 待补短板" + "`r`n" + "需要补一个规则" + "`r`n" + "还在排期"
 $sfText = $sfSrc -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', $sfProse
 Set-Content -LiteralPath $sumPath -Value $sfText -Encoding UTF8
-$sfOut = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 6 -Feature demo 2>&1 | Out-String
+$sfOut = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-String
 if ($LASTEXITCODE -eq 0) { Write-Host "SHORTFALL PROSE ACCEPTED" -ForegroundColor Red; $script:fail++ }
 if (($sfOut -notmatch 'none') -or ($sfOut -notmatch 'N/A') -or ($sfOut -notmatch '无')) { Write-Host "SHORTFALL DETAIL DOES NOT LIST THE CONFIGURED MARKERS" -ForegroundColor Red; $script:fail++ }
 Set-Content -LiteralPath $sumPath -Value $sfSrc -Encoding UTF8
@@ -360,24 +371,24 @@ $s = Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8
 $s2 = $s -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', ''
 $s2 = $s2 + "`r`n待补短板一节省略，结论已写在别处。`r`n"
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $s2 -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 6 -Feature demo | Out-Null
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "spoof correctly rejected" } else { Write-Host "SPOOF ACCEPTED" -ForegroundColor Red; $script:fail++ }
 
 Step 'red-line-scan -Files splits a comma list'
 Set-Content -LiteralPath "$proj\a.java" -Value 'class A { void f() { throw new RuntimeException("x"); } }' -Encoding ASCII
 Set-Content -LiteralPath "$proj\b.java" -Value 'class B { void f() { throw new RuntimeException("x"); } }' -Encoding ASCII
-$rlBoth = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'a.java,b.java' 2>&1 | Out-String
+$rlBoth = Invoke-Harness "$proj\scripts\red-line-scan.ps1" @{ Root = $proj; Files = 'a.java,b.java' } | Out-String
 if ($LASTEXITCODE -ne 1) { Write-Host "COMMA LIST DID NOT FAIL: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
 if (($rlBoth -notmatch 'a\.java') -or ($rlBoth -notmatch 'b\.java')) { Write-Host "COMMA LIST DID NOT SCAN BOTH FILES" -ForegroundColor Red; $script:fail++ }
 
 Step 'red-line-scan fails closed on an explicit list with 0 files'
-$rlNone = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'missing1.java,missing2.java' 2>&1 | Out-String
+$rlNone = Invoke-Harness "$proj\scripts\red-line-scan.ps1" @{ Root = $proj; Files = 'missing1.java,missing2.java' } | Out-String
 if ($LASTEXITCODE -ne 1) { Write-Host "0-FILE EXPLICIT LIST PASSED: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
 if ($rlNone -notmatch '\[FAIL\]') { Write-Host "0-FILE EXPLICIT LIST DID NOT PRINT [FAIL]" -ForegroundColor Red; $script:fail++ }
 if ($rlNone -match '\[OK\]') { Write-Host "0-FILE EXPLICIT LIST STILL PRINTED [OK]" -ForegroundColor Red; $script:fail++ }
 
 Step 'red-line-scan warns about missing paths but still scans the rest'
-$rlPart = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\red-line-scan.ps1" -Root $proj -Files 'a.java,missing.java' 2>&1 | Out-String
+$rlPart = Invoke-Harness "$proj\scripts\red-line-scan.ps1" @{ Root = $proj; Files = 'a.java,missing.java' } | Out-String
 if ($LASTEXITCODE -ne 1) { Write-Host "PARTIAL LIST DID NOT FAIL: exit $LASTEXITCODE" -ForegroundColor Red; $script:fail++ }
 if ($rlPart -notmatch '\[WARN\]') { Write-Host "PARTIAL LIST DID NOT PRINT [WARN]" -ForegroundColor Red; $script:fail++ }
 if ($rlPart -notmatch 'missing\.java') { Write-Host "PARTIAL LIST DID NOT NAME THE SKIPPED PATH" -ForegroundColor Red; $script:fail++ }

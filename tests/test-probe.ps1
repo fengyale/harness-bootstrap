@@ -10,12 +10,17 @@
 
   Pure ASCII; never writes into this repository.
 #>
+param([string]$TestRoot = '')
 $ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\test-probe')
+}
+if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
 
 $script = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\probe-project.ps1'
-$proj   = Join-Path $env:TEMP ('hb-probe-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-$empty  = Join-Path $env:TEMP ('hb-probe-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '-empty')
-$absOut = Join-Path $env:TEMP ('hb-probe-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '-out')
+$proj   = Join-Path $TestRoot 'proj'
+$empty  = Join-Path $TestRoot 'empty'
+$absOut = Join-Path $TestRoot 'out'
 $fail = 0
 
 function Check {
@@ -173,10 +178,14 @@ try {
     Check 'extension histogram is stable' (((@($ext1 | Sort-Object) -join ',')) -eq ((@($ext2 | Sort-Object) -join ',')))
 
 } finally {
-    foreach ($d in @($proj, $empty, $absOut)) {
-        if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
-    }
+    if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force -ErrorAction SilentlyContinue }
 }
+
+Write-Host '=== release.ps1 self test ===' -ForegroundColor Cyan
+$relScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\release.ps1'
+$relOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $relScript -SelfTest 2>&1 | Out-String
+Check 'release.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'release.ps1 self test reports OK' ($relOut -match 'RELEASE SELFTEST OK')
 
 if ($fail -gt 0) {
     Write-Host "FAILED: $fail check(s)" -ForegroundColor Red

@@ -46,8 +46,15 @@
 param(
     [string]$Root = (Get-Location).Path,
     [switch]$Write,
-    [switch]$Check
+    [switch]$Check,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -282,13 +289,13 @@ foreach ($target in $targets) {
 }
 
 if ($Write) {
-    if ($bad -gt 0) { exit 1 }
+    if ($bad -gt 0) { Complete-Harness 1 }
     if ($wrote -eq 0) { Write-Output 'skills-index: nothing to update' }
-    exit 0
+    Complete-Harness 0
 }
 
 if ($bad -gt 0) {
-    exit 1
+    Complete-Harness 1
 }
 Write-Output ("skills-index: in sync ({0} skill(s) in {1} file(s))" -f $rows.Count, $targets.Count)
-exit 0
+Complete-Harness 0

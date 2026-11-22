@@ -50,8 +50,15 @@ param(
     [string]$Root = (Get-Location).Path,
     [int]$WarnSkillLines = 250,
     [int]$MaxGrounded = 0,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -793,7 +800,7 @@ Write-Host ("RESULT pass={0} warn={1} fail={2}" -f $passCount, $warnCount, $fail
 if ($failCount -gt 0) {
     Write-Host ""
     Write-Host "Fix the FAIL rows above, then re-run this script." -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 
-exit 0
+Complete-Harness 0

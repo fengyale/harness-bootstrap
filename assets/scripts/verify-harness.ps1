@@ -42,8 +42,15 @@ param(
     [string]$Root = (Get-Location).Path,
     [int]$MaxAgentsLines = 150,
     [switch]$Quiet,
-    [switch]$IgnoreHooks
+    [switch]$IgnoreHooks,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -1004,7 +1011,7 @@ Write-Host ("RESULT pass={0} warn={1} fail={2}" -f $passCount, $warnCount, $fail
 if ($failCount -gt 0) {
     Write-Host ""
     Write-Host "Fix the FAIL rows above, then re-run this script." -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 
 if ($warnCount -gt 0) {
@@ -1012,4 +1019,4 @@ if ($warnCount -gt 0) {
 Write-Host "No blockers. WARN rows are optional hardening (see references/ on landing strategy)." -ForegroundColor Yellow
 }
 
-exit 0
+Complete-Harness 0

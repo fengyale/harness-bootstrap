@@ -10,10 +10,15 @@
 
   Pure ASCII; never writes into this repository.
 #>
+param([string]$TestRoot = '')
 $ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\test-audit-order')
+}
+if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
 
 $script = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\audit-order.ps1'
-$proj = Join-Path $env:TEMP ('hb-audit-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$proj = Join-Path $TestRoot ('audit-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $fail = 0
 
 function Check {
@@ -137,14 +142,14 @@ try {
     # Without origin/main the script must refuse instead of guessing a range.
     Check 'missing base exits 2 when it cannot derive one' (($LASTEXITCODE -eq 2) -or ($out -match '\[ERROR\]'))
 } finally {
-    Remove-Item -LiteralPath $proj -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $TestRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host '=== ignored record directory ===' -ForegroundColor Cyan
 # A .gitignore entry for .harness/changes used to look exactly like "first
 # harness adoption", so the gate stayed green forever. It must now fail and
 # name the cause, and an explicit recordsTracked=false must turn it into a skip.
-$proj2 = Join-Path $env:TEMP ('hb-audit-ign-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$proj2 = Join-Path $TestRoot ('audit-ign-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 try {
     New-Item -ItemType Directory -Force -Path $proj2 | Out-Null
     & git -C $proj2 init -q
@@ -171,13 +176,13 @@ try {
         if ($oldTask2) { $env:HARNESS_TASK = $oldTask2 }
     }
 } finally {
-    Remove-Item -LiteralPath $proj2 -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $TestRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host '=== no records and no ignore: still a first adoption ===' -ForegroundColor Cyan
 # The fail-closed branch must not swallow a genuine first install: no .harness
 # at all and no .gitignore entry still has to skip, not fail.
-$proj3 = Join-Path $env:TEMP ('hb-audit-new-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$proj3 = Join-Path $TestRoot ('audit-new-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 try {
     New-Item -ItemType Directory -Force -Path $proj3 | Out-Null
     & git -C $proj3 init -q
@@ -190,7 +195,7 @@ try {
     $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Root $proj3 -Base $b3 -Feature demo 2>&1 | Out-String
     Check 'a real first adoption still skips' (($LASTEXITCODE -eq 0) -and ($out3 -match 'first harness adoption'))
 } finally {
-    Remove-Item -LiteralPath $proj3 -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $TestRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ''

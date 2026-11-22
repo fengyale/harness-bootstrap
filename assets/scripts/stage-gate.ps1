@@ -33,8 +33,15 @@ param(
     [string]$Feature = '',
     [string]$Root = (Get-Location).Path,
     [switch]$All,
-    [switch]$ListStages
+    [switch]$ListStages,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 $rootPath    = (Resolve-Path -LiteralPath $Root).Path
@@ -472,7 +479,7 @@ if ($ListStages) {
         }
     }
     Write-Host ""
-    exit 0
+    Complete-Harness 0
 }
 
 $targets = @()
@@ -562,6 +569,6 @@ foreach ($d in $targets) {
 }
 
 Write-Host ""
-if ($anyFail) { Write-Host "Gate result: BLOCKED" -ForegroundColor Red; exit 1 }
+if ($anyFail) { Write-Host "Gate result: BLOCKED" -ForegroundColor Red; Complete-Harness 1 }
 Write-Host "Gate result: OPEN" -ForegroundColor Green
-exit 0
+Complete-Harness 0

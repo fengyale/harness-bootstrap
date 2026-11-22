@@ -81,8 +81,15 @@ param(
     [switch]$KeepBackup,
     [switch]$PruneBackups,
     [switch]$NoMergeKnown,
-    [switch]$KeepL1
+    [switch]$KeepL1,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 $MergeKnown = -not $NoMergeKnown
@@ -110,17 +117,17 @@ if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\stage-gate.ps1'))) 
 $versionFile = Join-Path $pkgPath 'VERSION'
 if (-not (Test-Path -LiteralPath $versionFile)) {
     Write-Host "not a harness package (VERSION missing): $pkgPath" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\stage-gate.ps1'))) {
     Write-Host "not a harness package (assets\scripts missing; legacy name is templates\scripts): $pkgPath" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 # The checker itself must be in the package. A truncated package used to result
 # in "verification skipped" and UPDATE OK; fail before touching the project.
 if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\verify-harness.ps1'))) {
     Write-Host "package is incomplete: assets\scripts\verify-harness.ps1 missing" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 # A project-level skill install places the package source under .trae/skills.
 # Templates are not project assets; warn instead of silently moving/removing a
@@ -132,7 +139,7 @@ if (Test-Path -LiteralPath $projectSkill) {
 
 if (-not (Test-Path -LiteralPath (Join-Path $rootPath '.harness'))) {
     Write-Host "not an installed harness (.harness missing): $rootPath" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 
 $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
@@ -153,7 +160,7 @@ function Get-Hash {
 $newVersion = Read-Version $versionFile
 if (-not $newVersion) {
     Write-Host "cannot read a x.y.z version from $versionFile" -ForegroundColor Red
-    exit 1
+    Complete-Harness 1
 }
 
 # The marker is new; older installs do not have it. Fall back to the skill copy
@@ -1018,7 +1025,7 @@ Write-Host ("add={0} update={1} merge={2} move={3} compact={4} skip={5} manual={
 if (-not $Apply) {
     Write-Host ''
     Write-Host 'No file changed. Re-run with -Apply to execute the plan.' -ForegroundColor Yellow
-    exit 0
+    Complete-Harness 0
 }
 
 # -------------------------------------------------------------------- apply
@@ -1218,7 +1225,7 @@ if ($failed -gt 0) {
     Write-Host ("backup kept for rollback: {0}" -f $backupRoot) -ForegroundColor Yellow
     Write-Host ("roll back with: Copy-Item '{0}\*' '{1}' -Recurse -Force" -f $backupRoot, $rootPath) -ForegroundColor Yellow
     Write-Host 'version marker was NOT advanced; fix the failures and re-run the upgrade.' -ForegroundColor Yellow
-    exit 1
+    Complete-Harness 1
 }
 
 Ensure-Gitignore
@@ -1293,4 +1300,4 @@ if ($PruneBackups) {
 }
 
 Write-Host ("UPDATE OK: {0} -> {1}; backup: {2}" -f $installedVersion, $newVersion, $backupState) -ForegroundColor Green
-exit 0
+Complete-Harness 0

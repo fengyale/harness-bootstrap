@@ -53,8 +53,15 @@ param(
     [ValidateSet('initial', 'final', 'review')]
     [string]$Stage = 'final',
     [switch]$OnlySqlReview,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$NoExit
 )
+
+function Complete-Harness {
+    param([int]$Code)
+    if ($NoExit) { throw ('__HARNESS_EXIT__' + $Code) }
+    exit $Code
+}
 
 $ErrorActionPreference = 'Stop'
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
@@ -64,17 +71,17 @@ if ($File) {
 } elseif ($Feature) {
     if ($Feature -eq '_template') {
         if (-not $Quiet) { Write-Host '[OK] _template skipped' }
-        exit 0
+        Complete-Harness 0
     }
     $path = Join-Path (Join-Path (Join-Path $rootPath '.harness') 'changes') (Join-Path $Feature 'summary.md')
 } else {
     Write-Host '[FAIL] input: need -Feature or -File'
-    exit 1
+    Complete-Harness 1
 }
 
 if (-not (Test-Path -LiteralPath $path)) {
     Write-Host "[FAIL] summary: not found at $path"
-    exit 1
+    Complete-Harness 1
 }
 
 $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
@@ -541,10 +548,10 @@ if ($OnlySqlReview) {
     if ($fails.Count -gt 0) {
         foreach ($f in $fails) { Write-Host "[FAIL] $f" }
         Write-Host "check-summary: $($fails.Count) fail(s)"
-        exit 1
+        Complete-Harness 1
     }
     if (-not $Quiet) { Write-Host '[OK] sql_review content valid' }
-    exit 0
+    Complete-Harness 0
 }
 
 if ($Stage -eq 'review') {
@@ -552,10 +559,10 @@ if ($Stage -eq 'review') {
     if ($fails.Count -gt 0) {
         foreach ($f in $fails) { Write-Host "[FAIL] $f" }
         Write-Host "check-summary: $($fails.Count) fail(s)"
-        exit 1
+        Complete-Harness 1
     }
     if (-not $Quiet) { Write-Host '[OK] review ledger valid' }
-    exit 0
+    Complete-Harness 0
 }
 
 # ---------------------------------------------------------------- required now
@@ -660,7 +667,7 @@ if ($Stage -eq 'final') {
 if ($fails.Count -gt 0) {
     foreach ($f in $fails) { Write-Host "[FAIL] $f" }
     Write-Host "check-summary: $($fails.Count) fail(s)"
-    exit 1
+    Complete-Harness 1
 }
 
 if (-not $Quiet) { Write-Host '[OK] summary fields valid' }
@@ -679,4 +686,4 @@ if ($Feature -and -not $File) {
         }
     } catch { }
 }
-exit 0
+Complete-Harness 0

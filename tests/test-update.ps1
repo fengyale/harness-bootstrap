@@ -20,13 +20,18 @@
   NOTE
     Pure ASCII. Skipped hooks/verify so the fixture does not need a git repo.
 #>
+param([string]$TestRoot = '')
 $ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\test-update')
+}
 
 $pkg = Split-Path -Parent $PSScriptRoot
-$base = Join-Path $env:TEMP 'hb-update-test'
+$base = $TestRoot
 $proj = Join-Path $base 'proj'
 $newPkg = Join-Path $base 'newpkg'
 $fail = 0
+. (Join-Path $PSScriptRoot 'test-lib.ps1')
 
 function Check {
     param([string]$Name, [bool]$Condition)
@@ -407,8 +412,13 @@ Set-Content -LiteralPath "$newPkg\assets\.trae\agents\new-agent.md" -Value '# ag
 # ------------------------------------------------------------------ dry run
 Write-Host ''
 Write-Host '=== dry run ===' -ForegroundColor Cyan
+# CLI parity: the first dry run stays a real -File call; the same input through
+# the in-process path must return the same exit code.
 $dry = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'DRY RUN FAILED' -ForegroundColor Red; $fail++ }
+$dryCliCode = $LASTEXITCODE
+$null = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj } | Out-String
+Check 'in-process dry run agrees with -File' ($LASTEXITCODE -eq $dryCliCode)
 Write-Host $dry
 
 Check 'fixture skill exists' (Test-Path -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md")
@@ -445,16 +455,16 @@ Check 'dry-run marks project rule MANUAL'  ($dry -match ('\[MANUAL\]\s+' + [rege
 
 Write-Host ''
 Write-Host '=== dry run with -UpdateSkills ===' -ForegroundColor Cyan
-$drySkills = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -UpdateSkills 2>&1 | Out-String
+$drySkills = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; UpdateSkills = $true } | Out-String
 Check 'dry-run: uncompiled skill UPDATE' ($drySkills -match '\[UPDATE\].*main-dev\\coding-skill\\SKILL\.md')
 Check 'dry-run: compiled skill MANUAL' ((($drySkills -match '\[MANUAL\].*main-dev\\compiled-skill\\SKILL\.md') -and ($drySkills -match 'no slot markers')))
 Check 'dry-run: skill index MANUAL' ($drySkills -match '\[MANUAL\].*\.harness\\skills\\README\.md')
-$dryForce = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -UpdateSkills -ForceSkills 2>&1 | Out-String
+$dryForce = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; UpdateSkills = $true; ForceSkills = $true } | Out-String
 Check 'dry-run warns that -ForceSkills resets skills' ($dryForce -match 'ForceSkills resets installed skills')
 
 Write-Host ''
 Write-Host '=== dry run with -MergeSkills ===' -ForegroundColor Cyan
-$dryMerge = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -MergeSkills 2>&1 | Out-String
+$dryMerge = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; MergeSkills = $true } | Out-String
 Check 'dry-run: marker skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-skill\\SKILL\.md')
 Check 'dry-run: legacy skill MERGE' ($dryMerge -match '\[MERGE\s*\].*main-dev\\merge-legacy\\SKILL\.md')
 Check 'dry-run: missing project block PENDING' ($dryMerge -match '\[PENDING\s*\].*main-dev\\merge-pending\\SKILL\.md')
@@ -467,7 +477,7 @@ Check 'dry-run: no line-limit reason' ($dryMerge -notmatch 'hard limit 120')
 # -------------------------------------------------------------------- apply
 Write-Host ''
 Write-Host '=== apply ===' -ForegroundColor Cyan
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -SkipHooks -SkipVerify 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'APPLY FAILED' -ForegroundColor Red; $fail++ }
 
 Check 'stage-gate replaced' ((Select-String -LiteralPath "$proj\scripts\stage-gate.ps1" -Pattern 'upgrade-test-marker' -Quiet))
@@ -575,7 +585,7 @@ Check 'manifest written' (Test-Path -LiteralPath (Join-Path $backup.FullName 'ma
 # ------------------------------------------------------------------ skills
 Write-Host ''
 Write-Host '=== apply with -UpdateSkills ===' -ForegroundColor Cyan
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -UpdateSkills -SkipHooks -SkipVerify -PruneBackups 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; UpdateSkills = $true; SkipHooks = $true; SkipVerify = $true; PruneBackups = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
 
 Check 'installed skill replaced with -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -match 'upgraded-skill')
@@ -592,7 +602,7 @@ $pendingFile = "$proj\.harness\skills\main-dev\merge-pending\SKILL.md"
 $bigFile = "$proj\.harness\skills\main-dev\merge-big\SKILL.md"
 $pendingBefore = [System.IO.File]::ReadAllText($pendingFile, [System.Text.Encoding]::UTF8)
 $bigBefore = [System.IO.File]::ReadAllText($bigFile, [System.Text.Encoding]::UTF8)
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -MergeSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; MergeSkills = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'MERGE APPLY FAILED' -ForegroundColor Red; $fail++ }
 
 $mergeAfter = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8)
@@ -641,7 +651,7 @@ Check 'big: merged above the old cap' (($bigAfter -ne $bigBefore) -and ($bigAfte
 
 $mergeStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8)
 $legacyStable = [System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8)
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -MergeSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; MergeSkills = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'MERGE REPEAT FAILED' -ForegroundColor Red; $fail++ }
 Check 'merge second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-skill\SKILL.md", [System.Text.Encoding]::UTF8) -eq $mergeStable)
 Check 'legacy second run is idempotent' ([System.IO.File]::ReadAllText("$proj\.harness\skills\main-dev\merge-legacy\SKILL.md", [System.Text.Encoding]::UTF8) -eq $legacyStable)
@@ -653,7 +663,7 @@ Check 'audit line records the pending count' ($markerAfterMerge -match 'pending:
 
 Write-Host ''
 Write-Host '=== apply with -ForceSkills ===' -ForegroundColor Cyan
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -UpdateSkills -ForceSkills -SkipHooks -SkipVerify 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; UpdateSkills = $true; ForceSkills = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'FORCE SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
 Check 'compiled skill replaced with -ForceSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -match 'upgraded-compiled')
 # The reset must leave slot markers behind: that is why verify-grounding will
@@ -668,7 +678,7 @@ Write-Host '=== apply with verification deletes the backup ===' -ForegroundColor
 # A no-op verifier lets this fixture exercise the delete-after-verify branch
 # without needing a full installed harness.
 Set-Content -LiteralPath "$newPkg\assets\scripts\verify-harness.ps1" -Value 'exit 0' -Encoding ASCII
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $newPkg -Root $proj -Apply -SkipHooks -PruneBackups 2>&1 | Out-String
+Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj; Apply = $true; SkipHooks = $true; PruneBackups = $true } | Out-String
 if ($LASTEXITCODE -ne 0) { Write-Host 'VERIFIED APPLY FAILED' -ForegroundColor Red; $fail++ }
 $upgradeDirs = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Directory -Force -ErrorAction SilentlyContinue)
 Check 'verified upgrade prunes backups' ($upgradeDirs.Count -eq 0)
@@ -720,7 +730,7 @@ $legacyPkg = Join-Path $base 'legacypkg'
 if (Test-Path -LiteralPath $legacyPkg) { Remove-Item -LiteralPath $legacyPkg -Recurse -Force }
 Copy-Item -LiteralPath $newPkg -Destination $legacyPkg -Recurse
 Rename-Item -LiteralPath (Join-Path $legacyPkg 'assets') -NewName 'templates'
-$outLegacy = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\update-harness.ps1" -PackagePath $legacyPkg -Root $proj 2>&1 | Out-String
+$outLegacy = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $legacyPkg; Root = $proj } | Out-String
 Check 'legacy templates/ layout accepted' ($LASTEXITCODE -eq 0)
 Check 'legacy layout is reported' ($outLegacy -match 'legacy package layout')
 

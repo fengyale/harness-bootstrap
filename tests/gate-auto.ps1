@@ -1,15 +1,35 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿param([string]$TestRoot = '', [switch]$Profile)
+$ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\gate-auto')
+}
 $pkg  = Split-Path -Parent $PSScriptRoot
-$proj = Join-Path $env:TEMP 'hb-install-test\proj3'
+$proj = Join-Path $TestRoot 'proj3'
 $fail = 0
+. (Join-Path $PSScriptRoot 'test-lib.ps1')
 
-function Step([string]$Name) { Write-Host ""; Write-Host "=== $Name ===" -ForegroundColor Cyan }
+# -Profile records how long each Step took. The suite spends most of its time
+# in child powershell.exe + git hook processes, so step timings say whether a
+# hook or a direct script call dominates.
+$script:stepTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$script:stepName = 'start'
+$script:stepTimes = New-Object System.Collections.Generic.List[object]
+function Step([string]$Name) {
+    if ($Profile -and $script:stepName) {
+        $script:stepTimes.Add([pscustomobject]@{ Step = $script:stepName; Seconds = [math]::Round($script:stepTimer.Elapsed.TotalSeconds, 2) })
+    }
+    $script:stepTimer.Restart()
+    $script:stepName = $Name
+    Write-Host ""
+    Write-Host "=== $Name ===" -ForegroundColor Cyan
+}
 function Expect([string]$Label, [int]$Code, [int]$Want) {
     if ($Code -eq $Want) { Write-Host ("ok: {0} (exit {1})" -f $Label, $Code) }
     else { Write-Host ("BAD: {0} exit={1} want={2}" -f $Label, $Code, $Want) -ForegroundColor Red; $script:fail++ }
 }
 
-if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
+if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $TestRoot | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\rules" | Out-Null
 Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
@@ -51,14 +71,19 @@ $tpl = $tpl -replace '(?m)^- 与已有特性的关系：.*$', '- 与已有特性
 $tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
+# CLI parity: this first check stays a real -File call, and the same input
+# through the in-process path must return the same code.
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage initial -Quiet
-Expect 'flow "L2 (standard)"' $LASTEXITCODE 0
+$cliInitialCode = $LASTEXITCODE
+Expect 'flow "L2 (standard)"' $cliInitialCode 0
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'initial'; Quiet = $true } | Out-Null
+Expect 'in-process check-summary agrees with -File' $LASTEXITCODE $cliInitialCode
 
 # full-width parens are built from a code point so this .ps1 can stay readable
 $fw = 'flow: L2' + [char]0xFF08 + 'standard' + [char]0xFF09
 $t2 = (Get-Content "$proj\.harness\changes\demo\summary.md" -Raw -Encoding UTF8) -replace 'flow: L2 \(standard\)', $fw
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $t2 -Encoding UTF8
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage final -Quiet
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final'; Quiet = $true } | Out-Null
 Expect 'flow with full-width parens' $LASTEXITCODE 0
 
 Step 'compiles / tests-green are machine checked'
@@ -85,27 +110,27 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\metrics" | Out-Null
 $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 Add-Content -LiteralPath "$proj\.harness\metrics\gate.jsonl" -Value ('{"event":"scan","ts":"' + $ts + '","blocked":0,"files":1,"hunks":1}') -Encoding UTF8
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature demo | Out-Null
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-Null
 Expect 'stage 3 with failing compile' $LASTEXITCODE 1
 
 # stage 5 depends on the same compile row, so fix it before testing the test row
 $fixed = $agents.Replace('`exit 1`', '`exit 0`').Replace('| 跑全部测试 | `exit 0` |', '| 跑全部测试 | `exit 1` |')
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed, (New-Object System.Text.UTF8Encoding($true)))
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 5 -Feature demo | Out-Null
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-Null
 Expect 'stage 5 with failing tests' $LASTEXITCODE 1
 
 $fixed2 = $fixed.Replace('| 跑全部测试 | `exit 1` |', '| 跑全部测试 | `exit 0` |')
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed2, (New-Object System.Text.UTF8Encoding($true)))
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 5 -Feature demo | Out-Null
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-Null
 Expect 'stage 5 with passing tests' $LASTEXITCODE 0
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature demo | Out-Null
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-Null
 Expect 'stage 3 with passing compile' $LASTEXITCODE 0
 
 # no compile row at all -> FAIL/BLOCKED (declared-but-empty is SKIP; absent is a gap)
 $noCmd = ($fixed2 -split "`r?`n" | Where-Object { $_ -notmatch '编译 / 类型检查' }) -join "`r`n"
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $noCmd, (New-Object System.Text.UTF8Encoding($true)))
-$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature demo 2>&1 | Out-String
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-String
 Expect 'stage 3 without a compile row' $LASTEXITCODE 1
 if ($out -match '\[FAIL\].*compiles') { Write-Host 'ok: missing command row is reported as FAIL' }
 else { Write-Host 'BAD: missing row not reported as FAIL' -ForegroundColor Red; $fail++ }
@@ -115,7 +140,7 @@ $ph = ($fixed2 -split "`r?`n" | ForEach-Object {
     if ($_ -match '编译 / 类型检查') { '| 编译 / 类型检查 | `<待实测>` |' } else { $_ }
 }) -join "`r`n"
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $ph, (New-Object System.Text.UTF8Encoding($true)))
-$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature demo 2>&1 | Out-String
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-String
 Expect 'stage 3 with a placeholder compile row' $LASTEXITCODE 0
 if ($out -match '\[SKIP\].*compiles') { Write-Host 'ok: placeholder row is reported as SKIP' }
 else { Write-Host 'BAD: placehold row not reported as SKIP' -ForegroundColor Red; $fail++ }
@@ -503,21 +528,20 @@ Remove-Item -LiteralPath "$proj\L1big.java" -Force -ErrorAction SilentlyContinue
 
 Step 'stage-gate prints a paste-ready declaration and names the missing skill'
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed2, (New-Object System.Text.UTF8Encoding($true)))
-$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 1 -Feature demo 2>&1 | Out-String
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '1'; Feature = 'demo' } | Out-String
 Expect 'stage 1 with an existing record' $LASTEXITCODE 0
 if ($out -match 'DECLARE: record=\.harness/changes/demo/summary\.md \| flow=L2') {
     Write-Host 'ok: stage 1 prints DECLARE with the flow value'
 } else { Write-Host 'BAD: stage 1 did not print a DECLARE line' -ForegroundColor Red; $fail++ }
 
-$out = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 3 -Feature nosuch 2>&1 | Out-String
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'nosuch' } | Out-String
 Expect 'stage 3 without any record' $LASTEXITCODE 1
 if ($out -match '\[HINT\].*request-analysis') {
     Write-Host 'ok: a missing record names request-analysis'
 } else { Write-Host 'BAD: a missing record did not name the skill' -ForegroundColor Red; $fail++ }
 
 Step 'pre-commit reports an ignored .harness instead of passing silently'
-$ig = Join-Path $env:TEMP 'hb-install-test\proj-ignore'
-if (Test-Path $ig) { Remove-Item $ig -Recurse -Force }
+$ig = Join-Path $TestRoot 'proj-ignore'
 New-Item -ItemType Directory -Force -Path "$ig\.harness\changes\demo", "$ig\.harness\metrics", "$ig\.harness\rules" | Out-Null
 [System.IO.File]::WriteAllText("$ig\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change is committed.`n", (New-Object System.Text.UTF8Encoding($false)))
 Copy-Item "$pkg\assets\scripts" "$ig\scripts" -Recurse
@@ -545,8 +569,7 @@ Step 'a weaker rule table cannot ride along with violating code'
 # One `git add` used to lower a rule and land the violation together: the scan
 # read the weakened table from the worktree and passed. The table must be
 # committed on its own, so the previous table stays in force for the code.
-$ruleProj = Join-Path $env:TEMP 'hb-install-test\proj-rule'
-if (Test-Path $ruleProj) { Remove-Item $ruleProj -Recurse -Force }
+$ruleProj = Join-Path $TestRoot 'proj-rule'
 New-Item -ItemType Directory -Force -Path "$ruleProj\.harness\changes", "$ruleProj\.harness\metrics", "$ruleProj\.harness\rules" | Out-Null
 [System.IO.File]::WriteAllText("$ruleProj\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change.`n", (New-Object System.Text.UTF8Encoding($false)))
 Copy-Item "$pkg\assets\scripts" "$ruleProj\scripts" -Recurse
@@ -591,7 +614,7 @@ $sumMut = ($sumMut -split "`r?`n" | Where-Object { $_ -notmatch '(?<![A-Za-z0-9_
 [System.IO.File]::WriteAllText($sumPath, $sumMut, (New-Object System.Text.UTF8Encoding($false)))
 $savedEap = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-$s10 = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 10 -Feature demo 2>&1 | Out-String
+$s10 = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '10'; Feature = 'demo' } | Out-String
 $ErrorActionPreference = $savedEap
 if ($s10 -match 'corrections-attributed') {
     if ($s10 -match '(?m)^\s*\[FAIL\].*corrections-attributed|corrections-attributed.*FAIL') {
@@ -607,7 +630,7 @@ if ($s10 -match 'corrections-attributed') {
 $sumFixed = $sumMut + "`r`n- lesson_id: demo-lesson`r`n"
 [System.IO.File]::WriteAllText($sumPath, $sumFixed, (New-Object System.Text.UTF8Encoding($false)))
 $ErrorActionPreference = 'Continue'
-$s10b = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\stage-gate.ps1" -Root $proj -Stage 10 -Feature demo 2>&1 | Out-String
+$s10b = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '10'; Feature = 'demo' } | Out-String
 $ErrorActionPreference = $savedEap
 if ($s10b -match '(?m)^\s*\[PASS\].*corrections-attributed|corrections-attributed.*PASS') {
     Write-Host 'ok: a real lesson_id clears the row'
@@ -616,6 +639,18 @@ if ($s10b -match '(?m)^\s*\[PASS\].*corrections-attributed|corrections-attribute
     $fail++
 }
 [System.IO.File]::WriteAllText($sumPath, $sumOrig, (New-Object System.Text.UTF8Encoding($false)))
+
+if ($Profile) {
+    if ($script:stepName) {
+        $script:stepTimes.Add([pscustomobject]@{ Step = $script:stepName; Seconds = [math]::Round($script:stepTimer.Elapsed.TotalSeconds, 2) })
+        $script:stepName = ''
+    }
+    Write-Host ""
+    Write-Host 'profile: top 10 slowest steps' -ForegroundColor Cyan
+    $script:stepTimes | Sort-Object Seconds -Descending | Select-Object -First 10 | ForEach-Object {
+        Write-Host ("  {0,-58} {1,8:N2}s" -f $_.Step, $_.Seconds)
+    }
+}
 
 Write-Host ""
 if ($fail -eq 0) { Write-Host 'GATE-AUTO OK' -ForegroundColor Green; exit 0 }

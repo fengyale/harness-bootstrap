@@ -22,9 +22,14 @@
   NOTE
     Pure ASCII on purpose (PS 5.1 parses .ps1 as ANSI without a BOM).
 #>
+param([string]$TestRoot = '')
 $ErrorActionPreference = 'Stop'
+if (-not $TestRoot) {
+    $TestRoot = Join-Path $env:TEMP ('hb-tests-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '\test-skills-registry')
+}
+. (Join-Path $PSScriptRoot 'test-lib.ps1')
 $pkg  = Split-Path -Parent $PSScriptRoot
-$proj = Join-Path $env:TEMP 'hb-install-test\proj4'
+$proj = Join-Path $TestRoot 'proj4'
 $fail = 0
 
 function Step([string]$Name) { Write-Host ""; Write-Host "=== $Name ===" -ForegroundColor Cyan }
@@ -33,7 +38,7 @@ function Check([string]$Label, [bool]$Ok) {
     else { Write-Host "BAD: $Label" -ForegroundColor Red; $script:fail++ }
 }
 function RunVerify {
-    return (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-harness.ps1" -Root $proj 2>&1 | Out-String)
+    return (Invoke-Harness "$proj\scripts\verify-harness.ps1" @{ Root = $proj } | Out-String)
 }
 function New-Skill([string]$Category, [string]$DirName, [string]$Name) {
     $dir = Join-Path $proj ".harness\skills\$Category\$DirName"
@@ -48,7 +53,8 @@ function New-Entry([string]$EntryName, [string]$SourceDir) {
     Copy-Item (Join-Path $SourceDir 'SKILL.md') $dest -Force
 }
 
-if (Test-Path $proj) { Remove-Item $proj -Recurse -Force }
+if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $TestRoot | Out-Null
 Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
 # The fixture skills have no [E1]/[E2] anchors, and a package install is strict.
 # Keep this fixture on the upgrade behaviour (WARN) so the registry assertions
@@ -73,6 +79,16 @@ Set-Content -LiteralPath $indexPath -Value @(
 
 New-Entry 'demo-skill' $demoDir
 
+Step 'in-process vs -File parity'
+# One deliberate CLI run keeps the exit-code contract honest: a regression in
+# Complete-Harness or -NoExit must show up here even though the rest is in-process.
+$out = RunVerify
+$codeIn = $LASTEXITCODE
+$outCli = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-harness.ps1" -Root $proj 2>&1 | Out-String)
+$codeCli = $LASTEXITCODE
+Check 'parity: exit codes agree' ($codeIn -eq $codeCli)
+Check 'parity: both report the same registry failure' (($out -match 'FAIL\] skills-registry') -eq ($outCli -match 'FAIL\] skills-registry'))
+
 Step 'unindexed and unreachable'
 $out = RunVerify
 Check 'registry FAIL is reported' ($out -match 'FAIL\] skills-registry')
@@ -82,7 +98,7 @@ Check 'missing entry is named' ($out -match 'no platform entry')
 Check 'listed and linked skill is not flagged' (-not ($out -match 'main-dev/demo-skill:'))
 
 Step 'metrics names the skill as unregistered'
-$m = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 28 2>&1 | Out-String)
+$m = (Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 28 } | Out-String)
 Check 'metrics reports the skill as not registered' ($m -match 'skill not registered: extra-helper')
 # The retirement side is asserted at the end, where five tasks and an old skill
 # make the verdict observable; a string check here would pass either way.
@@ -131,7 +147,7 @@ for ($i = 1; $i -le 5; $i++) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
     Set-Content -LiteralPath (Join-Path $d 'summary.md') -Value $tpl -Encoding UTF8
 }
-$m = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\metrics.ps1" -Root $proj -Days 28 2>&1 | Out-String)
+$m = (Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 28 } | Out-String)
 Check 'metrics reports the skill as not registered' ($m -match 'skill not registered: orphan-helper')
 Check 'unregistered skill is not a retire candidate' (-not ($m -match 'orphan-helper.*retire candidate'))
 Check 'registered but never loaded is still a retire candidate' ($m -match 'demo-skill.*retire candidate')
@@ -146,7 +162,7 @@ for ($i = 1; $i -le 260; $i++) { $longLines += "filler-$i" }
 [System.IO.File]::WriteAllLines($longFile, $longLines, (New-Object System.Text.UTF8Encoding($false)))
 Add-Content -LiteralPath $indexPath -Value '| `long-skill` | demo |' -Encoding UTF8
 New-Entry 'long-skill' $longDir
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 $gCode = $LASTEXITCODE
 Check 'long skill: verify-grounding still exits 0' ($gCode -eq 0)
 Check 'long skill: reported as a size WARN' ($g -match 'consider moving examples')
@@ -166,14 +182,14 @@ New-Item -ItemType Directory -Force -Path "$proj\src" | Out-Null
 Set-Content -LiteralPath "$proj\src\Main.java" -Value 'class Main { }' -Encoding ASCII
 New-Item -ItemType Directory -Force -Path "$proj\baseline" | Out-Null
 Set-Content -LiteralPath "$proj\baseline\baseline.json" -Value '{"srcRoots":["src"],"testRoots":[]}' -Encoding UTF8
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 $gCode = $LASTEXITCODE
 Check 'placeholder tree fails coverage' ($gCode -eq 1)
 Check 'failure names the structure tree' ($g -match 'coverage.*structure tree')
 [System.IO.File]::WriteAllLines($structPath, @(
     '# structure', '', '```text', 'demo/', '+-- src/', '```', ''
 ), (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'filled tree clears the failure' ($LASTEXITCODE -eq 0)
 
 Step 'coverage: an unfilled wiki table is a warning'
@@ -184,7 +200,7 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\wiki" | Out-Null
 $bizName = (-join ([char]0x4E1A, [char]0x52A1, [char]0x6A21, [char]0x578B)) + '.md'
 Copy-Item -LiteralPath (Join-Path $pkg "assets\.harness\wiki\$bizName") -Destination (Join-Path "$proj\.harness\wiki" $bizName) -Force
 Set-Content -LiteralPath "$proj\.harness\stack.json" -Value '{"orm":"mybatis","cache":"redis","mq":"present"}' -Encoding UTF8
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'template wiki table is reported as a warning' ($g -match 'WARN.*no real row')
 Check 'coverage warning does not fail the run' ($LASTEXITCODE -eq 0)
 
@@ -194,14 +210,14 @@ Step 'fill-depth: a placeholder left in a rule fails'
 # fenced code and inline code must stay legal so generics are not flagged.
 $phLine = '- name: <' + [char]0x5982 + ' PascalCase>'
 Add-Content -LiteralPath $structPath -Value $phLine -Encoding UTF8
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'leftover placeholder fails fill-depth' (($LASTEXITCODE -eq 1) -and ($g -match '\[FAIL\]\s+fill-depth'))
 $kept = @([System.IO.File]::ReadAllLines($structPath, [System.Text.Encoding]::UTF8) | Where-Object { $_ -ne $phLine })
 [System.IO.File]::WriteAllLines($structPath, $kept, (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'real content passes fill-depth' ($LASTEXITCODE -eq 0)
 Add-Content -LiteralPath $structPath -Value ('| a | `List<String>` | `' + [char]0x2026 + '` |') -Encoding UTF8
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'inline code is not a placeholder' ($LASTEXITCODE -eq 0)
 
 Step 'skills index: the directory is the only source of truth'
@@ -212,17 +228,17 @@ Step 'skills index: the directory is the only source of truth'
 Copy-Item -LiteralPath "$pkg\assets\.harness\skills\README.md" -Destination $indexPath -Force
 Copy-Item -LiteralPath "$pkg\assets\AGENTS.md" -Destination "$proj\AGENTS.md" -Force
 $syncScript = "$proj\scripts\sync-skills-index.ps1"
-$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+$si = (Invoke-Harness $syncScript @{ Root = $proj; Check = $true } | Out-String)
 $siCode = $LASTEXITCODE
 Check 'shipped table is stale for this fixture' ($siCode -eq 1)
 Check 'drift is reported under the skills-index name' ($si -match 'skills-index: drift')
 Check 'drift names the file it came from' ($si -match 'drift in \.harness/skills/README\.md')
 $null = New-Skill 'biz-dev' '97-index-helper' 'index-helper'
-$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+$si = (Invoke-Harness $syncScript @{ Root = $proj; Check = $true } | Out-String)
 Check 'adding a skill still fails the check' ($LASTEXITCODE -eq 1)
-$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Write 2>&1 | Out-String)
+$si = (Invoke-Harness $syncScript @{ Root = $proj; Write = $true } | Out-String)
 Check 'write succeeds' ($LASTEXITCODE -eq 0)
-$si = (& powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Root $proj -Check 2>&1 | Out-String)
+$si = (Invoke-Harness $syncScript @{ Root = $proj; Check = $true } | Out-String)
 Check 'check passes after write' ($LASTEXITCODE -eq 0)
 $written = [System.IO.File]::ReadAllText($indexPath, [System.Text.Encoding]::UTF8)
 Check 'the written table lists the new skill' ($written -match '\| biz-dev \| `index-helper` \|')
@@ -240,23 +256,23 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\t-stale" | Out
 $lbl = (-join ([char]0x52A0, [char]0x8F7D, [char]0x6280, [char]0x80FD)) + [char]0xFF1A
 $staleSummary = @('# stale probe', '', ('- ' + $lbl + '`loaded_skills: stale-probe`'))
 [System.IO.File]::WriteAllLines("$proj\.harness\changes\t-stale\summary.md", $staleSummary, (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'loaded + drifted skill fails the stale check' (($LASTEXITCODE -eq 1) -and ($g -match '\[FAIL\]\s+stale'))
 $fixed = @([System.IO.File]::ReadAllLines($staleFile, [System.Text.Encoding]::UTF8) |
     ForEach-Object { if ($_ -match '^- verified:') { '- verified: ' + (Get-Date -Format 'yyyy-MM-dd') } else { $_ } })
 [System.IO.File]::WriteAllLines($staleFile, $fixed, (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 're-verifying clears the stale failure' ($LASTEXITCODE -eq 0)
 
 Step 'groundingStrict: an ungrounded skill fails only when switched on'
 $strictCfg = (Get-Content -LiteralPath $fixtureCfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
 $strictCfg.groundingStrict = $true
 [System.IO.File]::WriteAllText($fixtureCfgPath, (($strictCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'strict mode fails an ungrounded skill' (($LASTEXITCODE -eq 1) -and ($g -match 'groundingStrict=true'))
 $strictCfg.groundingStrict = $false
 [System.IO.File]::WriteAllText($fixtureCfgPath, (($strictCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'upgrade behaviour keeps it a warning' ($LASTEXITCODE -eq 0)
 
 Step 'an empty project block fails even without strict grounding'
@@ -284,13 +300,13 @@ $emptyFile = Join-Path $emptyDir 'SKILL.md'
 ), (New-Object System.Text.UTF8Encoding($false)))
 Add-Content -LiteralPath $indexPath -Value '| `empty-probe` | demo |' -Encoding UTF8
 New-Entry 'empty-probe' $emptyDir
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'empty project block fails' (($LASTEXITCODE -eq 1) -and ($g -match 'carry no project fact'))
 $filled = @([System.IO.File]::ReadAllLines($emptyFile, [System.Text.Encoding]::UTF8) | ForEach-Object {
     if ($_ -match '^## bindings$') { '## bindings'; '- entry: DemoService#get' } else { $_ }
 })
 [System.IO.File]::WriteAllLines($emptyFile, $filled, (New-Object System.Text.UTF8Encoding($false)))
-$g = & powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\verify-grounding.ps1" -Root $proj 2>&1 | Out-String
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'one project fact clears it' ($LASTEXITCODE -eq 0)
 
 Step 'missing README is reported once'
