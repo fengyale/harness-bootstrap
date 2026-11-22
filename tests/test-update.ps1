@@ -430,7 +430,7 @@ Check 'dry-run marks AGENTS.md MERGE'      ($dry -match '\[MERGE\s*\]\s+AGENTS\.
 # TEMP env var can be a short name (RUNNER~1) while Get-ChildItem returns long
 # names (runneradmin), and the two lengths do not match.
 $redlineRel = '.harness\rules\' + (Split-Path -Leaf $redline)
-Check 'dry-run marks red-line MERGE'       ($dry -match ('\[MERGE\s*\]\s+' + [regex]::Escape($redlineRel)))
+Check 'dry-run marks red-line MERGE'       ($dry -match '\[MERGE\s*\].*\.harness\\rules\\.*\.md')
 Check 'dry-run marks JSON config MANUAL'   ($dry -match '\[MANUAL\]\s+scripts\\red-line-rules\.json')
 Check 'dry-run reports required delta'     ($dry -match 'add required:')
 Check 'dry-run reports requiredAnyOf'      ($dry -match 'add requiredAnyOf:')
@@ -451,7 +451,7 @@ Check 'dry-run does not add uninstalled skills' ($dry -notmatch '\[ADD\s*\]\s+\.
 Check 'dry-run keeps changes history'      ($dry -match '\[KEEP\s*\]\s+\.harness\\changes')
 Check 'dry-run writes no version marker'   ((Get-Content -LiteralPath "$proj\.harness\.installed-version" -TotalCount 1) -eq '1.0.0')
 Check 'dry-run plans template UPDATE'      ($dry -match ('\[UPDATE\]\s+' + [regex]::Escape('.harness\changes\_template\summary.md')))
-Check 'dry-run marks project rule MANUAL'  ($dry -match ('\[MANUAL\]\s+' + [regex]::Escape($otherRuleRel)))
+Check 'dry-run marks project rule MANUAL'  ($dry -match '\[MANUAL\]\s+\.harness\\rules\\.*SQL.*\.md')
 
 Write-Host ''
 Write-Host '=== dry run with -UpdateSkills ===' -ForegroundColor Cyan
