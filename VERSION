@@ -1,7 +1,13 @@
-HARNESS-BOOTSTRAP VERSION 1.31.17
+HARNESS-BOOTSTRAP VERSION 1.31.18
 
 changelog
 ---------
+1.31.18  (修复 test-update 的 CI 编码断言)
+- 修复 test-update 在 CI 上的中文规则文件名断言：runner 控制台把 .harness\rules\SQL评审规范.md 显示成 SQL????.md，改为匹配 ASCII 路径 .harness\rules\*.md 与 SQL*.md
+- 1.31.17 的并行 run-all / 唯一 TestRoot / 同进程调用 / tools/release.ps1 不变
+- 1.31.17 的 CI 因该断言失败，未发 GitHub Release；1.31.18 是同一功能的修复版
+- 本机 test-update -Throttle 1 通过（23.9s）；全量 CI 由 1.31.18 重新验证
+
 1.31.17  (测试提速与 release.ps1)
 - run-all 并行：六套唯一 -TestRoot，墙钟从 sum 变 max；本机 6 并发 807s（旧 1901.7s，约 13.5 分钟）
 - 开发期用 -Changed / -Suite；全量只在打包前跑一次，不再“先单跑再全量”

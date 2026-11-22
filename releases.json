@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.31.18",
+    "title": "(修复 test-update 的 CI 编码断言)",
+    "body": [
+      "- 修复 test-update 在 CI 上的中文规则文件名断言：runner 控制台把 .harness\\rules\\SQL评审规范.md 显示成 SQL????.md，改为匹配 ASCII 路径 .harness\\rules\\*.md 与 SQL*.md",
+      "- 1.31.17 的并行 run-all / 唯一 TestRoot / 同进程调用 / tools/release.ps1 不变",
+      "- 1.31.17 的 CI 因该断言失败，未发 GitHub Release；1.31.18 是同一功能的修复版",
+      "- 本机 test-update -Throttle 1 通过（23.9s）；全量 CI 由 1.31.18 重新验证"
+    ]
+  },
+  {
     "version": "1.31.17",
     "title": "(测试提速与 release.ps1)",
     "body": [
