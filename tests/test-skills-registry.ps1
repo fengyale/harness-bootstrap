@@ -341,6 +341,26 @@ $fixed = @([System.IO.File]::ReadAllLines($agentFile, [System.Text.Encoding]::UT
 $out = RunVerify
 Check 'filling the placeholder clears the warn' (-not ($out -match 'placeholders'))
 
+Step 'productivity: four proxies, unknown is not a pass'
+# This fixture has no gate.jsonl and is not a git repository, so every
+# productivity metric must degrade to n/a / unknown. Crediting those tasks as
+# first-pass would make the metric useless exactly where evidence is missing.
+$pj = (Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 28; Json = $true } | Out-String)
+$j = $null
+try { $j = ($pj | ConvertFrom-Json) } catch { $j = $null }
+Check 'metrics -Json carries the four productivity fields' ($null -ne $j -and
+    $null -ne $j.PSObject.Properties['firstPassRate'] -and
+    $null -ne $j.PSObject.Properties['gateRoundTrips'] -and
+    $null -ne $j.PSObject.Properties['leadTime'] -and
+    $null -ne $j.PSObject.Properties['reuseRate'])
+Check 'no gate log: first pass rate is n/a' ($null -ne $j -and $null -eq $j.firstPassRate)
+Check 'tasks without gate events are unknown, not passes' ($null -ne $j -and $j.gateRoundTrips.unknown -eq $j.tasks)
+Check 'no commits: lead time is unknown' ($null -ne $j -and $j.leadTime.measured -eq 0 -and $null -eq $j.leadTime.averageDays)
+Check 'no repeated skill: reuse is n/a' ($null -ne $j -and $j.reuseRate.pairs -eq 0 -and $null -eq $j.reuseRate.rate)
+$pc = (Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 28 } | Out-String)
+Check 'console prints the productivity section' ($pc -match 'productivity:')
+Check 'console prints n/a for the unmeasurable metrics' (($pc -match 'first pass rate: n/a') -and ($pc -match 'lead time: n/a'))
+
 Write-Host ''
 if ($fail -eq 0) { Write-Host 'SKILLS REGISTRY TEST OK' -ForegroundColor Green; exit 0 }
 Write-Host "SKILLS REGISTRY TEST FAILED: $fail check(s)" -ForegroundColor Red

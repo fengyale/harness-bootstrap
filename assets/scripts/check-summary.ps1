@@ -227,6 +227,7 @@ function Test-RealContent {
         $t = $line.Trim()
         if ($t.Length -eq 0) { continue }
         if ($t -match '^#{1,6}\s') { continue }
+        if ($t -match '^>') { continue }
         if ($t -match '^\|?\s*:?-{2,}') { $afterSeparator = $true; continue }
         if ($t -match '^\|') {
             # A row before the separator is the header row (field names only).
@@ -242,6 +243,9 @@ function Test-RealContent {
         }
         if ($RequireTableRow) { continue }
         $clean = ($t -replace '^[-*]\s+', '') -replace '`', ''
+        # A labelled bullet such as "- module: <placeholder>" must be judged by
+        # the value after the label, not by the label's first character.
+        $clean = $clean -replace '^[^:\uFF1A]{1,24}[:\uFF1A]\s*', ''
         if (-not (Test-Placeholder $clean)) { return $true }
     }
     return $false
@@ -296,6 +300,79 @@ function Get-ReviewList {
     $v = Get-ReviewCfg $Name
     if ($null -eq $v) { return @() }
     return @($v | ForEach-Object { [string]$_ })
+}
+
+# Delivery status is the terminal state of the record: "delivered but not
+# committed", "committed but not deployed", "deployed", or "not applicable". The
+# allowed words are Chinese, so they live in harness-required.json. A status of
+# "deployed" is a claim that the deployment record exists; the other values let
+# a task close without inventing a fake deployment row.
+$script:deliveryCfg = $null
+$script:deliveryStrict = $false
+if (Test-Path -LiteralPath $cfgPath) {
+    try {
+        $cfgAll = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json
+        if ($cfgAll.PSObject.Properties['deliveryStatus']) { $script:deliveryCfg = $cfgAll.deliveryStatus }
+        if ($cfgAll.PSObject.Properties['deliveryStatusStrict']) { $script:deliveryStrict = [bool]$cfgAll.deliveryStatusStrict }
+    } catch { }
+}
+
+function Get-DeliveryCfg {
+    param([string]$Name)
+    if (-not $script:deliveryCfg) { return $null }
+    $p = $script:deliveryCfg.PSObject.Properties[$Name]
+    if ($p) { return $p.Value }
+    return $null
+}
+
+function Assert-DeliveryStatus {
+    if (-not $script:deliveryCfg) {
+        Write-Host '[WARN] delivery_status: config missing; terminal state not checked' -ForegroundColor Yellow
+        return
+    }
+    $fieldName = 'delivery_status'
+    $cfgField = Get-DeliveryCfg 'field'
+    if ($cfgField) { $fieldName = [string]$cfgField }
+
+    $status = Get-FieldRaw $fieldName
+    if (Test-Placeholder $status) {
+        if ($script:deliveryStrict) {
+            Add-Fail $fieldName 'missing or placeholder (write delivered-not-committed / committed-not-deployed / deployed / not-applicable)'
+        } else {
+            Write-Host '[WARN] delivery_status: missing (upgrade keeps WARN; set deliveryStatusStrict=true after the first record)' -ForegroundColor Yellow
+        }
+        return
+    }
+
+    $statuses = @(Get-DeliveryCfg 'statuses' | ForEach-Object { [string]$_ })
+    $deployed = [string](Get-DeliveryCfg 'deployed')
+    if ($statuses.Count -gt 0 -and $statuses -notcontains $status) {
+        Add-Fail $fieldName ("value '" + $status + "' is not one of: " + ($statuses -join ', '))
+        return
+    }
+
+    # Only "deployed" promises a real deployment row. The other statuses are the
+    # explicit way to say the change never went out, which is why the template no
+    # longer demands a filled table from every L2 task.
+    if ($deployed -and $status -eq $deployed) {
+        $sections = @(Get-DeliveryCfg 'deployRecordSections' | ForEach-Object { [string]$_ } | Where-Object { $_.Length -gt 0 })
+        if ($sections.Count -eq 0) { $sections = @($fieldName) }
+        # A row of six dashes is the laziest possible fake record. Require the
+        # first cell (time) to look like a date, so "deployed" leaves a trace.
+        $lines = Get-SectionLines -Needles $sections
+        $hasDated = $false
+        if ($null -ne $lines) {
+            foreach ($line in $lines) {
+                $t = $line.Trim()
+                if ($t -notmatch '^\|') { continue }
+                $cells = @($t.Trim('|').Split('|') | ForEach-Object { ($_ -replace '`', '').Trim() })
+                if ($cells.Count -gt 0 -and $cells[0] -match '^\d{4}[-/]\d{1,2}[-/]\d{1,2}') { $hasDated = $true; break }
+            }
+        }
+        if (-not $hasDated) {
+            Add-Fail $fieldName 'status says deployed but the deployment record has no row with a date'
+        }
+    }
 }
 
 function Assert-SqlReview {
@@ -598,8 +675,16 @@ elseif ($flow -notmatch '^L[123]([ \t]|$|[\(\uFF08])') { Add-Fail 'flow' 'must b
 if (-not (Test-RealContent -Needles (Get-ContentNeedles 'acceptance') -RequireTableRow)) {
     Add-Fail 'acceptance' 'feature table has no real row (fill every acceptance criterion, not the template slot)'
 }
-if (-not (Test-RealContent -Needles (Get-ContentNeedles 'impact'))) {
-    Add-Fail 'impact' 'impact section is empty (modules / interfaces / tables, or an explicit "none")'
+# "Impact" may be written either as the short impact section or as the technical
+# change list; a task that only touches one of them must not be blocked. At least
+# one of the configured sections must carry a real line.
+$impactNeedles = @(Get-ContentNeedles 'impact')
+$impactOk = ($impactNeedles.Count -eq 0)
+foreach ($impactName in $impactNeedles) {
+    if (Test-RealContent -Needles @($impactName)) { $impactOk = $true; break }
+}
+if (-not $impactOk) {
+    Add-Fail 'impact' 'impact is empty (fill the impact section or the technical change list; an explicit "none" also counts)'
 }
 if (-not (Test-RealContent -Needles (Get-ContentNeedles 'tasks') -RequireTableRow)) {
     Add-Fail 'tasks' 'task table has no real row (split the work into tasks, each <= 4h)'
@@ -661,6 +746,24 @@ if ($Stage -eq 'final') {
 
     Assert-SqlReview
     Assert-ReviewLedger -Mode 'final'
+
+    # The terminal state is a field, not a hope: "deployed" must point at a real
+    # deployment row, the other values are the explicit "never went out" answer.
+    Assert-DeliveryStatus
+
+    # Cross-repo work keeps one summary per repository; this field points at the
+    # other repository's record. The gate cannot open another repository, so only
+    # presence and non-placeholder are checked ("-" means no cross-repo record).
+    # Skipped when the deliveryStatus block is absent, so an upgraded project with
+    # an old config keeps working while its config is being merged.
+    if ($script:deliveryCfg) {
+        $linked = Get-FieldRaw 'linked_records'
+        # The field is optional for older records: a single-repo task may never
+        # have had it. If it is present, it must not be a placeholder.
+        if ($null -ne $linked -and (Test-Placeholder $linked)) {
+            Add-Fail 'linked_records' 'placeholder (write repo:path or a URL, or - when there is no cross-repo record)'
+        }
+    }
 }
 
 # --------------------------------------------------------------------- report

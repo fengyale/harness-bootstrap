@@ -187,6 +187,24 @@ $relOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $relScript -Self
 Check 'release.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
 Check 'release.ps1 self test reports OK' ($relOut -match 'RELEASE SELFTEST OK')
 
+Write-Host '=== suggest-flow.ps1 self test ===' -ForegroundColor Cyan
+$sfScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\suggest-flow.ps1'
+$sfOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $sfScript -SelfTest 2>&1 | Out-String
+Check 'suggest-flow.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'suggest-flow.ps1 self test reports OK' ($sfOut -match 'SUGGEST-FLOW SELFTEST OK')
+
+Write-Host '=== harness-plan.ps1 self test ===' -ForegroundColor Cyan
+$hpScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\harness-plan.ps1'
+$hpOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $hpScript -SelfTest 2>&1 | Out-String
+Check 'harness-plan.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'harness-plan.ps1 self test reports OK' ($hpOut -match 'PLAN SELFTEST OK')
+
+Write-Host '=== metrics.ps1 self test ===' -ForegroundColor Cyan
+$metScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\metrics.ps1'
+$metOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $metScript -SelfTest 2>&1 | Out-String
+Check 'metrics.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'metrics.ps1 self test reports OK' ($metOut -match 'METRICS SELFTEST OK')
+
 if ($fail -gt 0) {
     Write-Host "FAILED: $fail check(s)" -ForegroundColor Red
     exit 1

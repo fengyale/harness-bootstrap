@@ -826,7 +826,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
           <thead><tr><th>字段</th><th>阶段 1 / pre-commit</th><th>阶段 10</th></tr></thead>
           <tbody>
             <tr><td><code>flow</code> / <code>touched_modules</code> / <code>loaded_skills</code> / <code>load_skip_reason</code></td><td>必填</td><td>保留</td></tr>
-            <tr><td>验收标准 / 业务影响 / 任务拆分（三节内容）</td><td><strong>必填，占位符即拒</strong></td><td>保留</td></tr>
+            <tr><td>验收标准 / 影响面（或技术变更清单）/ 任务拆分（三节内容）</td><td><strong>必填，占位符即拒</strong></td><td>保留</td></tr>
             <tr><td><code>corrections</code> / <code>impl_corrections</code></td><td>不查（做完才知道，先写只能是假数）</td><td>必填；<code>impl_corrections</code> 不得大于 <code>corrections</code></td></tr>
             <tr><td><code>lesson_id</code></td><td>不查（WIP 提交不骚扰）</td><td>必填；<code>corrections ≥ 1</code> 时必须是真实 kebab-case id，无教训写 <code>-</code></td></tr>
             <tr><td><code>sql_review</code></td><td>staged diff 含 SQL 时查结论（结论与四层是否矛盾）</td><td>必填；无 SQL 写「无 SQL 变更」；结论「通过」时四层不得有未验证项，引用的证据路径必须存在，数据源必须在编译后的绑定里</td></tr>

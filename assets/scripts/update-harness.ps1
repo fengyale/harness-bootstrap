@@ -97,7 +97,7 @@ $MergeKnown = -not $NoMergeKnown
 # One list for both the delta report and the actual merge. Two copies used to be
 # maintained by hand, so adding a key could report "by hand" while the merge
 # quietly did it (or vice versa). Keep this the only place to edit.
-$script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict', 'reviewLedger', 'reviewLedgerStrict')
+$script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict', 'reviewLedger', 'reviewLedgerStrict', 'deliveryStatus', 'deliveryStatusStrict')
 
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $pkgPath = (Resolve-Path -LiteralPath $PackagePath).Path
@@ -221,7 +221,7 @@ function Get-RequiredDelta {
         # Configuration blocks that the checkers read. A new script with an old
         # config silently skips its new check (check-summary returns early when
         # sqlReview / summaryContent is absent), so these must be named.
-        foreach ($key in @('sqlReview', 'summaryContent', 'recordsTracked', 'reviewLedger')) {
+        foreach ($key in @('sqlReview', 'summaryContent', 'recordsTracked', 'reviewLedger', 'deliveryStatus')) {
             $srcHas = ($src.PSObject.Properties.Name -contains $key)
             $dstHas = ($dst.PSObject.Properties.Name -contains $key)
             if ($srcHas -and -not $dstHas) { $parts += ('add ' + $key + ' (new config block)') }
@@ -238,6 +238,10 @@ function Get-RequiredDelta {
         if (($src.PSObject.Properties.Name -contains 'reviewLedgerStrict') -and
             -not ($dst.PSObject.Properties.Name -contains 'reviewLedgerStrict')) {
             $parts += 'add reviewLedgerStrict: false (upgrade keeps WARN; set true after the first review table is filled)'
+        }
+        if (($src.PSObject.Properties.Name -contains 'deliveryStatusStrict') -and
+            -not ($dst.PSObject.Properties.Name -contains 'deliveryStatusStrict')) {
+            $parts += 'add deliveryStatusStrict: false (upgrade keeps WARN; set true after the first delivery_status is filled)'
         }
         # Old projects that followed the previous "delete the rule" opt-out may
         # have left the gate scripts behind. Without this hint the new pair
@@ -434,7 +438,7 @@ function Merge-RequiredJson {
     # are new keys in 1.29-1.31; without them the new check-summary silently
     # returns early, so an upgrade would ship the script but not the gate.
     # Derived from $script:MergeKeys so the report and the merge cannot drift.
-    $copyKeys = @($script:MergeKeys | Where-Object { @('required', 'requiredAnyOf', 'sqlGate', 'groundingStrict', 'reviewLedgerStrict') -notcontains $_ })
+    $copyKeys = @($script:MergeKeys | Where-Object { @('required', 'requiredAnyOf', 'sqlGate', 'groundingStrict', 'reviewLedgerStrict', 'deliveryStatusStrict') -notcontains $_ })
     foreach ($key in $copyKeys) {
         if (($src.PSObject.Properties.Name -contains $key) -and
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
@@ -452,6 +456,12 @@ function Merge-RequiredJson {
     if (($src.PSObject.Properties.Name -contains 'reviewLedgerStrict') -and
         -not ($cfg.PSObject.Properties.Name -contains 'reviewLedgerStrict')) {
         $cfg | Add-Member -NotePropertyName reviewLedgerStrict -NotePropertyValue $false
+    }
+    # Same migration default for the delivery status: old summaries have no
+    # delivery_status yet, so strict would fail them on day one.
+    if (($src.PSObject.Properties.Name -contains 'deliveryStatusStrict') -and
+        -not ($cfg.PSObject.Properties.Name -contains 'deliveryStatusStrict')) {
+        $cfg | Add-Member -NotePropertyName deliveryStatusStrict -NotePropertyValue $false
     }
     [System.IO.File]::WriteAllText($DstPath, (($cfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
     return $true

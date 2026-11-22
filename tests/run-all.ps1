@@ -116,7 +116,10 @@ function Get-ChangedSuites {
             Add-Suite @('gate-auto.ps1', 'regression.ps1'); continue
         }
         if ($p -match '^assets/scripts/(metrics|verify-harness|verify-grounding|sync-skills-index)\.ps1$') {
-            Add-Suite @('regression.ps1', 'test-skills-registry.ps1'); continue
+            Add-Suite @('regression.ps1', 'test-skills-registry.ps1', 'test-probe.ps1'); continue
+        }
+        if ($p -match '^assets/scripts/(suggest-flow|harness-plan)\.ps1$') {
+            Add-Suite @('test-probe.ps1'); continue
         }
         if ($p -match '^assets/\.harness/skills/') {
             Add-Suite @('regression.ps1', 'test-skills-registry.ps1'); continue

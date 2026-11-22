@@ -75,10 +75,15 @@ $tpl = $tpl -replace '(?m)^\| `<P0/P1/P2>` \|.*$', '| - | - | 不适用 | - | �
 # initial checks the three content sections: a filled field block alone is not
 # an analysis, so the fixture must fill them like a real one would.
 $tpl = $tpl -replace '(?m)^\| F1 \|.*$', '| F1 | demo feature | returns 200 | no retries |'
-$tpl = $tpl -replace '(?m)^- 受影响模块：.*$', '- 受影响模块：demo'
-$tpl = $tpl -replace '(?m)^- 用户影响范围：.*$', '- 用户影响范围：none'
-$tpl = $tpl -replace '(?m)^- 与已有特性的关系：.*$', '- 与已有特性的关系：none'
+$tpl = $tpl -replace '(?m)^- 模块：.*$', '- 模块：demo'
+$tpl = $tpl -replace '(?m)^- 用户：.*$', '- 用户：none'
+$tpl = $tpl -replace '(?m)^- 数据：.*$', '- 数据：无'
+$tpl = $tpl -replace '(?m)^- 接口：.*$', '- 接口：无'
 $tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
+# Terminal state and cross-repo pointer are close-out fields; filling them like a
+# real summary keeps the final gate honest while the deployment table stays empty.
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', 'delivery_status: 已提交未部署'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])linked_records:[^\r\n]*', 'linked_records: -'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
 Step 'check-summary initial / final'
@@ -91,6 +96,42 @@ Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'dem
 if ($LASTEXITCODE -ne $cliInitialCode) { Write-Host "IN-PROCESS INITIAL DISAGREES WITH -File" -ForegroundColor Red; $script:fail++ }
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "FINAL FAILED" -ForegroundColor Red; $script:fail++ }
+
+Step 'delivery_status: close-out terminal state'
+# The record used to demand a deployment row from every task, so L2 either left
+# the table blank (invisible) or invented a deployment. delivery_status is the
+# machine-readable answer: only "deployed" promises a real row.
+$dsDir = Join-Path $proj '.harness\changes\ds-probe'
+New-Item -ItemType Directory -Force -Path $dsDir | Out-Null
+$dsPath = Join-Path $dsDir 'summary.md'
+# missing field
+$noDs = ($tpl -replace '(?m)^.*delivery_status:[^\r\n]*\r?\n', '')
+[System.IO.File]::WriteAllText($dsPath, $noDs, (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A SUMMARY WITHOUT delivery_status" -ForegroundColor Red; $script:fail++ }
+# placeholder value
+[System.IO.File]::WriteAllText($dsPath, ($tpl -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', 'delivery_status: <已部署|不适用>'), (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A PLACEHOLDER delivery_status" -ForegroundColor Red; $script:fail++ }
+# deployed + empty deployment table -> FAIL
+[System.IO.File]::WriteAllText($dsPath, ($tpl -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', 'delivery_status: 已部署'), (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED deployed WITH AN EMPTY DEPLOYMENT TABLE" -ForegroundColor Red; $script:fail++ }
+# committed-not-deployed + empty deployment table -> PASS
+[System.IO.File]::WriteAllText($dsPath, ($tpl -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', 'delivery_status: 已提交未部署'), (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "FINAL REJECTED committed-not-deployed WITH AN EMPTY DEPLOYMENT TABLE" -ForegroundColor Red; $script:fail++ }
+# linked_records is optional for single-repo tasks: an old summary without the
+# field must still close. A placeholder is not acceptable.
+$noLink = ($tpl -replace '(?m)^.*linked_records:[^\r\n]*\r?\n', '')
+[System.IO.File]::WriteAllText($dsPath, $noLink, (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "FINAL REJECTED A SUMMARY WITHOUT linked_records" -ForegroundColor Red; $script:fail++ }
+$badLink = ($tpl -replace '(?m)(?<![A-Za-z0-9_\-])linked_records:[^\r\n]*', 'linked_records: <repo:path>')
+[System.IO.File]::WriteAllText($dsPath, $badLink, (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = $dsPath; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A PLACEHOLDER linked_records" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath $dsDir -Recurse -Force
 
 Step 'initial validates content, not the close-out counts'
 # The failure this guards: every field filled, the three content sections still

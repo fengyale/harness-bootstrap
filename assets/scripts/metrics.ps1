@@ -24,12 +24,39 @@
     impl_corrections can be zero while the trend still gets worse. -Compare
     needs -Days N (N > 0); with -Days 0 there is no previous window.
 
+  PRODUCTIVITY
+    Four proxies, all computed from the sources above; nothing is invented:
+    1. first pass rate -- a task "passes" when the gate scan events attributed
+       to it contain no blocked=1 event. A task with no attributed event is
+       UNKNOWN, never a pass; the denominator is the tasks that own an event.
+    2. gate round trips -- blocked=1 scan events per task, averaged over the
+       tasks that own an event, plus the 0 / 1 / 2+ distribution.
+    3. lead time -- summary date -> last commit touching
+       .harness/changes/<feature>, in days. The record directory is the only
+       anchor a summary offers (it does not record source paths), and the
+       summary date is day-granular, so a same-day task reads as about 1 day.
+       No commit or no date line means unknown.
+    4. reuse -- for a skill loaded by >= 2 tasks, does the second task
+       (ordered by date) show fewer corrections OR fewer round trips than the
+       first? Each pair is measured only on the dimensions both tasks
+       recorded; a skill seen once is n/a and stays out of the denominator.
+
+  ATTRIBUTION
+    gate.jsonl has no task key (pre-commit writes only ts / blocked / files), so
+    per-task attribution is a proxy: the events from one day before the first
+    commit that touched .harness/changes/<feature> up to its last commit (a
+    blocked attempt creates no commit, hence the lookback). A task with no
+    commit falls back to its summary date, [D, D+1). An event is claimed by at
+    most one task; overlapping (concurrent) features can therefore under-count,
+    and those tasks stay unknown instead of being credited as first-pass.
+
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Json
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 28 -SkillMinAgeDays 28
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14 -Compare
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -SelfTest
 
   RETIREMENT
     A skill is only a retirement candidate when the observation window is at
@@ -55,6 +82,7 @@ param(
     [switch]$Json,
     [switch]$Quiet,
     [switch]$LessonGate,
+    [switch]$SelfTest,
     [switch]$NoExit
 )
 
@@ -64,7 +92,113 @@ function Complete-Harness {
     exit $Code
 }
 
+# SelfTest builds a throwaway project under %TEMP% (a git repo with two dated
+# summaries, a third without a commit, and a gate log with one blocked scan) and
+# runs this same script on it, so the four productivity proxies are asserted
+# against known inputs instead of whatever the real history happens to hold.
+function Invoke-MetricsSelfTest {
+    $bad = 0
+    function Add-SelfCheck {
+        param([ref]$Bad, [string]$Label, [bool]$Ok)
+        if ($Ok) { Write-Host ("ok: " + $Label) } else { Write-Host ("[FAIL] " + $Label) -ForegroundColor Red; $Bad.Value++ }
+    }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('hb-metrics-selftest-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    try {
+        $changes = Join-Path $tmp '.harness\changes'
+        $metricsDir = Join-Path $tmp '.harness\metrics'
+        New-Item -ItemType Directory -Force -Path $changes | Out-Null
+        New-Item -ItemType Directory -Force -Path $metricsDir | Out-Null
+
+        foreach ($spec in @(
+            @{ Name = 'alpha'; Date = '2026-03-01'; Corr = 3; Skills = 'demo-skill' },
+            @{ Name = 'beta'; Date = '2026-03-05'; Corr = 1; Skills = 'demo-skill' },
+            @{ Name = 'gamma'; Date = '2026-03-10'; Corr = 0; Skills = 'other-skill' }
+        )) {
+            $dir = Join-Path $changes $spec.Name
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $body = @(
+                ('# ' + $spec.Name + ' change'),
+                '',
+                ('- date: ' + $spec.Date),
+                ('- corrections: ' + $spec.Corr),
+                '- impl_corrections: 0',
+                ('- loaded_skills: ' + $spec.Skills),
+                ''
+            )
+            [System.IO.File]::WriteAllText((Join-Path $dir 'summary.md'), (($body -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+        }
+
+        $gateLines = @(
+            '{"event":"scan","ts":"2026-03-01T14:00:00Z","blocked":1,"files":1,"hunks":1}',
+            '{"event":"scan","ts":"2026-03-01T15:00:00Z","blocked":0,"files":1,"hunks":0}',
+            '{"event":"commit","ts":"2026-03-02T12:00:00Z","hash":"aaaaaaa","scanned":1}',
+            '{"event":"scan","ts":"2026-03-05T14:00:00Z","blocked":0,"files":1,"hunks":0}',
+            '{"event":"commit","ts":"2026-03-06T12:00:00Z","hash":"bbbbbbb","scanned":1}'
+        )
+        [System.IO.File]::WriteAllText((Join-Path $metricsDir 'gate.jsonl'), (($gateLines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+
+        $hasGit = $null -ne (Get-Command git -ErrorAction SilentlyContinue)
+        if ($hasGit) {
+            & git -C $tmp init -q 2>$null | Out-Null
+            # One commit per record directory with a fixed committer date: the
+            # lead time then has a known answer instead of "whenever it ran".
+            foreach ($c in @(
+                @{ Date = '2026-03-02T12:00:00+0000'; Path = '.harness/changes/alpha/summary.md' },
+                @{ Date = '2026-03-06T12:00:00+0000'; Path = '.harness/changes/beta/summary.md' }
+            )) {
+                & git -C $tmp add -- $c.Path 2>$null | Out-Null
+                $env:GIT_AUTHOR_DATE = $c.Date
+                $env:GIT_COMMITTER_DATE = $c.Date
+                & git -C $tmp -c 'user.email=s@example.com' -c 'user.name=selftest' -c 'commit.gpgsign=false' commit -q -m ('add ' + $c.Path) 2>$null | Out-Null
+            }
+            $env:GIT_AUTHOR_DATE = $null
+            $env:GIT_COMMITTER_DATE = $null
+        }
+
+        $psHost = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
+        $raw = @(& $psHost -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Root $tmp -Json 2>&1)
+        $text = ($raw | Out-String)
+        $j = $null
+        $startIdx = $text.IndexOf('{')
+        $endIdx = $text.LastIndexOf('}')
+        if ($startIdx -ge 0 -and $endIdx -gt $startIdx) {
+            try { $j = ($text.Substring($startIdx, $endIdx - $startIdx + 1) | ConvertFrom-Json) } catch { $j = $null }
+        }
+        Add-SelfCheck ([ref]$bad) 'json output is parsable' ($null -ne $j)
+        if ($null -ne $j) {
+            Add-SelfCheck ([ref]$bad) 'first pass rate = 50% (one blocked task, one clean task)' ($j.firstPassRate -eq 50)
+            Add-SelfCheck ([ref]$bad) 'task without a gate event is unknown, not a pass' ($j.gateRoundTrips.unknown -eq 1)
+            Add-SelfCheck ([ref]$bad) 'round trips: average 0.5, distribution 0/1/2+ = 1/1/0' `
+                ($j.gateRoundTrips.average -eq 0.5 -and $j.gateRoundTrips.zero -eq 1 -and $j.gateRoundTrips.one -eq 1 -and $j.gateRoundTrips.twoPlus -eq 0)
+            Add-SelfCheck ([ref]$bad) 'reuse: one pair, corrections 3 -> 1 counts as improved' `
+                ($j.reuseRate.pairs -eq 1 -and $j.reuseRate.improved -eq 1 -and $j.reuseRate.rate -eq 100)
+            Add-SelfCheck ([ref]$bad) 'a skill seen once stays n/a' (@($j.reuseRate.singleTaskSkills) -contains 'other-skill')
+            if ($hasGit) {
+                Add-SelfCheck ([ref]$bad) 'lead time measured for the two committed tasks' `
+                    ($j.leadTime.measured -eq 2 -and $j.leadTime.unknown -eq 1)
+                Add-SelfCheck ([ref]$bad) 'lead time is a positive number of days' `
+                    ($null -ne $j.leadTime.averageDays -and $j.leadTime.averageDays -gt 0.9 -and $j.leadTime.averageDays -lt 2.6)
+            } else {
+                Write-Host '[SKIP] git not found: lead time assertions skipped' -ForegroundColor Yellow
+            }
+        }
+    } finally {
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    if ($bad -eq 0) {
+        Write-Host 'METRICS SELFTEST OK' -ForegroundColor Green
+    } else {
+        Write-Host ("METRICS SELFTEST FAILED: " + $bad + " check(s)") -ForegroundColor Red
+    }
+    return $bad
+}
+
 $ErrorActionPreference = 'Stop'
+if ($SelfTest) {
+    $selfBad = Invoke-MetricsSelfTest
+    if ($selfBad -gt 0) { Complete-Harness 1 }
+    Complete-Harness 0
+}
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 
 $changesRoot = Join-Path $rootPath '.harness\changes'
@@ -413,6 +547,30 @@ function Get-SmallTasks {
     return $out
 }
 
+# Committer timestamps of every commit that touched the record directory of one
+# feature. This is the only per-task anchor available: gate.jsonl has no feature
+# column and summary.md does not record source paths.
+function Get-TaskGitRange {
+    param([string]$Root, [string]$Feature)
+    $times = @()
+    $rel = '.harness/changes/' + $Feature
+    try {
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            $raw = @(& git -C $Root log '--format=%ct' '--reverse' '--' $rel 2>$null)
+            foreach ($line in $raw) {
+                $t = ([string]$line).Trim()
+                if ($t -match '^\d+$') { $times += [long]$t }
+            }
+        }
+    } catch {
+        # A missing git binary or a non-repository root means "unknown", not
+        # "zero days": the metric must not turn a failed lookup into a pass.
+        $times = @()
+    }
+    if ($times.Count -eq 0) { return [pscustomobject]@{ Count = 0; First = $null; Last = $null } }
+    return [pscustomobject]@{ Count = $times.Count; First = $times[0]; Last = $times[$times.Count - 1] }
+}
+
 function Get-GateEvents {
     $out = @()
     if (-not (Test-Path -LiteralPath $logPath)) { return $out }
@@ -421,14 +579,19 @@ function Get-GateEvents {
         try { $e = $line | ConvertFrom-Json } catch {
             # A malformed gate line still counts as an un-dateable event so the
             # "skipped" number in the report cannot hide a broken log.
-            $out += [pscustomobject]@{ Event = 'invalid'; Date = $null; Blocked = '0'; Scanned = ''; Reason = '' }
+            $out += [pscustomobject]@{ Event = 'invalid'; Date = $null; Ts = $null; Blocked = '0'; Scanned = ''; Reason = '' }
             continue
         }
         $evtDate = $null
-        if ($e.ts) { try { $evtDate = ([datetime]$e.ts).Date } catch { $evtDate = $null } }
+        $evtTs = $null
+        if ($e.ts) { try { $evtTs = [datetime]$e.ts } catch { $evtTs = $null } }
+        if ($null -ne $evtTs) { $evtDate = $evtTs.Date }
         $out += [pscustomobject]@{
             Event = $e.event
             Date = $evtDate
+            # Ts keeps the wall-clock time: the productivity attribution needs a
+            # range, not just a day, to tell two same-day attempts apart.
+            Ts = $evtTs
             Blocked = "$($e.blocked)"
             Scanned = "$($e.scanned)"
             # assoc_skip carries why attribution was skipped; without it the
@@ -565,6 +728,150 @@ foreach ($t in $tasks) {
         if (-not $skillCounts.ContainsKey($key)) { $skillCounts[$key] = 0 }
         $skillCounts[$key] = $skillCounts[$key] + 1
     }
+}
+
+# -------------------------------------------------------------- productivity
+# See the header: every number below is a documented proxy, and a task with no
+# usable evidence is unknown / n/a instead of being counted as a success.
+$prodWindows = @()
+$evtList = @($curWindow.Events)
+$claimedIdx = New-Object 'bool[]' ([Math]::Max(1, $evtList.Count))
+$seq = 0
+foreach ($t in $tasks) {
+    $seq++
+    $git = Get-TaskGitRange -Root $rootPath -Feature $t.Feature
+    $from = $null
+    $to = $null
+    $anchor = 'none'
+    if ($git.Count -gt 0) {
+        # A blocked attempt writes no commit, so the first commit is the end of
+        # the task, not its start: look one day back to claim the blocked scans.
+        $from = ([System.DateTimeOffset]::FromUnixTimeSeconds($git.First)).LocalDateTime.AddDays(-1)
+        $to = ([System.DateTimeOffset]::FromUnixTimeSeconds($git.Last)).LocalDateTime.AddSeconds(1)
+        if ($git.Count -le 1) {
+            # With only the summary commit, blocked scans after it fall outside
+            # the old window. Extend one day so same-day retries are counted.
+            $to = ([System.DateTimeOffset]::FromUnixTimeSeconds($git.Last)).LocalDateTime.AddDays(1)
+        }
+        $anchor = 'git-record'
+    } elseif ($t.Dated) {
+        $from = $t.Date
+        $to = $t.Date.AddDays(1)
+        $anchor = 'summary-date'
+    }
+    $prodWindows += [pscustomobject]@{
+        Task = $t
+        From = $from
+        To = $to
+        Anchor = $anchor
+        Git = $git
+        Order = $seq
+        Events = @()
+        Scans = 0
+        Blocked = $null
+        FirstPass = $null
+        LeadDays = $null
+    }
+}
+
+# An event belongs to at most one task: the earliest window in start order wins.
+# Concurrent features share gate.jsonl with no key, so a collision would double
+# count; the loser stays unknown instead of inflating its first-pass credit.
+$byStart = @($prodWindows | Sort-Object @{Expression = { if ($null -ne $_.From) { $_.From } else { [datetime]::MaxValue } }}, @{Expression = { $_.Order }})
+foreach ($w in $byStart) {
+    if ($null -eq $w.From) { continue }
+    for ($i = 0; $i -lt $evtList.Count; $i++) {
+        if ($claimedIdx[$i]) { continue }
+        $e = $evtList[$i]
+        if ($null -eq $e.Ts) { continue }
+        if ($e.Ts -lt $w.From -or $e.Ts -ge $w.To) { continue }
+        $claimedIdx[$i] = $true
+        $w.Events = @($w.Events) + $e
+    }
+}
+foreach ($w in $prodWindows) {
+    $scans = @($w.Events | Where-Object { $_.Event -eq 'scan' })
+    $w.Scans = $scans.Count
+    if ($scans.Count -gt 0) {
+        $b = @($scans | Where-Object { $_.Blocked -eq '1' }).Count
+        $w.Blocked = $b
+        $w.FirstPass = ($b -eq 0)
+    }
+    if ($w.Git.Count -gt 0 -and $w.Task.Dated) {
+        $lastCommit = ([System.DateTimeOffset]::FromUnixTimeSeconds($w.Git.Last)).LocalDateTime
+        $w.LeadDays = [math]::Max(0, [math]::Round(($lastCommit - $w.Task.Date).TotalDays, 2))
+    }
+}
+
+$fpMeasured = @($prodWindows | Where-Object { $null -ne $_.FirstPass })
+$fpPassed = @($fpMeasured | Where-Object { $_.FirstPass })
+$fpRate = if ($fpMeasured.Count -gt 0) { [math]::Round($fpPassed.Count * 100.0 / $fpMeasured.Count, 1) } else { $null }
+
+$rtMeasured = $fpMeasured
+$rtSum = 0
+foreach ($w in $rtMeasured) { $rtSum += $w.Blocked }
+$rtAvg = if ($rtMeasured.Count -gt 0) { [math]::Round($rtSum / $rtMeasured.Count, 2) } else { $null }
+$rtZero = @($rtMeasured | Where-Object { $_.Blocked -eq 0 }).Count
+$rtOne = @($rtMeasured | Where-Object { $_.Blocked -eq 1 }).Count
+$rtTwo = @($rtMeasured | Where-Object { $_.Blocked -ge 2 }).Count
+$rtUnknown = $prodWindows.Count - $rtMeasured.Count
+
+$leadMeasured = @($prodWindows | Where-Object { $null -ne $_.LeadDays })
+$leadAvg = if ($leadMeasured.Count -gt 0) {
+    [math]::Round((@($leadMeasured | Measure-Object -Property LeadDays -Sum)[0].Sum) / $leadMeasured.Count, 2)
+} else { $null }
+$leadUnknown = $prodWindows.Count - $leadMeasured.Count
+
+# Reuse: one pair per skill, first task vs the next task that loaded it. A pair
+# counts as improved when corrections or round trips went down; it is unknown
+# when neither dimension was recorded on both sides.
+$skillTaskMap = @{}
+foreach ($w in $prodWindows) {
+    foreach ($s in @($w.Task.Skills)) {
+        $k = Get-SkillKey $s
+        if (-not $k) { continue }
+        if (-not $skillTaskMap.ContainsKey($k)) { $skillTaskMap[$k] = @() }
+        $skillTaskMap[$k] = @($skillTaskMap[$k]) + $w
+    }
+}
+$reusePairs = @()
+$reuseMeasured = 0
+$reuseImproved = 0
+$reuseUnknown = 0
+$singleTaskSkills = @()
+foreach ($k in ($skillTaskMap.Keys | Sort-Object)) {
+    $list = @($skillTaskMap[$k] | Sort-Object @{Expression = { if ($_.Task.Dated) { $_.Task.Date } else { [datetime]::MaxValue } }}, @{Expression = { $_.Task.Feature }})
+    if ($list.Count -lt 2) { $singleTaskSkills += $k; continue }
+    $a = $list[0]
+    $b = $list[1]
+    $signals = @()
+    if ($a.Task.HasCorrections -and $b.Task.HasCorrections) { $signals += ($b.Task.Corrections -lt $a.Task.Corrections) }
+    if ($null -ne $a.Blocked -and $null -ne $b.Blocked) { $signals += ($b.Blocked -lt $a.Blocked) }
+    $state = 'unknown'
+    if ($signals.Count -gt 0) {
+        $reuseMeasured++
+        if ($signals -contains $true) { $state = 'improved'; $reuseImproved++ } else { $state = 'not-improved' }
+    } else {
+        $reuseUnknown++
+    }
+    $reusePairs += [pscustomobject]@{
+        skill = $k
+        first = $a.Task.Feature
+        second = $b.Task.Feature
+        firstCorrections = $(if ($a.Task.HasCorrections) { $a.Task.Corrections } else { $null })
+        secondCorrections = $(if ($b.Task.HasCorrections) { $b.Task.Corrections } else { $null })
+        firstBlocked = $a.Blocked
+        secondBlocked = $b.Blocked
+        state = $state
+    }
+}
+$reuseRate = if ($reuseMeasured -gt 0) { [math]::Round($reuseImproved * 100.0 / $reuseMeasured, 1) } else { $null }
+
+# Console text helpers: a null metric must print as n/a, never as 0.
+function Format-MetricText {
+    param($Value, [string]$Suffix)
+    if ($null -eq $Value) { return 'n/a' }
+    return ([string]$Value + $Suffix)
 }
 
 # Lesson promotion is cumulative across sessions: count all summaries and small
@@ -1022,6 +1329,39 @@ if ($Json) {
         attributionSkipped = $stats.AssocSkip
         attributionSkippedIgnored = $stats.AssocIgnored
         skillLoadRate = $skillRate
+        firstPassRate = $fpRate
+        gateRoundTrips = [pscustomobject]@{
+            average = $rtAvg
+            zero = $rtZero
+            one = $rtOne
+            twoPlus = $rtTwo
+            measured = $rtMeasured.Count
+            unknown = $rtUnknown
+        }
+        leadTime = [pscustomobject]@{
+            averageDays = $leadAvg
+            measured = $leadMeasured.Count
+            unknown = $leadUnknown
+            source = 'last-commit-of-record-dir'
+        }
+        reuseRate = [pscustomobject]@{
+            rate = $reuseRate
+            pairs = $reuseMeasured
+            improved = $reuseImproved
+            unknown = $reuseUnknown
+            singleTaskSkills = @($singleTaskSkills)
+        }
+        reusePairs = @($reusePairs)
+        productivityTasks = @($prodWindows | ForEach-Object {
+            [pscustomobject]@{
+                feature = $_.Task.Feature
+                anchor = $_.Anchor
+                scans = $_.Scans
+                blocked = $_.Blocked
+                firstPass = $_.FirstPass
+                leadDays = $_.LeadDays
+            }
+        })
         skills = $skillCounts
         skillAges = @($installed | ForEach-Object {
             [pscustomobject]@{ name = $_.Name; ageDays = $_.AgeDays; source = $_.AgeSource }
@@ -1076,6 +1416,17 @@ if (-not $Quiet) {
     # The number comes from summary.md, so it measures what the agent wrote, not
     # what it read. The label says so; otherwise it looks like telemetry.
     Write-Host ("skill load rate (self-reported): {0}%" -f $(if ($null -eq $skillRate) { 'n/a' } else { $skillRate }))
+    # Productivity proxies. "unknown" is printed next to every number: a task
+    # without gate events or commits must not look like a clean pass.
+    Write-Host "productivity:"
+    Write-Host ("  first pass rate: {0} ({1}/{2} task(s) with gate events; {3} unknown)" -f `
+        (Format-MetricText $fpRate '%'), $fpPassed.Count, $fpMeasured.Count, $rtUnknown)
+    Write-Host ("  gate round trips: avg {0} per task (0: {1}   1: {2}   2+: {3}; {4} unknown)" -f `
+        (Format-MetricText $rtAvg ''), $rtZero, $rtOne, $rtTwo, $rtUnknown)
+    Write-Host ("  lead time: {0} (summary date -> last commit of the record dir; {1} measured, {2} unknown)" -f `
+        (Format-MetricText $leadAvg ' day(s)'), $leadMeasured.Count, $leadUnknown)
+    Write-Host ("  reuse: {0} ({1}/{2} skill pair(s) improved; {3} unknown; {4} skill(s) seen once -> n/a)" -f `
+        (Format-MetricText $reuseRate '%'), $reuseImproved, $reuseMeasured, $reuseUnknown, $singleTaskSkills.Count)
     if ($Compare -and $null -ne $prevStats) {
         $prevRate = if ($null -eq $prevStats.SkillRate) { 'n/a' } else { "$($prevStats.SkillRate)%" }
         Write-Host ("previous window: tasks {0}   avg corrections {1}   avg impl {2}   skill rate {3} (self-reported)   blocked {4}" -f `

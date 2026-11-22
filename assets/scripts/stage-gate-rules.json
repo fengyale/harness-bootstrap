@@ -4,8 +4,8 @@
   "_对齐": "summarySections 必须与 .harness/changes/_template/summary.md 的章节名一致，否则阶段门会误报 missing。多个关键词之间是 OR 关系，只需命中一个。",
 
   "summarySections": {
-    "requirement": ["需求概述", "为什么"],
-    "techImpact": ["技术变更清单"],
+    "requirement": ["功能点与验收标准", "目标"],
+    "techImpact": ["技术变更清单", "影响面", "业务影响"],
     "risk": ["冲突与风险"],
     "tasks": ["任务拆分"],
     "rollback": ["回滚方案"],

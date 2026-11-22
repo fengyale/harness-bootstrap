@@ -65,10 +65,15 @@ $tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])flow:[^\r\n]*', 'flow: L2 (standard
 # initial now checks content, not just field names: fill the three sections the
 # same way a real analysis would, otherwise every fixture below is a placeholder.
 $tpl = $tpl -replace '(?m)^\| F1 \|.*$', '| F1 | demo feature | returns 200 on POST | no retries |'
-$tpl = $tpl -replace '(?m)^- 受影响模块：.*$', '- 受影响模块：demo'
-$tpl = $tpl -replace '(?m)^- 用户影响范围：.*$', '- 用户影响范围：none'
-$tpl = $tpl -replace '(?m)^- 与已有特性的关系：.*$', '- 与已有特性的关系：none'
+$tpl = $tpl -replace '(?m)^- 模块：.*$', '- 模块：demo'
+$tpl = $tpl -replace '(?m)^- 用户：.*$', '- 用户：none'
+$tpl = $tpl -replace '(?m)^- 数据：.*$', '- 数据：无'
+$tpl = $tpl -replace '(?m)^- 接口：.*$', '- 接口：无'
 $tpl = $tpl -replace '(?m)^\| 1 \|.*$', '| 1 | write the code | - | 1h |'
+# Terminal state and cross-repo pointer are close-out fields; committed but not
+# deployed keeps the deployment table empty (the point of the new field).
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', 'delivery_status: 已提交未部署'
+$tpl = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])linked_records:[^\r\n]*', 'linked_records: -'
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -Encoding UTF8
 
 # CLI parity: this first check stays a real -File call, and the same input
