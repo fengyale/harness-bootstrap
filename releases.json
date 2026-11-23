@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.31.20",
+    "title": "(多模块编译/测试覆盖)",
+    "body": [
+      "- AGENTS.md「必跑命令」支持可选「模块」列（| 用途 | 模块 | 命令 |）；* 是默认行",
+      "- stage-gate 阶段 3/5/7/8 按 summary 的 touched_modules 跑对应模块的 compile/test；缺模块行且无 * → FAIL；只有单条命令的旧表只 WARN",
+      "- 占位行不再冒充 PASS：精确行占位且存在 * 时回退 *；任一选中模块占位整体 SKIP",
+      "- 用途列按整段匹配，跑全部测试（含编译）不会命中 compile；表头精确识别，歧义回退第二列",
+      "- 旧 rules 缺 moduleCommands 时用内置 fallback（ASCII + [char]），升级项目不会静默关闭",
+      "- 新增 gate-auto 多模块断言；本机 gate-auto 516.2s、regression 51.3s、verify-package Fast PASS"
+    ]
+  },
+  {
     "version": "1.31.19",
     "title": "(终态、模板裁剪、四指标与规划脚本)",
     "body": [
