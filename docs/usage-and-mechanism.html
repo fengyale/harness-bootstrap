@@ -790,7 +790,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 -
         </div>
         <div class="card card--green" style="--i:1">
           <h3>动代码</h3>
-          <p>先跑一次阶段 3 确认记录在盘（缺记录时 <code>[HINT]</code> 会指名加载 <code>request-analysis</code>），再加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 和阶段 5 会再次执行同一条命令，不通过就 BLOCKED。</p>
+          <p>先跑一次阶段 3 确认记录在盘（缺记录时 <code>[HINT]</code> 会指名加载 <code>request-analysis</code>），再加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 和阶段 5 会再次执行同一条命令，不通过就 BLOCKED。多模块项目在「必跑命令」表加「模块」列，<code>stage-gate</code> 按 <code>summary.md</code> 的 <code>touched_modules</code> 跑并集（<code>*</code> 为默认行，缺模块行且无 <code>*</code> 即 FAIL）；只有单条命令、没有模块列的旧表只 WARN 并提示补列。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 3 -Feature &lt;name&gt;</code></pre>
         </div>

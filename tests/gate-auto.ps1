@@ -645,6 +645,315 @@ if ($s10b -match '(?m)^\s*\[PASS\].*corrections-attributed|corrections-attribute
 }
 [System.IO.File]::WriteAllText($sumPath, $sumOrig, (New-Object System.Text.UTF8Encoding($false)))
 
+Step 'multi-module compile/test coverage'
+# A multi-module project declares one row per module. stage-gate must run only
+# the rows for touched_modules; running module-a for a module-b change hides the
+# missing compile/test. The gate script is the package copy, run with -Root.
+$gate = "$pkg\assets\scripts\stage-gate.ps1"
+$mm = Join-Path $TestRoot 'proj-mm'
+New-Item -ItemType Directory -Force -Path "$mm\.harness\changes\demo" | Out-Null
+$mmAgents = @'
+# mm project
+
+## 必跑命令
+
+| 用途 | 模块 | 命令 |
+| --- | --- | --- |
+| 编译 / 类型检查 | module-a | cmd /c echo a>module-a.compiled |
+| 编译 / 类型检查 | module-b | cmd /c echo b>module-b.compiled |
+| 跑全部测试 | module-a | cmd /c echo a>module-a.tested |
+| 跑全部测试 | module-b | cmd /c echo b>module-b.tested |
+'@
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", $mmAgents, (New-Object System.Text.UTF8Encoding($true)))
+$mmSum = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: module-b'
+[System.IO.File]::WriteAllText("$mm\.harness\changes\demo\summary.md", $mmSum, (New-Object System.Text.UTF8Encoding($false)))
+
+Invoke-Harness $gate @{ Root = $mm; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'multi-module stage 3 compiles only the touched module' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm\module-b.compiled") -and -not (Test-Path -LiteralPath "$mm\module-a.compiled")) {
+    Write-Host 'ok: stage 3 ran module-b compile, not module-a'
+} else { Write-Host 'BAD: stage 3 did not target module-b compile' -ForegroundColor Red; $fail++ }
+
+Invoke-Harness $gate @{ Root = $mm; Stage = '5'; Feature = 'demo' } | Out-Null
+Expect 'multi-module stage 5 tests only the touched module' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm\module-b.tested") -and -not (Test-Path -LiteralPath "$mm\module-a.tested")) {
+    Write-Host 'ok: stage 5 ran module-b tests, not module-a'
+} else { Write-Host 'BAD: stage 5 did not target module-b tests' -ForegroundColor Red; $fail++ }
+
+# Dropping the module-b compile row must BLOCK: a touched module without a row
+# is a configuration gap, not a free pass.
+$noB = ($mmAgents -split "`r?`n" | Where-Object { $_ -notmatch 'module-b' }) -join "`r`n"
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", $noB, (New-Object System.Text.UTF8Encoding($true)))
+$out = Invoke-Harness $gate @{ Root = $mm; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'multi-module stage 3 blocks a touched module with no row' $LASTEXITCODE 1
+if ($out -match 'no compile/test command for module module-b') {
+    Write-Host 'ok: the missing-module failure names module-b'
+} else { Write-Host 'BAD: missing module-b row not reported' -ForegroundColor Red; $fail++ }
+
+# A * row is the default for every module when it has no exact row.
+$starAgents = @'
+# mm project
+
+## 必跑命令
+
+| 用途 | 模块 | 命令 |
+| --- | --- | --- |
+| 编译 / 类型检查 | * | cmd /c echo star>module-star.compiled |
+| 跑全部测试 | * | cmd /c echo star>module-star.tested |
+'@
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", $starAgents, (New-Object System.Text.UTF8Encoding($true)))
+Remove-Item -LiteralPath "$mm\module-star.compiled" -Force -ErrorAction SilentlyContinue
+Invoke-Harness $gate @{ Root = $mm; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'multi-module stage 3 falls back to the * row' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$mm\module-star.compiled") {
+    Write-Host 'ok: module-b used the * compile row'
+} else { Write-Host 'BAD: the * row did not run for module-b' -ForegroundColor Red; $fail++ }
+
+# A two-column table still runs its single command, but the detail warns that a
+# module column is needed. That warning must not block (upgrade compatibility).
+$mm2 = Join-Path $TestRoot 'proj-mm2'
+New-Item -ItemType Directory -Force -Path "$mm2\.harness\changes\demo" | Out-Null
+$mm2Agents = @'
+# mm project
+
+## 必跑命令
+
+| 用途 | 命令 |
+| --- | --- |
+| 编译 / 类型检查 | cmd /c echo single>single.compiled |
+| 跑全部测试 | cmd /c echo single>single.tested |
+'@
+[System.IO.File]::WriteAllText("$mm2\AGENTS.md", $mm2Agents, (New-Object System.Text.UTF8Encoding($true)))
+[System.IO.File]::WriteAllText("$mm2\.harness\changes\demo\summary.md", $mmSum, (New-Object System.Text.UTF8Encoding($false)))
+$out2 = Invoke-Harness $gate @{ Root = $mm2; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'two-column table still opens stage 3' $LASTEXITCODE 0
+if (($out2 -match 'single command; add a') -and (Test-Path -LiteralPath "$mm2\single.compiled")) {
+    Write-Host 'ok: single-command table runs and warns about modules'
+} else { Write-Host 'BAD: single-command compatibility warning missing' -ForegroundColor Red; $fail++ }
+
+# An empty declaration on a table WITH a module column must not run the first
+# module row: module-a would compile while a module-b change was called PASS.
+$emptySum = $tpl -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: none'
+[System.IO.File]::WriteAllText("$mm\.harness\changes\demo\summary.md", $emptySum, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", $mmAgents, (New-Object System.Text.UTF8Encoding($true)))
+$out = Invoke-Harness $gate @{ Root = $mm; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'empty touched_modules without a * row blocks stage 3' $LASTEXITCODE 1
+if (($out -replace '\s+', '') -match 'empty/none') {
+    Write-Host 'ok: empty declaration is reported as a gap'
+} else { Write-Host 'BAD: empty declaration not reported' -ForegroundColor Red; $fail++ }
+
+# With a * row the same declaration runs the default row.
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", ($mmAgents + "`r`n" + '| 编译 / 类型检查 | * | cmd /c echo s>empty-star.compiled |'), (New-Object System.Text.UTF8Encoding($true)))
+Remove-Item -LiteralPath "$mm\module-a.compiled","$mm\empty-star.compiled" -Force -ErrorAction SilentlyContinue
+Invoke-Harness $gate @{ Root = $mm; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'empty touched_modules with a * row opens stage 3' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm\empty-star.compiled") -and -not (Test-Path -LiteralPath "$mm\module-a.compiled")) {
+    Write-Host 'ok: an empty declaration used the * row, not module-a'
+} else { Write-Host 'BAD: empty declaration did not use the * row' -ForegroundColor Red; $fail++ }
+
+# The purpose cell decides which row is a compile row. Matching the whole line
+# made a test row whose parenthetical mentions compile satisfy the compile gate,
+# and a lint row was treated as a compile row.
+$mm3 = Join-Path $TestRoot 'proj-mm3'
+New-Item -ItemType Directory -Force -Path "$mm3\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm3\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 模块 | 命令 |',
+    '| --- | --- | --- |',
+    '| 跑全部测试（含编译） | module-b | cmd /c echo t>purpose-test.tested |',
+    '| 编译前 Lint | module-b | cmd /c echo l>purpose-lint.ran |'
+)
+[System.IO.File]::WriteAllText("$mm3\.harness\changes\demo\summary.md", $mmSum, (New-Object System.Text.UTF8Encoding($false)))
+$out = Invoke-Harness $gate @{ Root = $mm3; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'test/lint purposes do not satisfy the compile gate' $LASTEXITCODE 1
+if (-not (Test-Path -LiteralPath "$mm3\purpose-lint.ran")) {
+    Write-Host 'ok: a mislabeled row did not run as a compile command'
+} else { Write-Host 'BAD: the lint row was executed as compile' -ForegroundColor Red; $fail++ }
+
+# A placeholder exact row is not a PASS and must not hide a real * row.
+$mm4 = Join-Path $TestRoot 'proj-mm4'
+New-Item -ItemType Directory -Force -Path "$mm4\.harness\changes\demo" | Out-Null
+$phAgents = @'
+# mm project
+
+## 必跑命令
+
+| 用途 | 模块 | 命令 |
+| --- | --- | --- |
+| 编译 / 类型检查 | module-a | cmd /c echo a>ph-a.compiled |
+| 编译 / 类型检查 | module-b | - |
+'@
+[System.IO.File]::WriteAllText("$mm4\AGENTS.md", $phAgents, (New-Object System.Text.UTF8Encoding($true)))
+[System.IO.File]::WriteAllText("$mm4\.harness\changes\demo\summary.md", $mmSum, (New-Object System.Text.UTF8Encoding($false)))
+$out = Invoke-Harness $gate @{ Root = $mm4; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'placeholder module row is a SKIP, not a PASS' $LASTEXITCODE 0
+if (($out -match '\[SKIP\].*compiles') -and ($out -notmatch '\[PASS\].*compiles')) {
+    Write-Host 'ok: a placeholder module row is reported as SKIP'
+} else { Write-Host 'BAD: placeholder module row was counted as PASS' -ForegroundColor Red; $fail++ }
+
+[System.IO.File]::WriteAllText("$mm4\AGENTS.md", ($phAgents + "`r`n" + '| 编译 / 类型检查 | * | cmd /c echo s>ph-star.compiled |'), (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness $gate @{ Root = $mm4; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'placeholder exact row falls back to the * row' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$mm4\ph-star.compiled") {
+    Write-Host 'ok: the * row ran instead of the placeholder'
+} else { Write-Host 'BAD: the placeholder shadowed the * row' -ForegroundColor Red; $fail++ }
+
+# An older rules file without moduleCommands must still recognise a 3-column
+# table; silently disabling module coverage would run nothing and pass.
+$mm5 = Join-Path $TestRoot 'proj-mm5'
+New-Item -ItemType Directory -Force -Path "$mm5\.harness\changes\demo" | Out-Null
+Copy-Item "$pkg\assets\scripts" "$mm5\scripts" -Recurse
+$mm5Rules = Join-Path $mm5 'scripts\stage-gate-rules.json'
+$rulesObj = Get-Content -LiteralPath $mm5Rules -Raw -Encoding UTF8 | ConvertFrom-Json
+$rulesObj.PSObject.Properties.Remove('moduleCommands')
+[System.IO.File]::WriteAllText($mm5Rules, ($rulesObj | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$mm5\AGENTS.md", $mmAgents, (New-Object System.Text.UTF8Encoding($true)))
+[System.IO.File]::WriteAllText("$mm5\.harness\changes\demo\summary.md", $mmSum, (New-Object System.Text.UTF8Encoding($false)))
+$out = Invoke-Harness "$mm5\scripts\stage-gate.ps1" @{ Root = $mm5; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'rules without moduleCommands still cover the module column' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm5\module-b.compiled") -and (($out -replace '\s+', '') -match 'moduleCommandsconfigmissing')) {
+    Write-Host 'ok: built-in headers ran module-b and the fallback is named'
+} else { Write-Host 'BAD: moduleCommands fallback missing' -ForegroundColor Red; $fail++ }
+
+# Header recognition: a table without a command header puts the command in the
+# second column, not in the last one.
+$mm6 = Join-Path $TestRoot 'proj-mm6'
+New-Item -ItemType Directory -Force -Path "$mm6\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm6\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 执行方式 | 说明 |',
+    '| --- | --- | --- |',
+    '| 编译 / 类型检查 | cmd /c echo x>second.compiled | cmd /c echo bad>last.ran |'
+)
+Set-Content -LiteralPath "$mm6\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- touched_modules: module-b')
+$out = Invoke-Harness $gate @{ Root = $mm6; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'headerless command falls back to the second column' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm6\second.compiled") -and -not (Test-Path -LiteralPath "$mm6\last.ran")) {
+    Write-Host 'ok: second column ran, the note column did not'
+} else { Write-Host 'BAD: command column fallback ran the wrong cell' -ForegroundColor Red; $fail++ }
+
+# A header cell that merely contains the command word must not win over the
+# exact command header.
+Set-Content -LiteralPath "$mm6\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 编译/测试命令 | 模块 | 命令 |',
+    '| --- | --- | --- |',
+    '| 编译 / 类型检查 | module-b | cmd /c echo t>third.compiled |'
+)
+$out = Invoke-Harness $gate @{ Root = $mm6; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'exact command header wins over a containing header' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$mm6\third.compiled") {
+    Write-Host 'ok: the exact command column ran'
+} else { Write-Host 'BAD: the containing header was chosen as the command' -ForegroundColor Red; $fail++ }
+
+# Two modules sharing one command must run once with both names in the label.
+$mm7 = Join-Path $TestRoot 'proj-mm7'
+New-Item -ItemType Directory -Force -Path "$mm7\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm7\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 模块 | 命令 |',
+    '| --- | --- | --- |',
+    '| 编译 / 类型检查 | module-a | cmd /c echo sh>shared.compiled |',
+    '| 编译 / 类型检查 | module-b | cmd /c echo sh>shared.compiled |'
+)
+Set-Content -LiteralPath "$mm7\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- touched_modules: module-a, module-b')
+$out = Invoke-Harness $gate @{ Root = $mm7; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'shared command covers both modules' $LASTEXITCODE 0
+if (($out -replace '\s+', '') -match 'module-a\+module-b') {
+    Write-Host 'ok: the deduplicated command names both modules'
+} else { Write-Host 'BAD: the deduplicated command names only one module' -ForegroundColor Red; $fail++ }
+
+# touched_modules recognises only a field line. An annotated name or a trailing
+# dot still resolves; a prose line that merely mentions the word does not.
+$mm8 = Join-Path $TestRoot 'proj-mm8'
+New-Item -ItemType Directory -Force -Path "$mm8\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm8\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 模块 | 命令 |',
+    '| --- | --- | --- |',
+    '| 编译 / 类型检查 | module-a | cmd /c echo a>parse-a.compiled |',
+    '| 编译 / 类型检查 | module-b | cmd /c echo b>parse-b.compiled |'
+)
+Set-Content -LiteralPath "$mm8\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- 触及模块：module-b（新增）')
+Invoke-Harness $gate @{ Root = $mm8; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'annotated touched_modules resolves the module' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm8\parse-b.compiled") -and -not (Test-Path -LiteralPath "$mm8\parse-a.compiled")) {
+    Write-Host 'ok: a parenthetical note is stripped from the module name'
+} else { Write-Host 'BAD: annotated module name not resolved' -ForegroundColor Red; $fail++ }
+
+Remove-Item -LiteralPath "$mm8\parse-b.compiled" -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath "$mm8\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- `touched_modules`: module-b.')
+Invoke-Harness $gate @{ Root = $mm8; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'backticked touched_modules with a trailing dot resolves' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$mm8\parse-b.compiled") {
+    Write-Host 'ok: the trailing dot is stripped from the module name'
+} else { Write-Host 'BAD: trailing dot not stripped' -ForegroundColor Red; $fail++ }
+
+Remove-Item -LiteralPath "$mm8\parse-b.compiled" -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath "$mm8\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '', 'note: touched_modules: module-b')
+$out = Invoke-Harness $gate @{ Root = $mm8; Stage = '3'; Feature = 'demo' } | Out-String
+Expect 'a prose mention of touched_modules is not a declaration' $LASTEXITCODE 1
+if (-not (Test-Path -LiteralPath "$mm8\parse-b.compiled")) {
+    Write-Host 'ok: the prose mention did not run a module command'
+} else { Write-Host 'BAD: prose was parsed as the declaration' -ForegroundColor Red; $fail++ }
+
+# A blank line ends the table; a second table in the same section is not merged.
+$mm9 = Join-Path $TestRoot 'proj-mm9'
+New-Item -ItemType Directory -Force -Path "$mm9\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm9\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 命令 |',
+    '| --- | --- |',
+    '| 编译 / 类型检查 | cmd /c echo one>first-table.compiled |',
+    '',
+    '| 用途 | 命令 |',
+    '| --- | --- |',
+    '| 编译 / 类型检查 | cmd /c echo two>second-table.ran |'
+)
+Set-Content -LiteralPath "$mm9\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- touched_modules: none')
+Invoke-Harness $gate @{ Root = $mm9; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'a blank line ends the run-commands table' $LASTEXITCODE 0
+if ((Test-Path -LiteralPath "$mm9\first-table.compiled") -and -not (Test-Path -LiteralPath "$mm9\second-table.ran")) {
+    Write-Host 'ok: the second table was not merged into the first'
+} else { Write-Host 'BAD: two tables were merged' -ForegroundColor Red; $fail++ }
+
+# An escaped pipe belongs to the command, not to the table.
+$mm10 = Join-Path $TestRoot 'proj-mm10'
+New-Item -ItemType Directory -Force -Path "$mm10\.harness\changes\demo" | Out-Null
+Set-Content -LiteralPath "$mm10\AGENTS.md" -Encoding UTF8 -Value @(
+    '# mm project',
+    '',
+    '## 必跑命令',
+    '',
+    '| 用途 | 模块 | 命令 |',
+    '| --- | --- | --- |',
+    "| 编译 / 类型检查 | module-b | Set-Content pipe.compiled 'a\|b' |"
+)
+Set-Content -LiteralPath "$mm10\.harness\changes\demo\summary.md" -Encoding UTF8 -Value @('# demo', '', '- touched_modules: module-b')
+Invoke-Harness $gate @{ Root = $mm10; Stage = '3'; Feature = 'demo' } | Out-Null
+Expect 'an escaped pipe stays inside the command' $LASTEXITCODE 0
+if (Test-Path -LiteralPath "$mm10\pipe.compiled") {
+    Write-Host 'ok: the escaped pipe did not split the row'
+} else { Write-Host 'BAD: the escaped pipe truncated the command' -ForegroundColor Red; $fail++ }
+
 if ($Profile) {
     if ($script:stepName) {
         $script:stepTimes.Add([pscustomobject]@{ Step = $script:stepName; Seconds = [math]::Round($script:stepTimer.Elapsed.TotalSeconds, 2) })

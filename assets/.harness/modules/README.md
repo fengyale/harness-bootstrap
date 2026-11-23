@@ -18,3 +18,5 @@
 ## 命名
 
 `modules/<module 目录名>.md`，与 `pom.xml` 的 module 名一致。
+
+**模块名是 `summary.md` 的 `touched_modules` 与 `AGENTS.md` 必跑命令表「模块」列的对齐键**：门禁按它把模块映射到对应命令，名字不一致会被当成缺行。默认行必须写 `*`，模块列留空不等于 `*`；`touched_modules` 为空 / none 又没写 `*` 行时门禁同样 BLOCKED。

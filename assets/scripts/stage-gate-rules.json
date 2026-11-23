@@ -38,6 +38,21 @@
 
   "commandSkipExact": ["none", "N/A", "无", "—", "-"],
 
+  "_moduleCommands说明": "必跑命令表支持可选「模块」列。脚本按表头识别用途列、命令列与模块列（整格相等优先，唯一子串次之）；没有表头时回退到「第二列是命令」。allModules 表示该行覆盖所有模块，noneMarkers 表示被触及模块为空。messages 是输出文案，中文只能放在本 JSON 里。",
+
+  "moduleCommands": {
+    "purposeHeader": ["用途", "purpose"],
+    "moduleHeader": ["模块", "module"],
+    "commandHeader": ["命令", "command"],
+    "allModules": ["*", "all", "全部"],
+    "noneMarkers": ["none", "-", "无", "不适用"],
+    "messages": {
+      "missingModuleRow": "no compile/test command for module {0}; add a row or *; check the name against .harness/modules/ cards",
+      "singleCommandWarn": "single command; add a 模块 column to cover: {0}",
+      "emptyTouchedModules": "table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)"
+    }
+  },
+
   "messages": {
     "noFeature": "no -Feature given",
     "summaryFound": "found",

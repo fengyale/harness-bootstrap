@@ -56,6 +56,74 @@ $RULES = (Get-Content -LiteralPath $rulesPath -Raw -Encoding UTF8) | ConvertFrom
 # gate crash instead of reporting a failed criterion.
 $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' } else { 'pwsh' }
 
+# Module-aware run-command config. A rules file from an older install may not
+# carry moduleCommands; without a fallback the module column silently stopped
+# being recognised. The built-in names are ASCII except the Chinese header
+# words, which are assembled from code points (this file must stay parseable
+# without a BOM on PS 5.1).
+$script:moduleConfigFallback = $false
+
+function New-DefaultModuleMessages {
+    return [pscustomobject]@{
+        missingModuleRow    = 'no compile/test command for module {0}; add a row or *; check the name against .harness/modules/ cards'
+        singleCommandWarn   = 'single command; add a module column to cover: {0}'
+        emptyTouchedModules = 'table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)'
+    }
+}
+
+function Get-ModuleCommandConfig {
+    $defaults = [pscustomobject]@{
+        moduleHeader  = @(([string][char]0x6A21 + [char]0x5757), 'module')
+        commandHeader = @(([string][char]0x547D + [char]0x4EE4), 'command')
+        purposeHeader = @(([string][char]0x7528 + [char]0x9014), 'purpose')
+        allModules    = @('*', 'all', ([string][char]0x5168 + [char]0x90E8))
+        noneMarkers   = @('none', '-', ([string][char]0x65E0), ([string][char]0x4E0D + [char]0x9002 + [char]0x7528))
+        messages      = (New-DefaultModuleMessages)
+    }
+    $mc = $RULES.moduleCommands
+    if (-not $mc) {
+        $script:moduleConfigFallback = $true
+        return $defaults
+    }
+    $cfg = [pscustomobject]@{
+        moduleHeader  = $defaults.moduleHeader
+        commandHeader = $defaults.commandHeader
+        purposeHeader = $defaults.purposeHeader
+        allModules    = $defaults.allModules
+        noneMarkers   = $defaults.noneMarkers
+        messages      = $defaults.messages
+    }
+    if ($mc.moduleHeader)  { $cfg.moduleHeader  = @($mc.moduleHeader) }
+    if ($mc.commandHeader) { $cfg.commandHeader = @($mc.commandHeader) }
+    if ($mc.purposeHeader) { $cfg.purposeHeader = @($mc.purposeHeader) }
+    if ($mc.allModules)    { $cfg.allModules    = @($mc.allModules) }
+    if ($mc.noneMarkers)   { $cfg.noneMarkers   = @($mc.noneMarkers) }
+    if ($mc.messages) {
+        $msg = $defaults.messages
+        foreach ($p in $mc.messages.PSObject.Properties) {
+            if (-not $p.Value) { continue }
+            # A future rules key must not crash the gate under
+            # $ErrorActionPreference='Stop'; add it when unknown.
+            if ($msg.PSObject.Properties.Name -contains $p.Name) {
+                $msg.($p.Name) = [string]$p.Value
+            } else {
+                $msg | Add-Member -NotePropertyName $p.Name -NotePropertyValue ([string]$p.Value) -Force
+            }
+        }
+        $cfg.messages = $msg
+    }
+    return $cfg
+}
+
+$MC = Get-ModuleCommandConfig
+
+function Get-McMessage {
+    param([string]$Name, [string]$Default)
+    $v = [string]$MC.messages.$Name
+    if ($v) { return $v }
+    return $Default
+}
+
 function New-Stage {
     param([string]$Key, [string]$Name, [array]$Criteria)
     return [pscustomobject]@{ Key = $Key; Name = $Name; Criteria = $Criteria }
@@ -129,12 +197,95 @@ function Get-SummaryText {
     return (Get-Content -LiteralPath $f -Raw -Encoding UTF8)
 }
 
-# Returns the raw command cell of the first matching row, or $null when the
-# table has no such row. Returning the raw cell (not a cleaned command) lets the
-# caller tell "row declared but not yet measured" (placeholder) apart from
-# "row missing" (AGENTS.md is incomplete) -- those are different failures.
-function Get-AgentsCommandRow {
-    param([string]$ProjectRoot, [string[]]$Keywords, [string[]]$SectionNames)
+# Split one markdown table line into raw cells. An escaped pipe (\|) belongs to
+# the command, not to the table: Split('|') silently truncated it and ran a
+# different command.
+function Split-TableLine {
+    param([string]$Line)
+    $raw = @([regex]::Split($Line.Trim().Trim('|'), '(?<!\\)\|'))
+    $out = @()
+    foreach ($c in $raw) { $out += ($c.Trim() -replace '\\\|', '|') }
+    return ,$out
+}
+
+function Test-SeparatorCells {
+    param([string[]]$Cells)
+    if ($Cells.Count -eq 0) { return $false }
+    foreach ($c in $Cells) { if (($c.Trim()) -notmatch '^:?-{2,}:?$') { return $false } }
+    return $true
+}
+
+# Finds a header cell by its exact text first, then by a unique substring.
+# Searching for a substring alone used to pick a data-like header cell (one that
+# merely contains the word) over the real command column. When several cells
+# match a substring the header is ambiguous, so -1 is returned instead of
+# guessing.
+function Find-HeaderIndex {
+    param([string[]]$Cells, [string[]]$Needles)
+    if (-not $Cells -or -not $Needles) { return -1 }
+    for ($c = 0; $c -lt $Cells.Count; $c++) {
+        $cell = ([string]$Cells[$c]).Trim()
+        foreach ($n in $Needles) {
+            if ($n -and ($cell -ieq ([string]$n).Trim())) { return $c }
+        }
+    }
+    $hits = @()
+    for ($c = 0; $c -lt $Cells.Count; $c++) {
+        $cell = ([string]$Cells[$c]).Trim()
+        $hit = $false
+        foreach ($n in $Needles) {
+            if (-not $n) { continue }
+            if ($cell.IndexOf(([string]$n), [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $hit = $true; break }
+        }
+        if ($hit) { $hits += $c }
+    }
+    if ($hits.Count -eq 1) { return $hits[0] }
+    return -1
+}
+
+# Purpose cells are short labels, not commands: a compile label is compile,
+# while a test label with a parenthetical note mentioning compile is still only
+# a test row, because the segment after dropping the parenthetical must equal a
+# keyword. Whole-segment equality stops a keyword that merely appears inside a
+# free-text cell from selecting that row.
+function Test-PurposeMatch {
+    param([string]$Purpose, [string[]]$Keywords)
+    if (-not $Purpose) { return $false }
+    $segments = @($Purpose -split '[/\uFF0F]')
+    foreach ($s in $segments) {
+        $t = $s.Trim()
+        $t = ($t -replace '\s*[\uFF08(][^\uFF09)]*[\uFF09)]\s*$', '').Trim()
+        if (-not $t) { continue }
+        foreach ($k in $Keywords) {
+            if ($k -and ($t -ieq ([string]$k).Trim())) { return $true }
+        }
+    }
+    return $false
+}
+
+# Same marker semantics as Test-RunCommand, exposed so row selection can tell a
+# placeholder from a real command before deciding whether to fall back to *.
+function Test-PlaceholderCommand {
+    param([object]$RawCell, [string[]]$SkipMarkers, [string[]]$SkipExact)
+    if ($null -eq $RawCell) { return $true }
+    $cmd = ([string]$RawCell).Trim().Trim('`').Trim()
+    if ($cmd -eq '') { return $true }
+    if ($cmd -match '<') { return $true }
+    foreach ($e in @($SkipExact)) { if ($e -and ($cmd -eq [string]$e)) { return $true } }
+    foreach ($m in @($SkipMarkers)) { if ($m -and ($cmd -match [regex]::Escape([string]$m))) { return $true } }
+    return $false
+}
+
+# Parses the run-commands table. Two header shapes are accepted:
+#   | purpose | command |
+#   | purpose | module | command |
+# The command / module / purpose columns are identified by their header text
+# (keywords live in stage-gate-rules.json). A table without a header falls back
+# to the second column for the command, which matches the old template wording.
+# Parsing stops at a blank line so a second table in the same section cannot be
+# merged into this one.
+function Get-AgentsCommandTable {
+    param([string]$ProjectRoot, [string[]]$SectionNames)
     $agents = Join-Path $ProjectRoot 'AGENTS.md'
     if (-not (Test-Path -LiteralPath $agents)) { return $null }
     $lines = [System.IO.File]::ReadAllLines($agents, [System.Text.Encoding]::UTF8)
@@ -144,8 +295,8 @@ function Get-AgentsCommandRow {
     # contain a keyword such as "compile".
     $start = -1
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        # The template labels this section in bold (**run commands**) rather than
-        # as a heading, so both forms count as a section marker.
+        # The template labels this section in bold rather than as a heading, so
+        # both forms count as a section marker.
         $isSectionLine = ($lines[$i] -match '^#{2,6}[ \t]*') -or ($lines[$i] -match '^\*\*')
         if ($isSectionLine -and (Test-HasAny -Text $lines[$i] -Needles $SectionNames)) {
             $start = $i
@@ -154,22 +305,256 @@ function Get-AgentsCommandRow {
     }
     if ($start -lt 0) { return $null }
 
+    $tableIdx = @()
     for ($i = $start + 1; $i -lt $lines.Count; $i++) {
-        $line = $lines[$i]
-        if ($line -match '^#{2,6}[ \t]*') { break }
-        if ($line -notmatch '^\|') { continue }
-        foreach ($kw in $Keywords) {
-            if ($line -match [regex]::Escape($kw)) {
-                # An escaped pipe (\|) belongs to the command, not to the table:
-                # Split('|') silently truncated it and ran a different command.
-                $cells = [regex]::Split($line.Trim().Trim('|'), '(?<!\\)\|')
-                if ($cells.Count -ge 2) {
-                    return ($cells[1].Trim() -replace '\\\|', '|')
-                }
-            }
+        if ($lines[$i] -match '^#{2,6}[ \t]*') { break }
+        if ($lines[$i].Trim() -eq '') {
+            if ($tableIdx.Count -gt 0) { break }
+            continue
+        }
+        if ($lines[$i] -match '^\|') { $tableIdx += $i } else { if ($tableIdx.Count -gt 0) { break } }
+    }
+    if ($tableIdx.Count -eq 0) { return $null }
+
+    $cfg = $MC
+    $headerCells = $null
+    $cmdIdx = -1
+    $modIdx = -1
+    $purposeIdx = 0
+    $hasHeader = $false
+    $dataFrom = $tableIdx[0]
+
+    # A header exists only when the second table line is a separator row.
+    if ($tableIdx.Count -ge 2) {
+        $second = Split-TableLine $lines[$tableIdx[1]]
+        if (Test-SeparatorCells -Cells $second) { $hasHeader = $true; $dataFrom = $tableIdx[1] + 1 }
+    }
+
+    $ambiguous = $false
+    $purposeMissing = $false
+    if ($hasHeader) {
+        $headerCells = Split-TableLine $lines[$tableIdx[0]]
+        $cmdIdx = Find-HeaderIndex -Cells $headerCells -Needles $cfg.commandHeader
+        $modIdx = Find-HeaderIndex -Cells $headerCells -Needles $cfg.moduleHeader
+        $pi = Find-HeaderIndex -Cells $headerCells -Needles $cfg.purposeHeader
+        if ($pi -ge 0) { $purposeIdx = $pi } else { $purposeMissing = $true }
+        if ($cmdIdx -ge 0 -and $modIdx -ge 0 -and $cmdIdx -eq $modIdx) {
+            # One cell cannot be both the module and the command; keep the
+            # command and stop pretending the table has a module column.
+            $modIdx = -1
+            $ambiguous = $true
         }
     }
-    return $null
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $started = $false
+    for ($i = $dataFrom; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^#{2,6}[ \t]*') { break }
+        if ($lines[$i].Trim() -eq '') { if ($started) { break } else { continue } }
+        if ($lines[$i] -notmatch '^\|') { if ($started) { break } else { continue } }
+        $started = $true
+        $cells = Split-TableLine $lines[$i]
+        if (Test-SeparatorCells -Cells $cells) { continue }
+        $ci = $cmdIdx
+        if ($ci -lt 0) { $ci = if ($cells.Count -ge 2) { 1 } else { $cells.Count - 1 } }
+        if ($ci -ge $cells.Count) { $ci = $cells.Count - 1 }
+        $cmd = $cells[$ci]
+        $mod = ''
+        if ($hasHeader -and $modIdx -ge 0 -and $modIdx -ne $ci -and $modIdx -lt $cells.Count) {
+            $mod = ([string]$cells[$modIdx]).Trim().Trim('`').Trim()
+        }
+        $purpose = ''
+        if ($purposeIdx -ge 0 -and $purposeIdx -lt $cells.Count) { $purpose = $cells[$purposeIdx] }
+        $rows.Add([pscustomobject]@{ Line = $lines[$i]; Cells = $cells; Module = $mod; Command = $cmd; Purpose = $purpose })
+    }
+
+    $hasModule = ($hasHeader -and $modIdx -ge 0)
+    return [pscustomobject]@{
+        HasHeader       = $hasHeader
+        HasModuleColumn = $hasModule
+        HeaderAmbiguous = $ambiguous
+        PurposeMissing  = $purposeMissing
+        CommandIndex    = $cmdIdx
+        ModuleIndex     = $modIdx
+        PurposeIndex    = $purposeIdx
+        HeaderCells     = $headerCells
+        Rows            = $rows
+    }
+}
+
+function Test-IsAllModule {
+    param([string]$Module)
+    if (-not $Module) { return $false }
+    $v = $Module.Trim()
+    foreach ($a in $MC.allModules) { if ($v -eq [string]$a) { return $true } }
+    return $false
+}
+
+# Reads touched_modules from summary.md. Only a field line counts: after an
+# optional list bullet the line must start with the field itself (English name
+# or the configured Chinese label), so a prose sentence that merely mentions
+# the word is not treated as the declaration. Accepted shapes: the bare field,
+# the Chinese label, the backticked field, and the template's labelled bullet
+# that repeats the English field after the Chinese label.
+# Every token drops a trailing parenthetical note and a trailing dot, so an
+# annotated or punctuated module name still resolves to the module. A none
+# marker means "no module"; names keep their case and dashes.
+function Get-TouchedModules {
+    param([string]$FeatureName)
+    $text = Get-SummaryText -FeatureName $FeatureName
+    if (-not $text) { return @() }
+    $rx = '(?m)^[ \t]*(?:[-*][ \t]+)?(?:\u89E6\u53CA\u6A21\u5757[ \t]*[:\uFF1A][ \t]*`?touched_modules`?[ \t]*[:\uFF1A]|`?touched_modules`?[ \t]*[:\uFF1A]|\u89E6\u53CA\u6A21\u5757[ \t]*[:\uFF1A])[ \t]*([^\r\n]*)'
+    $m = [regex]::Match($text, $rx)
+    if (-not $m.Success) { return @() }
+    $tokens = @($m.Groups[1].Value -split '[,\uFF0C\u3001\s]+' | ForEach-Object { $_.Trim().Trim('`').Trim() } | Where-Object { $_ })
+    $out = @()
+    foreach ($t in $tokens) {
+        $name = ($t -replace '\s*[\uFF08(][^\uFF09)]*[\uFF09)]\s*$', '').Trim()
+        $name = $name -replace '\.$', ''
+        $name = $name.Trim()
+        if (-not $name) { continue }
+        $isNone = $false
+        foreach ($n in $MC.noneMarkers) { if ($name -eq [string]$n) { $isNone = $true; break } }
+        if (-not $isNone) { $out += $name }
+    }
+    return $out
+}
+
+# Copies a cached command result before decorating its detail: Test-RunCommand
+# hands back the same hashtable for a repeated command, and a hint appended in
+# place would leak into the next criterion that reuses that command.
+function Copy-RunResult {
+    param($Result)
+    return @{ Ok = $Result.Ok; Ran = $Result.Ran; Found = $Result.Found; Detail = [string]$Result.Detail }
+}
+
+# Adds the configuration / header hints to a detail string. A gate that quietly
+# fell back to built-in header names looks identical to a correctly configured
+# one; naming it is what makes the drift visible.
+function Add-TableHints {
+    param($Result, $Table)
+    $extra = @()
+    if ($script:moduleConfigFallback) { $extra += '[HINT] moduleCommands config missing; built-in header names used' }
+    if ($Table -and $Table.HeaderAmbiguous) {
+        $extra += '[HINT] header ambiguity: module and command columns resolved to the same cell; the module column is ignored'
+    }
+    if ($Table -and $Table.PurposeMissing) {
+        $col = [int]$Table.PurposeIndex + 1
+        $extra += ('[HINT] purpose column not found; used column ' + $col)
+    }
+    if ($extra.Count -gt 0) {
+        $d = [string]$Result.Detail
+        if ($d) { $Result.Detail = $d + ' ; ' + ($extra -join ' ; ') } else { $Result.Detail = ($extra -join ' ; ') }
+    }
+    return $Result
+}
+
+# Runs the compile / test command set for the touched modules.
+#   no matching row                 -> FAIL (missing row)
+#   table has a module column       -> per-module row or *; a module without one -> FAIL
+#   module column, no touched items -> * rows only; without one the declaration is
+#                                      empty, which is a gap, not a default module
+#   table without a module column   -> first row (old behaviour), plus a WARN in
+#                                      the detail when modules are touched (still Ok)
+# A selected placeholder / not-applicable row makes the whole set a SKIP: one
+# module left unmeasured must never be summarised as PASS. Commands are cached
+# so -All does not run the same command twice, and rows sharing a command are
+# deduplicated with every benefiting module named in the label.
+function Test-RunCommandSet {
+    param([string]$ProjectRoot, [string]$FeatureName, [string[]]$Keywords, [string[]]$SkipMarkers, [string[]]$SkipExact)
+    $table = Get-AgentsCommandTable -ProjectRoot $ProjectRoot -SectionNames $RULES.agentsCommandSection
+    $matched = @()
+    if ($table) { $matched = @($table.Rows | Where-Object { Test-PurposeMatch -Purpose $_.Purpose -Keywords $Keywords }) }
+    if ($matched.Count -eq 0) {
+        $noRow = @{ Ok=$false; Ran=$false; Found=$false; Detail='AGENTS.md run-commands table has no such row (add a measured command, or mark it not-applicable)' }
+        return (Add-TableHints -Result $noRow -Table $table)
+    }
+    $touched = @(Get-TouchedModules -FeatureName $FeatureName)
+
+    if (-not $table.HasModuleColumn) {
+        $r = Copy-RunResult (Test-RunCommand -RawCell $matched[0].Command -SkipMarkers $SkipMarkers -SkipExact $SkipExact)
+        if ($touched.Count -gt 0) {
+            $warn = [string]::Format([string](Get-McMessage 'singleCommandWarn' 'single command; add a module column to cover: {0}'), ($touched -join ', '))
+            $r.Detail = ((('' + $r.Detail) + ' ; ' + $warn))
+        }
+        return (Add-TableHints -Result $r -Table $table)
+    }
+
+    $starRows = @($matched | Where-Object { Test-IsAllModule $_.Module })
+    $selected = New-Object System.Collections.Generic.List[object]
+    if ($touched.Count -eq 0) {
+        if ($starRows.Count -gt 0) {
+            foreach ($row in $starRows) { $selected.Add($row) }
+        } else {
+            # No touched module and no default row: running the first module row
+            # would compile module-a only and call a module-b change PASS.
+            $msg = Get-McMessage 'emptyTouchedModules' 'table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)'
+            return (Add-TableHints -Result @{ Ok=$false; Ran=$true; Found=$true; Detail=$msg } -Table $table)
+        }
+    } else {
+        $missing = @()
+        foreach ($mod in $touched) {
+            $hit = @($matched | Where-Object { $_.Module -and (($_.Module.Trim()) -eq $mod) })
+            if ($hit.Count -gt 0) {
+                $row = $hit[0]
+                # A placeholder exact row must not shadow a real * row: the
+                # module would look covered while nothing ran for it.
+                if ((Test-PlaceholderCommand -RawCell $row.Command -SkipMarkers $SkipMarkers -SkipExact $SkipExact) -and $starRows.Count -gt 0) {
+                    $selected.Add($starRows[0])
+                } else {
+                    $selected.Add($row)
+                }
+                continue
+            }
+            if ($starRows.Count -gt 0) { $selected.Add($starRows[0]); continue }
+            $missing += $mod
+        }
+        if ($missing.Count -gt 0) {
+            $tmpl = Get-McMessage 'missingModuleRow' 'no compile/test command for module {0}; add a row or *; check the name against .harness/modules/ cards'
+            $details = @($missing | ForEach-Object { [string]::Format([string]$tmpl, $_) }) -join '; '
+            return (Add-TableHints -Result @{ Ok=$false; Ran=$true; Found=$true; Detail=$details } -Table $table)
+        }
+    }
+
+    # The same command declared for two modules must run once, and its label must
+    # name every module it covers.
+    $groups = New-Object System.Collections.Generic.List[object]
+    $byCommand = @{}
+    foreach ($row in $selected) {
+        $key = [string]$row.Command
+        $mod = if ($row.Module) { $row.Module.Trim() } else { '' }
+        if ($byCommand.ContainsKey($key)) {
+            $g = $byCommand[$key]
+            if ($mod -and ($g.Modules -notcontains $mod)) { $g.Modules.Add($mod) }
+            continue
+        }
+        $g = [pscustomobject]@{ Command = $key; Modules = (New-Object System.Collections.Generic.List[string]) }
+        if ($mod) { $g.Modules.Add($mod) }
+        $byCommand[$key] = $g
+        $groups.Add($g)
+    }
+
+    $labels = @()
+    $failed = $null
+    $hasSkip = $false
+    foreach ($g in $groups) {
+        $label = if ($g.Modules.Count -gt 0) { (($g.Modules -join '+') + ': ' + $g.Command) } else { [string]$g.Command }
+        $r = Test-RunCommand -RawCell $g.Command -SkipMarkers $SkipMarkers -SkipExact $SkipExact
+        if ($r.Ran -eq $false -and $r.Found -eq $true) {
+            $hasSkip = $true
+            $labels += ('SKIP ' + $label)
+            continue
+        }
+        if (-not $r.Ok) { $failed = ($label + ' -> ' + $r.Detail); break }
+        $labels += $label
+    }
+    if ($failed) {
+        return (Add-TableHints -Result @{ Ok=$false; Ran=$true; Found=$true; Detail=('module command failed: ' + $failed) } -Table $table)
+    }
+    if ($hasSkip) {
+        return (Add-TableHints -Result @{ Ok=$false; Ran=$false; Found=$true; Detail=('placeholder or not-applicable marker: ' + ($labels -join ', ')) } -Table $table)
+    }
+    return (Add-TableHints -Result @{ Ok=$true; Ran=$true; Found=$true; Detail=('modules ok: ' + ($labels -join ', ')) } -Table $table)
 }
 
 function Test-RunCommand {
@@ -187,14 +572,9 @@ function Test-RunCommand {
         return @{ Ok = $false; Ran = $false; Found = $false; Detail = 'AGENTS.md run-commands table has no such row (add a measured command, or mark it not-applicable)' }
     }
     $cmd = ([string]$RawCell).Trim().Trim('`').Trim()
-    # Two marker styles: phrases that announce themselves anywhere in the cell
-    # ("pending measurement", "TBD") and bare words that are a marker only when they are the
-    # whole cell ("none", "n/a", "-"). Substring matching for the latter turned a
-    # real command containing "none" into a silent SKIP.
-    $exact = @()
-    if ($SkipExact) { $exact = @($SkipExact) }
-    $isExactMarker = @($exact | Where-Object { $_ -and ($cmd -eq [string]$_) }).Count -gt 0
-    if (($cmd -eq '') -or ($cmd -match '<') -or $isExactMarker -or (Test-HasAny -Text $cmd -Needles $SkipMarkers)) {
+    # Marker semantics live in Test-PlaceholderCommand so row selection and
+    # execution cannot disagree about what counts as a placeholder.
+    if (Test-PlaceholderCommand -RawCell $RawCell -SkipMarkers $SkipMarkers -SkipExact $SkipExact) {
         return @{ Ok = $false; Ran = $false; Found = $true; Detail = "row is a placeholder or not-applicable marker: $RawCell" }
     }
     # Same command, same answer: -All would otherwise compile and test four times.
@@ -379,10 +759,10 @@ function Test-Criterion {
             return @{ Ok=$false; Detail='corrections > 0 but no lesson_id; attribute it so the lesson can be promoted' }
         }
         'compiles' {
-            return Test-RunCommand -RawCell (Get-AgentsCommandRow -ProjectRoot $ProjectRoot -Keywords $RULES.agentsCommandPurpose.compile -SectionNames $RULES.agentsCommandSection) -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            return Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.compile -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
         }
         'tests-green' {
-            return Test-RunCommand -RawCell (Get-AgentsCommandRow -ProjectRoot $ProjectRoot -Keywords $RULES.agentsCommandPurpose.test -SectionNames $RULES.agentsCommandSection) -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            return Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
         }
         'red-lines' {
             # Read the last pre-commit scan instead of running a full scan: a legacy
