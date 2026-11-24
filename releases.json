@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.31.22",
+    "title": "(开工提示词：第一条命令与硬前置)",
+    "body": [
+      "- AGENTS.md 顶部新增「开工第一件事（不可跳过）」：改源码 / 配置 / SQL / 接口前先跑 harness-start；未通过 Stage 1 不得 Edit/Write；用户说「开始做吧」不等于跳过；L0/L1 先写明档位",
+      "- request-analysis / coding-skill description 改为「必须使用 / 未完成不得改代码」；技能开头加硬前置；coding-skill 第 0 步改为 harness-start，保留单独复核 Stage 1 的命令",
+      "- AGENTS AI 编码纪律的必上技能改为先跑 harness-start（内含 harness-plan + Stage 1）；技能索引两行同步",
+      "- 开发流程规范 1.1 的开工入口改为「L2/L3 第一条命令」，补「开始做吧」语义；SKILL.md 安装/使用段补同一句",
+      "- 技能总行数 1935 → 1940（平均 78）；.ps1 计数仍 33；只动提示词，无脚本行为变化"
+    ]
+  },
+  {
     "version": "1.31.21",
     "title": "(开工入口与假红修复)",
     "body": [

@@ -1,17 +1,19 @@
 ---
 name: coding-skill
-description: 编码实现：按项目分层写业务代码，遵守数据访问、异常与缓存约定，改完必须做编译验证。动代码前使用，先按第 0 步确认变更记录已落盘。
+description: 编码实现：任何源码写操作前必须使用；第 0 步先跑 harness-start 并贴 DECLARE，未贴不得 Edit/Write。
 ---
 
 <!-- harness:package:begin body -->
 
 # 编码
 
+> **硬前置**：L2/L3 第一次 Edit/Write 前先跑 `scripts\harness-start.ps1`；它内部会跑 `stage-gate.ps1 -Stage 1`，没有 `DECLARE` 不得改代码。L0/L1 按第 0 步表格走轻量路径。
+
 > 目标：用最小改动实现需求，并让改动可编译、可验证、可评审。
 
 ## 何时用
 
-- 需求已分析完，进入实现或重构
+- 需求已分析完，进入实现或重构；准备第一次 Edit/Write 源码
 
 > **开工前先定档**：只有「1 个文件 · diff ≤30 行 · 不碰公共层 / DB / 配置 / 接口」才是 `L1`，其余都是 `L2 / L3`（判据见 `.harness/rules/开发流程规范.md` 第 1.1 节）。拿不准就升档。
 
@@ -34,14 +36,15 @@ description: 编码实现：按项目分层写业务代码，遵守数据访问�
 ## 模式（跨技术栈不变）
 ### 第 0 步：先证明记录已存在（动任何**写操作**之前）
 
-允许先做**只读探索**（读代码、Grep、看接口）来确认档位与影响面；但一旦开始写代码 / 生成文件，必须先贴出 `DECLARE`。**读完代码再补声明，等于事后追认**——所以探索完、动笔前，跑一次：
+允许先做**只读探索**（读代码、Grep、看接口）来确认档位与影响面；但一旦开始写代码 / 生成文件，必须先贴出 `DECLARE`。**读完代码再补声明，等于事后追认**——所以探索完、动笔前，先跑 `harness-start`（L2/L3；它内部会跑 `stage-gate.ps1 -Stage 1`）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stage 1 -Feature 特性名
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"
 ```
 
 跑完把脚本打印的 `DECLARE: record=… | flow=… | next=…` 那行**原样贴进回复**（贴不出来就说明第 0 步没做）。
 `L0` / `L1` 没有 summary，脚本不会给 `DECLARE`：直接写明档位（`L0：无记录` / `L1：写 _small.md`）再动手。
+> 只想单独复核 Stage 1 时，可跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名`。
 
 | 命令结果 | 下一步 |
 | --- | --- |

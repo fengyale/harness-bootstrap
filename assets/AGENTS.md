@@ -1,5 +1,10 @@
 # <项目名> AI 编码约束
 
+> **开工第一件事（不可跳过）**：改源码 / 配置 / SQL / 接口前，先跑
+> `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`。
+> 未 exit 0 / summary 未建 / Stage 1 未 OPEN 之前，不得 Edit/Write 源码；用户说「开始做吧」只是同意方案，不等于跳过。
+> 只改文档 / 注释 / 格式（L0）或 L1 轻量改动时，先在回复里写明「L0：无记录」/「L1：写 _small.md」，再走轻量路径。
+
 > 这是**唯一常驻文件**（TRAE 全量加载）。只放**每轮必须**的内容：技术栈、必跑命令、红线、文件索引、编码纪律。
 > 目标：**≤150 行**。写每一行前先问「每轮都必须读吗」，再按类型归位：
 > 项目知识（规则入口 / 业务流 / 数据模型 / 接口协议 / 环境工具）→ `.harness/wiki/`；
@@ -95,10 +100,10 @@
 | biz-dev | `notification` | 面向使用者的消息提醒（站内、短信、邮件、推送）上线或改造时使用 |
 | biz-dev | `stats-report` | 报表或看板指标开发、口径争议、数据刷新不及时时使用 |
 | biz-dev | `sql-review` | SQL 性能评审：新增或修改 SQL、加索引、改分页、改批量写入时使用 |
-| main-dev | `coding-skill` | 编码实现：按项目分层写业务代码，遵守数据访问、异常与缓存约定，改完必须做编译验证 |
+| main-dev | `coding-skill` | 编码实现：源码写操作前必须使用，先跑 harness-start 并贴 DECLARE |
 | main-dev | `deploy-verify` | 一次发布上线前后使用 |
 | main-dev | `expert-reviewer` | 代码评审：按结构、红线、性能、安全、一致性、可测性六个维度评审改动并输出分级结论 |
-| main-dev | `request-analysis` | 需求分析与拆解：把一句话需求转成可验证的任务清单，判断落在哪个模块、影响哪些接… |
+| main-dev | `request-analysis` | 需求分析与拆解：编码需求、首次 Edit/Write 前必须使用，先定档建 summary |
 | main-dev | `unit-test-ci` | 搭建或调整持续集成流水线时使用 |
 | main-dev | `unit-test-write` | 为新逻辑补测试、或修完缺陷后补回归用例时使用 |
 | trouble-shooting | `slow-sql` | 慢查询排查与优化：接口响应变慢、数据库 CPU 高、报表查询超时时使用 |
@@ -167,11 +172,11 @@
 
 ## AI 编码纪律（与 `开发流程规范.md` 保持一致，此处只留摘要）
 
-- **加载范围**：默认只读「本任务涉及的模块卡 + 直接相关的 1–2 份 wiki / 规则」；**技能与模块卡不占此额度**，按流程必上。**开工先跑 `scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`**（出上下文、建 summary 骨架、过 Stage 1、写 `.git/harness-task-started`），Stage 1 通过后再改代码。`requireTaskStart` 默认 false（升级与新装都不启用，L0 / 纯文档 / harness-only / merge 提交不受影响），团队 adoption 后手动改 true；开启后 pre-commit 只在提交 `summary.md` 时校验该 marker。
+- **开工第一件事**：见文件顶部「开工第一件事（不可跳过）」。L2/L3 先跑 `scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`（出上下文、建 summary 骨架、过 Stage 1、写 `.git/harness-task-started`），Stage 1 通过后再改代码；L0/L1 先在回复里写明档位，再走轻量路径。`requireTaskStart` 默认 false（升级与新装都不启用，L0 / 纯文档 / harness-only / merge 提交不受影响），团队 adoption 后手动改 true；开启后 pre-commit 只在提交 `summary.md` 时校验该 marker。
 - **超限例外**：跨模块改造、数据迁移、上线评审可多读，在 `summary.md` 写一行「额外读取：… ｜ 原因：…」。
 - **单次变更量 ≤ 文件总量的 40%**，超过必须拆分；每次改完必须过上面的"必跑命令"。多智能体并行时，读代码可并行，**编译 / 测试 / 迁移一次只跑一个**，避免共享 target 与 fixture 互相污染
 - **先定档再落盘**：L0（纯文档 / 注释 / 格式 / typo，不改行为）不建记录；L1（单文件、diff ≤30 行、不碰公共层 / DB / 配置 / 接口）只在 `.harness/changes/_small.md` 追加一行，**提交时 pre-commit 按实际 diff 核对，超过 1 文件或 30 行会被拒绝**；L2/L3 先复制 `.harness/changes/_template/summary.md` 到 `.harness/changes/` 下的特性目录（目录名即特性名），运行 `check-summary.ps1 -Feature 特性名 -Stage initial` 通过后**单独提交一次**（只含 `.harness/` 下文件），再改代码——pre-commit 会拒绝「新增 summary + `.harness/` 之外的改动」同一个提交，因为 git 只能看提交顺序、看不到编辑顺序。`/plan` 模式的计划必须写进对应记录，不能只留在工具的计划面板。
-- **必上技能**：收到需求先跑 `scripts\harness-plan.ps1 -Requirement "需求原文"`（只读，给出模块卡/技能/门禁/表/接口），再加载 `request-analysis`；**动代码前先跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名` 并把 `DECLARE` 行贴进回复**（出现 `[HINT]` 说明记录缺失，先补记录），再加载 `coding-skill`；合并前加载 `expert-reviewer`，平台装了 `code-reviewer` 子智能体时**优先委派它**做独立评审。改动后先跑 `scripts\suggest-flow.ps1`，用它的 `flow:` / `touched_modules:` 填记录，再按档位走流程
+- **必上技能**：收到需求先跑 `scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`（内含 `harness-plan` 与 `stage-gate.ps1 -Stage 1`），再加载 `request-analysis`；**动代码前把 `DECLARE` 行贴进回复**（出现 `[HINT]` 说明记录缺失，先补记录），再加载 `coding-skill`；合并前加载 `expert-reviewer`，平台装了 `code-reviewer` 子智能体时**优先委派它**做独立评审。改动后先跑 `scripts\suggest-flow.ps1`，用它的 `flow:` / `touched_modules:` 填记录，再按档位走流程
 - **涉及 SQL 必评审**：新增/修改 SQL、加索引、改分页或批量写入时，**已装 `sql-review` 就必须加载它**并按步骤评估；未装时按 `.harness/rules/SQL评审规范.md` 手工评审。两种情况都要写 `sql_review:`，含正确性四层（语法 / 结构 / 绑定 / 结果）与执行计划结论；**四层里有「未验证」时结论不得写「通过」**，结论为「通过 / 已改写」时必须引用 `.harness/changes/` 下本特性 `sql-review/` 里真实存在的证据文件（EXPLAIN 或结果摘要），只写通过不引用路径会在阶段 10 FAIL；引用的证据路径必须真实存在；stage-gate 阶段 10 校验（**涉及 SQL 的改动合并前就要跑**），缺则不能收尾
 - **禁止在未加载对应技能时凭印象编码**——先查 `.harness/skills/README.md`；清单里没有的技能按“技能缺失”处理并说明
 - **任务摘要必须可判定**：L2/L3 的 `summary.md` 由 `scripts/check-summary.ps1` 校验；**pre-commit 查档位 / 加载技能 / 触及模块，外加验收标准、影响面（或技术变更清单）、任务拆分的真实内容**（模板占位符算未填）；`corrections` / `impl_corrections` / `lesson_id` / `sql_review` / `delivery_status` / `linked_records` 由 `stage-gate` 阶段 10 查——它们做完才知道，`delivery_status` 为 `已部署` 时还要求部署记录有真实一行；`linked_records` 有跨仓时写 `repo:path` 或 URL，无跨仓写 `-`，整行缺失视为单仓（不算未完成），但占位符会 FAIL。L1 的 `_small.md` 行由 `metrics.ps1` 解析，字段不全或写坏会报 malformed，且 pre-commit 会按实际 diff 核对 L1 声明（>1 文件或 >30 行直接拒绝）。**缺字段或留占位符 = 任务未完成**
