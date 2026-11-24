@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.31.24",
+    "title": "(任务开工体验与门禁语义修复)",
+    "body": [
+      "- harness-start：plan 算出的流程档位与匹配模块直接预填 flow / touched_modules；显式 -Flow / -Modules 仍优先，档位冲突时打印 INFO；自检新增 7 条用例",
+      "- summary 模板：开头改为「由 harness-start 自动创建，就地填写并提交，不要另存副本」，说明首跑 BLOCKED 属正常；「待补短板」收窄为 harness 能力并注明业务改动写「无」即可",
+      "- check-summary：SQL 证据路径抽取剥离全角标点与反引号，`（.harness/…）` 不再把 `）` 吃进路径导致误判 missing",
+      "- stage-gate：shortfall-listed 文案改为「只记 harness 能力，业务改动写 none 标记即可」，业务源码路径不再被视为已补能力；regression 增补全角括号 / 反引号 / 业务路径 / none 标记四类用例"
+    ]
+  },
+  {
     "version": "1.31.23",
     "title": "(升级可靠性 Phase 1：新包引导、块级合并、激活报告)",
     "body": [

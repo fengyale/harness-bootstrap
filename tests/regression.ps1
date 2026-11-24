@@ -368,6 +368,14 @@ if ($LASTEXITCODE -eq 0) { Write-Host "CONTRADICTORY SQL REVIEW ACCEPTED" -Foreg
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(.harness/changes/demo/sql-review/explain.txt) · 计划 type=ref · 结论 通过'
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "CONSISTENT SQL REVIEW REJECTED" -ForegroundColor Red; $script:fail++ }
+# Hand-written evidence often sits inside full-width brackets or backticks; the
+# closing character must not become part of the path.
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验（.harness/changes/demo/sql-review/explain.txt） · 计划 type=ref · 结论 通过'
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "FULL-WIDTH BRACKETS AROUND SQL EVIDENCE REJECTED" -ForegroundColor Red; $script:fail++ }
+Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验(`.harness/changes/demo/sql-review/explain.txt`) · 计划 type=ref · 结论 通过'
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "BACKTICK-WRAPPED SQL EVIDENCE REJECTED" -ForegroundColor Red; $script:fail++ }
 # "pass" written by hand with no locatable artefact is self-report, not evidence.
 Set-SqlReview 'sql_review: demo.t · 语法 OK · 结构 OK · 绑定 #{} · 结果 已验 · 计划 type=ref · 结论 通过'
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
@@ -402,9 +410,22 @@ $sfSrc = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
 $sfProse = "## 待补短板" + "`r`n" + "需要补一个规则" + "`r`n" + "还在排期"
 $sfText = $sfSrc -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', $sfProse
 Set-Content -LiteralPath $sumPath -Value $sfText -Encoding UTF8
-$sfOut = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-String
+$sfOut = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-String -Width 4096
 if ($LASTEXITCODE -eq 0) { Write-Host "SHORTFALL PROSE ACCEPTED" -ForegroundColor Red; $script:fail++ }
 if (($sfOut -notmatch 'none') -or ($sfOut -notmatch 'N/A') -or ($sfOut -notmatch '无')) { Write-Host "SHORTFALL DETAIL DOES NOT LIST THE CONFIGURED MARKERS" -ForegroundColor Red; $script:fail++ }
+# The section is harness-only: a business source path is not a harness capability.
+$sfBiz = "## 待补短板" + "`r`n" + "- 本次暴露的短板：规则缺口还在排期" + "`r`n" + "- 已补的能力：src/main/java/OrderService.java"
+$sfBizText = $sfSrc -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', $sfBiz
+Set-Content -LiteralPath $sumPath -Value $sfBizText -Encoding UTF8
+$sfOut2 = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-String -Width 4096
+if ($LASTEXITCODE -eq 0) { Write-Host "BUSINESS PATH ACCEPTED AS A HARNESS CAPABILITY" -ForegroundColor Red; $script:fail++ }
+if (($sfOut2 -notmatch 'harness capability') -or ($sfOut2 -notmatch 'business-code')) { Write-Host "SHORTFALL DETAIL DOES NOT EXPLAIN THE HARNESS-ONLY RULE" -ForegroundColor Red; Write-Host $sfOut2; $script:fail++ }
+# Business work with nothing to add: a none marker is a legal conclusion.
+$sfNone = "## 待补短板" + "`r`n" + "- 本次暴露的短板：无" + "`r`n" + "- 已补的能力：无"
+$sfNoneText = $sfSrc -replace '(?ms)^## 待补短板\r?\n.*?(?=\r?\n## )', $sfNone
+Set-Content -LiteralPath $sumPath -Value $sfNoneText -Encoding UTF8
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '6'; Feature = 'demo' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "A NONE MARKER WAS REJECTED IN THE SHORTFALL SECTION" -ForegroundColor Red; $script:fail++ }
 Set-Content -LiteralPath $sumPath -Value $sfSrc -Encoding UTF8
 
 Step 'A3+ spoof must fail'

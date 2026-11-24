@@ -395,7 +395,10 @@ function Assert-SqlReview {
     # A pass verdict is a claim about work that was done: it must point at an
     # artefact a reviewer can open. Record the .harness/... references once, so
     # the verdict check and the existence check below cannot disagree.
-    $evidenceMatches = @([regex]::Matches($sql, '\.harness[\\/][^\s\u00B7,;:()\[\]]+'))
+    # A path written by hand often sits inside full-width brackets or backticks.
+    # Only ASCII punctuation used to end the match, so the closing character was
+    # swallowed and Test-Path failed on a path the reviewer never wrote.
+    $evidenceMatches = @([regex]::Matches($sql, '\.harness[\\/][^\s\u00B7,;:()\[\]`\uFF08\uFF09\uFF0C\u3001\u3002\uFF1B\uFF1A\uFF01\uFF1F\uFF1C\uFF1E\uFF5C\u300A\u300B\u300C\u300D\u3010\u3011\u201C\u201D\u2018\u2019]+'))
     $hasEvidence = ($evidenceMatches.Count -gt 0)
 
     # The conclusion template separates the parts with a middle dot.

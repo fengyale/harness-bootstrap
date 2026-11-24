@@ -23,9 +23,11 @@
     characters, and the resolved directory must sit under .harness/changes.
     -Flow L0 is refused (L0 keeps no record); -Flow L1 warns that L1 normally
     uses .harness/changes/_small.md.
+    The plan's flow hint and matched module cards pre-fill flow / touched_modules
+    when -Flow / -Modules are not passed; an explicit argument always wins.
     When the project declares modules (module cards or a module column in the
-    AGENTS.md command table) and -Modules is empty, a warning names the risk:
-    stage 3 may FAIL on touched_modules=none.
+    AGENTS.md command table) and neither -Modules nor the plan names one, a
+    warning names the risk: stage 3 may FAIL on touched_modules=none.
     Not a git repository: stage 1 still runs, but no marker is written (WARN).
 
   NOTE ON THE GATE
@@ -155,6 +157,8 @@ function Invoke-Start {
         [string]$RequirementText,
         [string]$FlowValue,
         [string]$ModulesText,
+        [bool]$FlowExplicit = $true,
+        [bool]$ModulesExplicit = $true,
         [switch]$NoPlan
     )
 
@@ -175,6 +179,11 @@ function Invoke-Start {
     Write-Host ('harness-start: ' + $FeatureName) -ForegroundColor Cyan
 
     # ---------------------------------------------------------- 1 context pack
+    # The plan also carries a flow hint and the module cards it matched. They are
+    # read only when the caller did not pass -Flow / -Modules: an explicit
+    # argument always wins, so a re-run cannot silently move the declaration.
+    $hintFlow = ''
+    $hintModules = @()
     if (-not $NoPlan) {
         $planScript = Join-Path $RootPath 'scripts\harness-plan.ps1'
         if (Test-Path -LiteralPath $planScript) {
@@ -183,9 +192,21 @@ function Invoke-Start {
             } else {
                 Write-Host ''
                 Write-Host '--- harness plan (read only) ---' -ForegroundColor Cyan
-                & $PS -NoProfile -ExecutionPolicy Bypass -File $planScript -Root $RootPath -Requirement $RequirementText -Feature $FeatureName | Out-Host
-                if ($LASTEXITCODE -ne 0) {
+                # Captured, then printed unchanged: the same lines feed the hint
+                # below, so the console and the pre-fill cannot disagree.
+                $planLines = @(& $PS -NoProfile -ExecutionPolicy Bypass -File $planScript -Root $RootPath -Requirement $RequirementText -Feature $FeatureName 2>&1 | ForEach-Object { "$_" })
+                $planExit = $LASTEXITCODE
+                $planLines | Out-Host
+                if ($planExit -ne 0) {
                     Write-Host '[WARN] harness-plan failed; continuing (the plan is an aid, not a gate)' -ForegroundColor Yellow
+                }
+                foreach ($line in $planLines) {
+                    $fm = [regex]::Match($line, 'level hint\s*:\s*(L[0-3])')
+                    if ($fm.Success) { $hintFlow = $fm.Groups[1].Value }
+                    $mm = [regex]::Match($line, '^\s*-\s+(\S+)\s+\(score\s+\d+\)\s+\[\.harness/modules/')
+                    if ($mm.Success -and -not ($hintModules -contains $mm.Groups[1].Value)) {
+                        $hintModules += $mm.Groups[1].Value
+                    }
                 }
                 Write-Host '--- end of plan ---' -ForegroundColor Cyan
             }
@@ -193,7 +214,19 @@ function Invoke-Start {
     }
 
     # --------------------------------------------------------- 2 change record
-    $modulesValue = Get-ModulesValue $ModulesText
+    $effectiveFlow = $FlowValue
+    $flowSource = 'argument'
+    if (-not $FlowExplicit -and $hintFlow) { $effectiveFlow = $hintFlow; $flowSource = 'plan hint' }
+    if ($FlowExplicit -and $hintFlow -and $hintFlow -ne $FlowValue) {
+        Write-Host ('[INFO] the plan suggests ' + $hintFlow + '; keeping explicit -Flow ' + $FlowValue) -ForegroundColor DarkGray
+    }
+    $effectiveModules = $ModulesText
+    $modulesSource = 'argument'
+    if (-not $ModulesExplicit -and @($hintModules).Count -gt 0) {
+        $effectiveModules = ($hintModules -join ',')
+        $modulesSource = 'plan hint'
+    }
+    $modulesValue = Get-ModulesValue $effectiveModules
     if ($modulesValue -eq 'none' -and ((Test-HasModuleCards $RootPath) -or (Test-HasModuleColumn $RootPath))) {
         Write-Host '[WARN] touched_modules=none but this project declares modules; pass -Modules a,b or stage 3 may FAIL' -ForegroundColor Yellow
     }
@@ -207,12 +240,16 @@ function Invoke-Start {
             return 1
         }
         $text = [System.IO.File]::ReadAllText($template, [System.Text.Encoding]::UTF8)
-        $text = Set-SummaryPrefill -Text $text -FlowValue $FlowValue -ModulesValue $modulesValue
+        $text = Set-SummaryPrefill -Text $text -FlowValue $effectiveFlow -ModulesValue $modulesValue
         $dir = Split-Path -Parent $summaryPath
         if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
         [System.IO.File]::WriteAllText($summaryPath, $text, $Utf8NoBom)
         Write-Host ('[ADD] ' + $summaryPath) -ForegroundColor Green
-        Write-Host ('      pre-filled flow: ' + $FlowValue + ' / touched_modules: ' + $modulesValue)
+        $sourceNote = ''
+        if ($flowSource -eq 'plan hint' -or $modulesSource -eq 'plan hint') {
+            $sourceNote = '  (from the plan hint; adjust before committing)'
+        }
+        Write-Host ('      pre-filled flow: ' + $effectiveFlow + ' / touched_modules: ' + $modulesValue + $sourceNote)
         Write-Host '      fill loaded_skills / acceptance / impact / tasks, then re-run this command'
     } else {
         Write-Host ('[KEEP] existing record not overwritten: ' + $summaryPath) -ForegroundColor DarkGray
@@ -338,6 +375,39 @@ function Invoke-StartSelfTest {
         Assert-Case 'default touched_modules is none' ($codeB -eq 1 -and $text2 -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: none')
         Assert-Case 'a multi-module project warns when -Modules is empty' ($logB -match 'touched_modules=none' -and $logB -match 'stage 3')
 
+        # --- the plan's own hint pre-fills flow / touched_modules when the caller
+        # does not pass them. This guards the contradiction where the plan prints
+        # L3 while the template is pre-filled L2 / none.
+        $tmp4 = Join-Path ([System.IO.Path]::GetTempPath()) ('hb-start-hint-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Fixture -Path $tmp4 -WithTemplate
+        $stubPlan = @(
+            "Write-Host 'harness plan (stub)'",
+            "Write-Host '  level hint  : L3 -- stub hint'",
+            "Write-Host '  - core  (score 2)  [.harness/modules/core.md]'",
+            'exit 0'
+        ) -join "`r`n"
+        [System.IO.File]::WriteAllText((Join-Path $tmp4 'scripts\harness-plan.ps1'), ($stubPlan + "`r`n"), $Utf8NoBom)
+        $linesP = @(Invoke-Start -RootPath $tmp4 -FeatureName 'hinted' -RequirementText 'demo request' -FlowValue 'L2' -ModulesText '' -FlowExplicit $false -ModulesExplicit $false 6>&1)
+        $codeP = [int]($linesP[-1])
+        $logP = ($linesP | ForEach-Object { "$_" }) -join "`n"
+        $spP = Join-Path $tmp4 '.harness\changes\hinted\summary.md'
+        $textP = ''
+        if (Test-Path -LiteralPath $spP) { $textP = [System.IO.File]::ReadAllText($spP, [System.Text.Encoding]::UTF8) }
+        Assert-Case 'plan hint fills flow when -Flow is not passed' ($textP -match '(?m)(?<![A-Za-z0-9_\-])flow: L3')
+        Assert-Case 'plan hint fills touched_modules when -Modules is not passed' ($textP -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: core')
+        Assert-Case 'pre-fill names the plan as its source' ($logP -match 'plan hint')
+        Assert-Case 'a plan-hinted start still blocks on placeholder content' ($codeP -eq 1)
+
+        # --- an explicit argument wins over the hint (and says so)
+        $linesE = @(Invoke-Start -RootPath $tmp4 -FeatureName 'explicit' -RequirementText 'demo request' -FlowValue 'L2' -ModulesText 'manual' 6>&1)
+        $logE = ($linesE | ForEach-Object { "$_" }) -join "`n"
+        $spE = Join-Path $tmp4 '.harness\changes\explicit\summary.md'
+        $textE = ''
+        if (Test-Path -LiteralPath $spE) { $textE = [System.IO.File]::ReadAllText($spE, [System.Text.Encoding]::UTF8) }
+        Assert-Case 'explicit -Flow wins over the plan hint' ($textE -match '(?m)(?<![A-Za-z0-9_\-])flow: L2')
+        Assert-Case 'explicit -Modules wins over the plan hint' ($textE -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: manual')
+        Assert-Case 'a conflicting explicit flow is reported' ($logE -match 'keeping explicit -Flow L2')
+
         # --- fill the countable content and pass stage 1
         Set-SummaryContent -Path $sp
         $code = Invoke-Start -RootPath $tmp -FeatureName 'demo' -FlowValue 'L2' -ModulesText 'a,b' -NoPlan
@@ -386,7 +456,7 @@ function Invoke-StartSelfTest {
         Assert-Case 'a non-git start exits 0 with a warning' ($codeH -eq 0 -and $logH -match 'not a git repository')
         Assert-Case 'a non-git start writes no marker' (-not (Test-Path -LiteralPath (Join-Path $tmp3 '.git\harness-task-started')))
     } finally {
-        foreach ($d in @($tmp, $tmp2, $tmp3)) {
+        foreach ($d in @($tmp, $tmp2, $tmp3, $tmp4)) {
             if ($d -and (Test-Path -LiteralPath $d)) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
     }
@@ -415,4 +485,7 @@ catch {
     exit 1
 }
 
-exit (Invoke-Start -RootPath $rootPath -FeatureName $Feature -RequirementText $Requirement -FlowValue $Flow -ModulesText $Modules -NoPlan:$SkipPlan)
+$flowExplicit = $PSBoundParameters.ContainsKey('Flow')
+$modulesExplicit = $PSBoundParameters.ContainsKey('Modules')
+
+exit (Invoke-Start -RootPath $rootPath -FeatureName $Feature -RequirementText $Requirement -FlowValue $Flow -ModulesText $Modules -FlowExplicit $flowExplicit -ModulesExplicit $modulesExplicit -NoPlan:$SkipPlan)

@@ -161,7 +161,7 @@ $stageDefs = @(
     New-Stage '6' 'code review' @(
         @{ Id='review-recorded'; Kind='AUTO';  Text='summary.md has a review conclusion' },
         @{ Id='review-ledger';   Kind='AUTO';  Text='summary.md review table is well-formed (P0/P1 have fingerprints and evidence)' },
-        @{ Id='shortfall-listed'; Kind='AUTO'; Text='summary.md states which missing capability was added (A3+)' },
+        @{ Id='shortfall-listed'; Kind='AUTO'; Text='summary.md names the harness capability added (business-code work writes a none marker)' },
         @{ Id='review-report';   Kind='HUMAN'; Text='no open P0 issue' },
         @{ Id='six-dimensions';  Kind='HUMAN'; Text='all review dimensions were concluded' }
     )
@@ -710,16 +710,17 @@ function Test-Criterion {
         'shortfall-listed' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
             # A3+ is an acceptance criterion, so it needs a machine-readable resting
-            # place. The section must either conclude "none" or name the capability
-            # that was actually added (a rule / script / skill path).
+            # place. The section is about harness assets only: a rule / gate / skill
+            # path, or a none marker when business code had nothing to add. A plain
+            # business source path is not a harness capability and stays a failure.
             $body = Get-SectionBody -Text $summary -Needles $S.shortfall
-            if ($null -eq $body) { return @{ Ok=$false; Detail='no shortfall section (which missing capability was added)' } }
+            if ($null -eq $body) { return @{ Ok=$false; Detail='no shortfall section (state the harness capability added, or write a none marker)' } }
             if (Test-HasAny -Text $body -Needles $RULES.noneMarkers) { return @{ Ok=$true; Detail=$M.present } }
             if ($body -match '(\.harness|scripts)[\\/]') { return @{ Ok=$true; Detail=$M.present } }
             # List the configured markers instead of "a none marker": the failure
             # is only actionable if it says what would have been accepted.
             $markerList = @($RULES.noneMarkers | Where-Object { $_ } | ForEach-Object { [string]$_ }) -join ' / '
-            return @{ Ok=$false; Detail=("shortfall section does not name the added capability (write its .harness/ or scripts/ path, or one of: " + $markerList + ")") }
+            return @{ Ok=$false; Detail=("shortfall section must name a harness capability (.harness/ or scripts/ path); business-code changes need no harness asset, so a none marker is enough. Accepted: " + $markerList) }
         }
         'distill-recorded' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
