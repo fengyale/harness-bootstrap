@@ -107,6 +107,7 @@
     "scripts/metrics.ps1",
     "scripts/audit-order.ps1",
     "scripts/update-harness.ps1",
+    "scripts/upgrade-report.ps1",
     "scripts/promote-pattern.ps1"
   ]
 }

@@ -1,9 +1,11 @@
 # <项目名> AI 编码约束
 
+<!-- harness:upgrade:begin id=start-command -->
 > **开工第一件事（不可跳过）**：改源码 / 配置 / SQL / 接口前，先跑
 > `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`。
 > 未 exit 0 / summary 未建 / Stage 1 未 OPEN 之前，不得 Edit/Write 源码；用户说「开始做吧」只是同意方案，不等于跳过。
 > 只改文档 / 注释 / 格式（L0）或 L1 轻量改动时，先在回复里写明「L0：无记录」/「L1：写 _small.md」，再走轻量路径。
+<!-- harness:upgrade:end id=start-command -->
 
 > 这是**唯一常驻文件**（TRAE 全量加载）。只放**每轮必须**的内容：技术栈、必跑命令、红线、文件索引、编码纪律。
 > 目标：**≤150 行**。写每一行前先问「每轮都必须读吗」，再按类型归位：
@@ -158,7 +160,7 @@
 | `.harness/reviews.md` | 评审发现索引（`metrics.ps1` 自动刷新、团队共享）；写 P0/P1 指纹前先查表，同一问题复用同一指纹 |
 | `.harness/lessons-promoted.txt` | 已晋升教训清单（团队共享）；**晋升必须带断言**：`id :: check=路径::说明`，检查脚本内要有 `# lesson: id` 与 `# fails-when: 什么改动会让它变红`；缺一由 `metrics.ps1 -LessonGate` 判 FAIL |
 | `scripts/install-git-hooks.ps1` | 安装 git pre-commit 强制门禁（**真正的拦截点**，不是可选的编辑器 hook） |
-| `scripts/update-harness.ps1` | 升级已装项目：不加 `-Apply` 只预览，`-Apply` 执行；`-MergeSkills` 用新版通用段并保留项目绑定（推荐）；`-UpdateSkills` 只替换未编译技能；`-ForceSkills` 强制覆盖 |
+| `scripts/update-harness.ps1` | 升级：日常从**新包**跑 `assets\upgrade\upgrade-harness.ps1 -Root 项目根目录`（它调用新包的 `update-harness.ps1`，项目旧 updater 被绕过）；本文件是**被替换的机制文件**，`-PackagePath` 直调只用于 1.30.0 及更早的首次升级或兼容排查。`-Apply` 才执行；`-MergeSkills` 用新版通用段并保留项目绑定 |
 | `scripts/red-line-scan.ps1` | 红线扫描脚本（hooks 与 CI 共用） |
 | `scripts/check-summary.ps1` | `summary.md` 校验：pre-commit 查档位 / 技能 / 模块 + 验收标准、影响面、任务拆分三节内容；阶段 10 查收尾字段 |
 | `scripts/audit-order.ps1` | CI 提交区间审计：源码提交前是否已有 summary；`[L0]` 豁免，合并提交跳过。记录目录被 `.gitignore` 忽略时直接 FAIL（不是静默跳过） |

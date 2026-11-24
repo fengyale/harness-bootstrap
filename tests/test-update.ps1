@@ -75,6 +75,21 @@ $otherRule = @(Get-ChildItem -LiteralPath "$proj\.harness\rules" -File |
 Add-Content -LiteralPath $otherRule.FullName -Value 'project-only-rule-line' -Encoding UTF8
 $otherRuleRel = '.harness\rules\' + (Split-Path -Leaf $otherRule)
 
+# A rule file that carries BOTH a red-line table and an upgrade block. The block
+# branch must win in the plan and in the apply phase alike; otherwise the dry run
+# promises a red-line merge while the apply only replaces the block.
+$combinedRel = '.harness\rules\combined-probe.md'
+$combinedDst = Join-Path $proj $combinedRel
+[System.IO.File]::WriteAllLines($combinedDst, @(
+    '# combined probe',
+    '<!-- harness:upgrade:begin id=probe-block -->',
+    'old-probe-line',
+    '<!-- harness:upgrade:end id=probe-block -->',
+    '',
+    '| R5 | probe-rule | old-check |',
+    '| R6 | probe-log | old-log-check |'
+), (New-Object System.Text.UTF8Encoding($false)))
+
 # Same idea for AGENTS.md: a project keeps its own red-line names, while the
 # framework-owned check cell must be refreshed from the package.
 $agentsLines = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) | ForEach-Object {
@@ -88,6 +103,24 @@ $agentsLines = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.
 $agentsNoRecord = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) |
     Where-Object { $_ -notmatch 'HARNESS_ALLOW_NO_RECORD' })
 [System.IO.File]::WriteAllLines("$proj\AGENTS.md", $agentsNoRecord, (New-Object System.Text.UTF8Encoding($false)))
+# Same idea for the marked entry block: an install older than the marker carries
+# the paragraph without it. Drop only the marker lines (the text stays, so the
+# upgrade has to replace the unmarked copy instead of duplicating it) and add a
+# project-only line that must survive.
+$agentsNoBlock = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'harness:upgrade:(begin|end)\s+id=start-command' })
+$agentsNoBlock += '> project-custom-agents-line'
+[System.IO.File]::WriteAllLines("$proj\AGENTS.md", $agentsNoBlock, (New-Object System.Text.UTF8Encoding($false)))
+
+# The process rules keep their own entry paragraph. Older installs have no
+# flow-start-command block around it: the upgrade must report MANUAL and must not
+# rewrite a hand-written rules file. Strip only the marker lines.
+$flowRule = @(Get-ChildItem -LiteralPath "$proj\.harness\rules" -File | Where-Object {
+    (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -match 'harness:upgrade:begin\s+id=flow-start-command' })[0].FullName
+$flowNoBlock = @([System.IO.File]::ReadAllLines($flowRule, [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'harness:upgrade:(begin|end)\s+id=flow-start-command' })
+[System.IO.File]::WriteAllLines($flowRule, $flowNoBlock, (New-Object System.Text.UTF8Encoding($false)))
+$flowBefore = [System.IO.File]::ReadAllText($flowRule, [System.Text.Encoding]::UTF8)
 
 # One installed skill (the install keeps 3-5, not all 25 templates).
 # Create the fixture contents explicitly instead of copying a template file:
@@ -406,6 +439,15 @@ Add-Content -LiteralPath "$newPkg\assets\AGENTS.md" -Value '<!-- new template li
 # of truth for the known-row merge.
 New-Item -ItemType Directory -Force -Path "$newPkg\assets\.harness" | Out-Null
 Copy-Item -LiteralPath "$pkg\assets\.harness\rules" -Destination "$newPkg\assets\.harness\rules" -Recurse
+[System.IO.File]::WriteAllLines((Join-Path $newPkg 'assets\.harness\rules\combined-probe.md'), @(
+    '# combined probe',
+    '<!-- harness:upgrade:begin id=probe-block -->',
+    'new-probe-line',
+    '<!-- harness:upgrade:end id=probe-block -->',
+    '',
+    '| R5 | probe-rule | new-check |',
+    '| R6 | probe-log | new-log-check |'
+), (New-Object System.Text.UTF8Encoding($false)))
 New-Item -ItemType Directory -Force -Path "$newPkg\assets\.trae\agents" | Out-Null
 Set-Content -LiteralPath "$newPkg\assets\.trae\agents\new-agent.md" -Value '# agent' -Encoding UTF8
 
@@ -458,6 +500,14 @@ Check 'dry-run keeps changes history'      ($dry -match '\[KEEP\s*\]\s+\.harness
 Check 'dry-run writes no version marker'   ((Get-Content -LiteralPath "$proj\.harness\.installed-version" -TotalCount 1) -eq '1.0.0')
 Check 'dry-run plans template UPDATE'      ($dry -match ('\[UPDATE\]\s+' + [regex]::Escape('.harness\changes\_template\summary.md')))
 Check 'dry-run marks project rule MANUAL'  ($dry -match '\[MANUAL\]\s+\.harness\\rules\\.*SQL.*\.md')
+# The marked AGENTS block must be planned as an insert, and the rules file whose
+# block is missing must be MANUAL (never rewritten automatically).
+Check 'dry-run plans the start-command block insert' (($dry -match '\[MERGE\s*\]\s+AGENTS\.md') -and ($dry -match 'start-command block inserted; other lines kept'))
+Check 'dry-run marks flow rules MANUAL' (($dry -match '\[MANUAL\s*\]\s+\.harness\\rules\\') -and ($dry -match 'flow-start-command block missing; copy from package'))
+# Plan/apply branch order: a rule file with both a red-line table and a block is
+# handled as a block merge in the plan, exactly like the apply phase does.
+Check 'dry-run merges a combined rule file by block' ($dry -match 'combined-probe\.md\s*\r?\n\s+probe-block block replaced; other lines kept')
+Check 'dry-run does not promise a red-line merge for it' (-not ($dry -match 'combined-probe\.md\s*\r?\n\s+known red-line rows merged'))
 
 Write-Host ''
 Write-Host '=== dry run with -UpdateSkills ===' -ForegroundColor Cyan
@@ -565,6 +615,13 @@ Check 'red-line R6 rule name kept'  ($dstR6 -match '^\| R6 \| project-log-rule \
 Check 'red-line R6 check merged'    ($dstR6 -notmatch 'old-log-check')
 Check 'red-line project row kept'   (@($redlineAfter | Where-Object { $_ -match '^\| R9 ' }).Count -eq 1)
 
+# The combined file proves the apply phase took the block branch, not the
+# red-line branch: the block content changed, the R5 check cell did not.
+$combinedAfter = [System.IO.File]::ReadAllLines($combinedDst, [System.Text.Encoding]::UTF8)
+Check 'combined rule: block replaced' (@($combinedAfter | Where-Object { $_ -eq 'new-probe-line' }).Count -eq 1)
+Check 'combined rule: old block gone' (@($combinedAfter | Where-Object { $_ -eq 'old-probe-line' }).Count -eq 0)
+Check 'combined rule: red-line row left to the project' (@($combinedAfter | Where-Object { $_ -match '^\| R5 \| probe-rule \| old-check \|' }).Count -eq 1)
+
 # AGENTS.md known-line merge keeps the project's rule names.
 $agentsAfter = [System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8)
 $agentsR5 = @($agentsAfter | Where-Object { $_ -match '^\| R5 ' })[0]
@@ -582,6 +639,19 @@ $sqlLines = @($agentsFinal | Where-Object { $_ -match 'sql_review:' })
 Check 'AGENTS record line inserted once' ($recordLines.Count -eq 1)
 Check 'AGENTS task line kept once' ($taskLines.Count -eq 1)
 Check 'AGENTS SQL line kept once' ($sqlLines.Count -eq 1)
+
+# Marked block merge: inserted once after the title, the older unmarked copy is
+# replaced (not duplicated), and the project-only line survives.
+$startBegin = @($agentsFinal | Where-Object { $_ -match 'harness:upgrade:begin\s+id=start-command' })
+$startEnd = @($agentsFinal | Where-Object { $_ -match 'harness:upgrade:end\s+id=start-command' })
+$startCmd = @($agentsFinal | Where-Object { $_ -match 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\harness-start\.ps1 -Feature' })
+$customLine = @($agentsFinal | Where-Object { $_ -match 'project-custom-agents-line' })
+Check 'AGENTS start-command block inserted' (($startBegin.Count -eq 1) -and ($startEnd.Count -eq 1))
+Check 'AGENTS start command appears once' ($startCmd.Count -eq 1)
+Check 'AGENTS project-only line kept' ($customLine.Count -eq 1)
+Check 'AGENTS block markers are paired in order' (($startBegin.Count -eq 1) -and ($startEnd.Count -eq 1) -and
+    ([array]::IndexOf($agentsFinal, $startBegin[0]) -lt [array]::IndexOf($agentsFinal, $startEnd[0])))
+Check 'flow rules file left untouched (MANUAL)' ([System.IO.File]::ReadAllText($flowRule, [System.Text.Encoding]::UTF8) -eq $flowBefore)
 $taskIdx = if ($taskLines.Count -gt 0) { [array]::IndexOf($agentsFinal, $taskLines[0]) } else { -1 }
 Check 'record line follows the task line' (($taskIdx -ge 0) -and ($taskIdx + 1 -lt $agentsFinal.Count) -and ($agentsFinal[$taskIdx + 1] -match 'HARNESS_ALLOW_NO_RECORD'))
 $ignoreAfter = [System.IO.File]::ReadAllText("$proj\.gitignore", [System.Text.Encoding]::UTF8)
@@ -604,6 +674,15 @@ Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root
 if ($LASTEXITCODE -ne 0) { Write-Host 'SKILL APPLY FAILED' -ForegroundColor Red; $fail++ }
 
 Check 'installed skill replaced with -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\coding-skill\SKILL.md" -Raw) -match 'upgraded-skill')
+# A second upgrade must not insert the marked block again.
+$agentsRepeat = @([System.IO.File]::ReadAllLines("$proj\AGENTS.md", [System.Text.Encoding]::UTF8))
+Check 'AGENTS block stays single after a repeat upgrade' (
+    (@($agentsRepeat | Where-Object { $_ -match 'harness:upgrade:begin\s+id=start-command' }).Count -eq 1) -and
+    (@($agentsRepeat | Where-Object { $_ -match 'harness:upgrade:end\s+id=start-command' }).Count -eq 1) -and
+    (@($agentsRepeat | Where-Object { $_ -match 'project-custom-agents-line' }).Count -eq 1))
+# Once the block is current the plan must not keep advertising a block change.
+$dryRepeat = Invoke-Harness "$proj\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj } | Out-String
+Check 'dry-run omits the block note when the block is current' ($dryRepeat -notmatch 'start-command block (inserted|replaced)')
 Check 'compiled skill untouched by -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\main-dev\compiled-skill\SKILL.md" -Raw) -notmatch 'upgraded-compiled')
 Check 'skill index untouched by -UpdateSkills' ((Get-Content -LiteralPath "$proj\.harness\skills\README.md" -Raw) -match 'skill index')
 $skillBackup = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Recurse -File -Filter 'SKILL.md' |
@@ -699,6 +778,47 @@ $upgradeDirs = @(Get-ChildItem -LiteralPath "$proj\.harness\upgrade" -Directory 
 Check 'verified upgrade prunes backups' ($upgradeDirs.Count -eq 0)
 $marker = Get-Content -LiteralPath "$proj\.harness\.installed-version" -Raw -Encoding UTF8
 Check 'audit records backup deletion' ($marker -match 'backup: deleted after verification')
+
+Write-Host ''
+Write-Host '=== bootstrap from the new package ===' -ForegroundColor Cyan
+# A-path entry: assets\upgrade\upgrade-harness.ps1 must upgrade with the NEW
+# package's updater. The project's own (old) copy is replaced by a decoy that
+# leaves a sentinel, so "the old updater ran" is observable.
+$bootstrap = Join-Path $pkg 'assets\upgrade\upgrade-harness.ps1'
+if (Test-Path -LiteralPath $bootstrap) {
+    $bproj = Join-Path $base 'bootstrap-proj'
+    if (Test-Path -LiteralPath $bproj) { Remove-Item -LiteralPath $bproj -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path "$bproj\.harness" | Out-Null
+    Copy-Item -LiteralPath "$pkg\assets\scripts" -Destination "$bproj\scripts" -Recurse
+    foreach ($sub in @('rules', 'wiki', 'modules', 'changes')) {
+        Copy-Item -LiteralPath "$pkg\assets\.harness\$sub" -Destination "$bproj\.harness\$sub" -Recurse
+    }
+    Copy-Item -LiteralPath "$pkg\assets\AGENTS.md" -Destination "$bproj\AGENTS.md"
+    Copy-Item -LiteralPath "$pkg\assets\.gitignore" -Destination "$bproj\.gitignore"
+    Set-Content -LiteralPath "$bproj\.harness\.installed-version" -Value '1.0.0' -Encoding ASCII
+    # Older install: no marked block, plus a project-only line.
+    $bAgents = @([System.IO.File]::ReadAllLines("$bproj\AGENTS.md", [System.Text.Encoding]::UTF8) |
+        Where-Object { $_ -notmatch 'harness:upgrade:(begin|end)\s+id=start-command' })
+    $bAgents += '> bootstrap-custom-line'
+    [System.IO.File]::WriteAllLines("$bproj\AGENTS.md", $bAgents, (New-Object System.Text.UTF8Encoding($false)))
+    Set-Content -LiteralPath "$bproj\scripts\update-harness.ps1" -Encoding ASCII -Value @(
+        'param([string]$Root = ''.'', [string]$PackagePath = '''')',
+        '[System.IO.File]::WriteAllText((Join-Path $Root ''old-updater-ran.txt''), ''old'', (New-Object System.Text.UTF8Encoding($false)))',
+        'exit 1'
+    )
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrap -Root $bproj -PackagePath $pkg `
+        -Apply -MergeSkills -SkipHooks -SkipVerify -SkipReport | Out-Null
+    Check 'bootstrap upgrade exits 0' ($LASTEXITCODE -eq 0)
+    Check 'bootstrap did not run the project old updater' (-not (Test-Path -LiteralPath "$bproj\old-updater-ran.txt"))
+    $bAfter = @([System.IO.File]::ReadAllLines("$bproj\AGENTS.md", [System.Text.Encoding]::UTF8))
+    Check 'bootstrap inserted the start-command block' (
+        (@($bAfter | Where-Object { $_ -match 'harness:upgrade:begin\s+id=start-command' }).Count -eq 1) -and
+        (@($bAfter | Where-Object { $_ -match 'harness:upgrade:end\s+id=start-command' }).Count -eq 1))
+    Check 'bootstrap kept the project-only line' (@($bAfter | Where-Object { $_ -match 'bootstrap-custom-line' }).Count -eq 1)
+} else {
+    Write-Host 'FAIL: bootstrap entry missing (assets\upgrade\upgrade-harness.ps1); the core integration case could not run' -ForegroundColor Red
+    $fail++
+}
 
 Write-Host ''
 Write-Host '=== install layout: real sql-review template ===' -ForegroundColor Cyan

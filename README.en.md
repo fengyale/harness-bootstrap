@@ -41,12 +41,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      33 .ps1 file(s) parse
+[PASS] parse      35 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] markers    25 template skill(s) carry balanced package/project blocks
+[PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
 [PASS] contract   67 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
@@ -113,15 +113,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 ### 5. Upgrade an existing install
 
-Do not re-run step 0: it is Copy-Missing and will not replace old scripts. Use the upgrade entry:
+Do not re-run step 0: it is Copy-Missing and will not replace old scripts. Upgrade by running the bootstrap script from the **new package** (it calls the new package's own `update-harness.ps1`, so the project's old updater is bypassed):
 
 ```powershell
 # plan only, no files changed
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <new package root> -MergeSkills
+powershell -NoProfile -ExecutionPolicy Bypass -File <new package>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <project root> -MergeSkills
 # apply
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <new package root> -Apply -MergeSkills
+powershell -NoProfile -ExecutionPolicy Bypass -File <new package>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <project root> -Apply -MergeSkills
 ```
 
 `-MergeSkills` lets installed skills pick up new package text: the new template becomes the skeleton and only the `harness:project` blocks are swapped back to the project's own. Matching is by frontmatter `name`, so a directory the project renamed is still found (e.g. `04-sql-review` on disk, `14-sql-review` in the template); a block with no matching section is reported as `PENDING` instead of overwritten. Without it, installed skills are reported as `MANUAL` while the machinery scripts still upgrade.
@@ -131,13 +131,14 @@ The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.
 `scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept:
 
 - `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead. Keys outside the whitelist are summarized as one `add N key(s) by hand` line in the dry run (empty arrays / null count as missing); `groundingStrict` is always written as `false` on upgrade
+- The package's `harness:upgrade` block in `AGENTS.md` (the entry command) is inserted or replaced in place, and an older unmarked copy is replaced instead of duplicated; the `flow-start-command` block in `.harness/rules/开发流程规范.md` is only replaced when the project already has it — when missing it is `MANUAL` and the project rules file is never rewritten
 - The red-line summary replaces just the R5/R6 checked cell
 - Old L1 summary directories move to the upgrade backup and are deleted after verification; `-KeepL1` keeps them, and L2/L3 history is never touched
 - Skill bodies only report a difference by default; `-MergeSkills` swaps back just the `harness:project` blocks, marking `PENDING` when a block cannot be placed or still holds a slot, writing neither (no post-merge line cap). Frontmatter is kept as-is, with one exception: the pre-1.31.8 `description` clause that told the model requirements were already clear (read as permission to skip `request-analysis` and the summary) is replaced with the current one and named in the MERGE detail
 - `-UpdateSkills` replaces only uncompiled copies that still contain `slot:`; `-ForceSkills` overrides, but leaves slot-bearing skeletons, so recompile them and run `verify-harness.ps1` again (`-SkipVerify` for the reset step)
 - The skill index and `_template` are treated separately, one as a project asset and the other as a package asset
 
-After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`.
+After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`; then run `scripts\verify-harness.ps1 -UpgradeReport` once and work through the files the new package still reports as `MANUAL`.
 
 The first `verify-harness.ps1` after an upgrade may report `skills-registry`: skills that exist in the project but were never indexed or given an entry are now named. They were already unreachable before the upgrade — add them to `.harness\skills\README.md` with a platform entry, or delete the ones no longer in use. `skills-index` normally starts as a `WARN` in an existing install (`AGENTS.md` has no generated marker block yet); run `scripts\sync-skills-index.ps1 -Root . -Write` once. A `FAIL` there means real drift. If the upgrade itself fails, the output now includes the full `Copy-Item` command that restores the backup.
 

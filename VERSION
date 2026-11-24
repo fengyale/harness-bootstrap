@@ -1,7 +1,16 @@
-HARNESS-BOOTSTRAP VERSION 1.31.22
+HARNESS-BOOTSTRAP VERSION 1.31.23
 
 changelog
 ---------
+1.31.23  (升级可靠性 Phase 1：新包引导、块级合并、激活报告)
+- 新增 assets/upgrade/upgrade-harness.ps1：从新包执行升级，绕开项目旧 updater；dry-run 不跑报告，-Apply 后跑激活报告；缺报告脚本降 WARN；支持 -PruneBackups
+- 新增 scripts/upgrade-report.ps1：8 项 [ACTIVE]/[MANUAL]/[MISSING]；requireTaskStart=false 报 MANUAL（不是 ACTIVE）；空 start-command 块 / 模板缺字段报 MISSING；支持 -Strict / -Json
+- verify-harness 新增 -UpgradeReport；harness-required.json 的 required 加入 scripts/upgrade-report.ps1
+- AGENTS 顶部 start-command 与流程规范 flow-start-command 改为 harness:upgrade 标记块；update-harness 对 AGENTS 自动插入/替换块，流程规范缺块 MANUAL；幂等、保留项目内容
+- verify-package 扫描 assets/upgrade（35 个 .ps1）；新增 upgrade 块标记成对 / 无尖括号 / 无 slot 检查
+- README / SKILL / HTML 升级入口改为新包 assets\upgrade\upgrade-harness.ps1；旧项目 updater 只做兼容；升级后 verify-harness -UpgradeReport
+- 测试：test-update 块合并 / bootstrap decoy；test-probe 报告 / 引导失败路径；Fast 9 项 PASS
+
 1.31.22  (开工提示词：第一条命令与硬前置)
 - AGENTS.md 顶部新增「开工第一件事（不可跳过）」：改源码 / 配置 / SQL / 接口前先跑 harness-start；未通过 Stage 1 不得 Edit/Write；用户说「开始做吧」不等于跳过；L0/L1 先写明档位
 - request-analysis / coding-skill description 改为「必须使用 / 未完成不得改代码」；技能开头加硬前置；coding-skill 第 0 步改为 harness-start，保留单独复核 Stage 1 的命令

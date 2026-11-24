@@ -265,6 +265,113 @@ $metOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $metScript -Self
 Check 'metrics.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
 Check 'metrics.ps1 self test reports OK' ($metOut -match 'METRICS SELFTEST OK')
 
+Write-Host '=== upgrade-report.ps1 self test ===' -ForegroundColor Cyan
+$urScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\upgrade-report.ps1'
+$urOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $urScript -SelfTest 2>&1 | Out-String
+Check 'upgrade-report.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'upgrade-report.ps1 self test reports OK' ($urOut -match 'UPGRADE-REPORT SELFTEST OK')
+
+Write-Host '=== upgrade-harness.ps1 self test ===' -ForegroundColor Cyan
+$uhScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\upgrade\upgrade-harness.ps1'
+$uhOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $uhScript -SelfTest 2>&1 | Out-String
+Check 'upgrade-harness.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'upgrade-harness.ps1 self test reports OK' ($uhOut -match 'UPGRADE-HARNESS SELFTEST OK')
+
+Write-Host '=== upgrade-report.ps1 edge cases ===' -ForegroundColor Cyan
+$urEdge = Join-Path $env:TEMP ('hb-ur-edge-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$urUtf8 = New-Object System.Text.UTF8Encoding($false)
+$urCnReview = -join @([char]0x8BC4, [char]0x5BA1, [char]0x7ED3, [char]0x8BBA)
+function Invoke-Report {
+    param([string]$TargetRoot, [string[]]$ExtraArgs)
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $urScript, '-Root', $TargetRoot) + $ExtraArgs
+    $out = & powershell @argList 2>&1 | Out-String
+    return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+}
+function Get-ReportMap {
+    param([string]$Text)
+    $map = @{}
+    $s = $Text.IndexOf('{')
+    $e = $Text.LastIndexOf('}')
+    if ($s -lt 0 -or $e -le $s) { return $map }
+    try { $j = ($Text.Substring($s, $e - $s + 1) | ConvertFrom-Json) } catch { return $map }
+    foreach ($it in @($j.items)) { $map[[string]$it.id] = [string]$it.status }
+    return $map
+}
+try {
+    # broken config, a begin marker without an end marker, a foreign hook
+    $r1 = Join-Path $urEdge 'r1'
+    New-Item -ItemType Directory -Force -Path (Join-Path $r1 'scripts') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $r1 '.git\hooks') | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $r1 'scripts\harness-required.json'), '{ this is not json', $urUtf8)
+    [System.IO.File]::WriteAllText((Join-Path $r1 'AGENTS.md'),
+        ('# demo' + "`n" + '<!-- harness:upgrade:begin id=start-command -->' + "`n" + 'run it' + "`n"), $urUtf8)
+    [System.IO.File]::WriteAllText((Join-Path $r1 '.git\hooks\pre-commit'), '#!/bin/sh' + "`n", $urUtf8)
+    $res = Invoke-Report -TargetRoot $r1 -ExtraArgs @('-Json')
+    $map = Get-ReportMap $res.Text
+    Check 'broken config makes requireTaskStart MISSING' ($map['requireTaskStart'] -eq 'MISSING')
+    Check 'a begin marker without an end marker is MISSING' ($map['agents-start-command'] -eq 'MISSING')
+    Check 'a hook without check-task-start is MANUAL' ($map['pre-commit-hook'] -eq 'MANUAL')
+    Check 'MISSING rows do not fail the default exit code' ($res.Code -eq 0)
+
+    # every row ACTIVE or MANUAL -> -Strict must stay 0
+    $r2 = Join-Path $urEdge 'r2'
+    New-Item -ItemType Directory -Force -Path (Join-Path $r2 'scripts') | Out-Null
+    Put-File (Join-Path $r2 'scripts\harness-start.ps1') @('# demo')
+    Put-File (Join-Path $r2 'scripts\check-task-start.ps1') @('# demo')
+    Put-File (Join-Path $r2 'scripts\harness-required.json') @('{"requireTaskStart": false}')
+    Put-File (Join-Path $r2 'AGENTS.md') @(
+        '# demo',
+        '<!-- harness:upgrade:begin id=start-command -->',
+        'run scripts\harness-start.ps1',
+        '<!-- harness:upgrade:end id=start-command -->'
+    )
+    Put-File (Join-Path $r2 '.harness\changes\_template\summary.md') @(
+        '# summary',
+        '- delivery_status: todo',
+        '- linked_records: -',
+        ('## ' + $urCnReview)
+    )
+    $res = Invoke-Report -TargetRoot $r2 -ExtraArgs @('-Json')
+    $map = Get-ReportMap $res.Text
+    Check 'requireTaskStart=false is MANUAL' ($map['requireTaskStart'] -eq 'MANUAL')
+    Check 'an absent hook is MANUAL' ($map['pre-commit-hook'] -eq 'MANUAL')
+    Check 'an absent flow block is MANUAL' ($map['flow-start-command'] -eq 'MANUAL')
+    Check 'an absent moduleCommands is MANUAL' ($map['module-commands'] -eq 'MANUAL')
+    Check 'the summary template is ACTIVE when complete' ($map['summary-template'] -eq 'ACTIVE')
+    $res = Invoke-Report -TargetRoot $r2 -ExtraArgs @('-Strict')
+    Check '-Strict exits 0 when no row is MISSING' ($res.Code -eq 0)
+} finally {
+    if (Test-Path -LiteralPath $urEdge) { Remove-Item -LiteralPath $urEdge -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Write-Host '=== verify-harness -UpgradeReport delegation ===' -ForegroundColor Cyan
+$vhScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\verify-harness.ps1'
+$vhRoot = Join-Path $env:TEMP ('hb-vh-report-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    New-Item -ItemType Directory -Force -Path (Join-Path $vhRoot 'scripts') | Out-Null
+    $called = Join-Path $vhRoot 'report-called.txt'
+    $vhReport = Join-Path $vhRoot 'scripts\upgrade-report.ps1'
+    Put-File $vhReport @(
+        'param([string]$Root)',
+        '[System.IO.File]::WriteAllText((Join-Path $Root ''report-called.txt''), "called", (New-Object System.Text.UTF8Encoding($false)))',
+        'exit 0'
+    )
+    $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $vhScript -Root $vhRoot 2>&1
+    $noCode = $LASTEXITCODE
+    $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $vhScript -Root $vhRoot -UpgradeReport 2>&1
+    $withCode = $LASTEXITCODE
+    Check 'verify-harness -UpgradeReport keeps the main exit code' ($withCode -eq $noCode)
+    Check 'verify-harness -UpgradeReport calls the report' (Test-Path -LiteralPath $called)
+
+    Remove-Item -LiteralPath $called, $vhReport -Force -ErrorAction SilentlyContinue
+    $missingOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $vhScript -Root $vhRoot -UpgradeReport 2>&1 | Out-String
+    $missingCode = $LASTEXITCODE
+    Check 'a missing report script keeps the main exit code' ($missingCode -eq $noCode)
+    Check 'a missing report script is reported as MISSING' ($missingOut -match [regex]::Escape('[MISSING] scripts\upgrade-report.ps1'))
+} finally {
+    if (Test-Path -LiteralPath $vhRoot) { Remove-Item -LiteralPath $vhRoot -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 if ($fail -gt 0) {
     Write-Host "FAILED: $fail check(s)" -ForegroundColor Red
     exit 1

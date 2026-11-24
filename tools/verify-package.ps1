@@ -69,7 +69,7 @@ if (-not (Test-Path -LiteralPath $contractPath)) {
 
 # ---------------------------------------------------------------- 1 parse
 $scriptFiles = @()
-foreach ($dir in @('assets\scripts', 'tools', 'tests')) {
+foreach ($dir in @('assets\scripts', 'assets\upgrade', 'tools', 'tests')) {
     $dp = Join-Path $packageRoot $dir
     if (-not (Test-Path -LiteralPath $dp)) { continue }
     $scriptFiles += @(Get-ChildItem -LiteralPath $dp -Filter *.ps1 -File -Force)
@@ -306,12 +306,86 @@ if (Test-Path -LiteralPath $tplSkills) {
         $markerBad += $bad
     }
 }
+# ------------------------------------------------- 4c upgrade block markers
+# AGENTS.md and the project rules carry harness:upgrade blocks that the upgrade
+# inserts or replaces verbatim. A malformed marker (unpaired, an angle-bracket
+# blank, a slot) would silently stop that paragraph from being merged into every
+# existing project, so the package checks its own blocks here.
+$upgradeBlocks = 0
+$assetsRoot = Join-Path $packageRoot 'assets'
+if (Test-Path -LiteralPath $assetsRoot) {
+    foreach ($uf in @(Get-ChildItem -LiteralPath $assetsRoot -Recurse -File -Filter '*.md' -Force)) {
+        $uLines = [System.IO.File]::ReadAllLines($uf.FullName, [System.Text.Encoding]::UTF8)
+        $hasUpgrade = $false
+        foreach ($ul in $uLines) {
+            if ($ul -match 'harness:upgrade:') { $hasUpgrade = $true; break }
+        }
+        if (-not $hasUpgrade) { continue }
+        # Anchor on the fixed layout; Substring over the root breaks on 8.3 names.
+        $rm = [regex]::Match($uf.FullName, '\\assets\\(.+)$')
+        $rel = if ($rm.Success) { 'assets/' + ($rm.Groups[1].Value -replace '\\', '/') } else { $uf.Name }
+        $stack = New-Object System.Collections.Generic.List[string]
+        $uIds = @{}
+        $bad = 0
+        foreach ($ul in $uLines) {
+            if ($ul -match '<!--\s*harness:upgrade:begin\s+id=([A-Za-z0-9][A-Za-z0-9-]*)\s*-->') {
+                $id = $matches[1]
+                if ($stack.Count -gt 0) {
+                    Add-Result 'markers' 'FAIL' "${rel}: nested harness:upgrade block $id"
+                    $bad++
+                }
+                if ($uIds.ContainsKey($id)) {
+                    Add-Result 'markers' 'FAIL' "${rel}: duplicate harness:upgrade id $id"
+                    $bad++
+                } else {
+                    $uIds[$id] = $true
+                }
+                $stack.Add($id)
+                $upgradeBlocks++
+                continue
+            }
+            if ($ul -match '<!--\s*harness:upgrade:end(?:\s+id=([A-Za-z0-9-]+))?\s*-->') {
+                $endId = $matches[1]
+                if ($stack.Count -eq 0) {
+                    Add-Result 'markers' 'FAIL' "${rel}: harness:upgrade end without begin"
+                    $bad++
+                } else {
+                    $top = $stack[$stack.Count - 1]
+                    if ($endId -and $endId -ne $top) {
+                        Add-Result 'markers' 'FAIL' "${rel}: harness:upgrade end id $endId closes $top"
+                        $bad++
+                    }
+                    $stack.RemoveAt($stack.Count - 1)
+                }
+                continue
+            }
+            if ($stack.Count -gt 0) {
+                # The block is copied into every project; a blank or a slot in it
+                # would remain unfilled forever.
+                if ($ul -notmatch '<!--' -and $ul -match '<[^<>\r\n]+>') {
+                    Add-Result 'markers' 'FAIL' "${rel}: angle-bracket blank inside harness:upgrade block $($stack[$stack.Count - 1])"
+                    $bad++
+                }
+                if ($ul -match '<!--\s*slot:') {
+                    Add-Result 'markers' 'FAIL' "${rel}: slot marker inside harness:upgrade block $($stack[$stack.Count - 1])"
+                    $bad++
+                }
+            }
+        }
+        if ($stack.Count -gt 0) {
+            Add-Result 'markers' 'FAIL' "${rel}: $($stack.Count) harness:upgrade block(s) not closed"
+            $bad++
+        }
+        $markerBad += $bad
+    }
+}
+
 if ($markerCount -eq 0) {
     # The loop above skips a file without markers, so an empty template tree (or
     # a broken marker syntax) used to print "0 template skill(s)" and PASS.
     Add-Result 'markers' 'FAIL' 'no template skill carries package/project markers'
 } elseif ($markerBad -eq 0) {
-    Add-Result 'markers' 'PASS' "$markerCount template skill(s) carry balanced package/project blocks"
+    Add-Result 'markers' 'PASS' "$markerCount template skill(s) carry balanced package/project blocks; $upgradeBlocks harness:upgrade block(s) well formed"
 }
 
 # ------------------------------------------------------------ 5 contracts

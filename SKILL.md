@@ -130,7 +130,7 @@ Harness 就是把"看运气"变成"看流程"。
 | "该触发不触发""调触发词" | **调优** | 只读 `references/维护与体检.md` 第三节 |
 | "复盘""这两周有没有用""A7 怎么样" | **两周复盘** | 只读 `references/两周复盘.md`（这是验 A7 的唯一方式） |
 | "加一条红线""补一个技能" | **增量** | 只做那一个小动作，不要重跑全程 |
-| "升级 harness""更新到新版" | **升级** | 只跑 `scripts\update-harness.ps1 -PackagePath <新包>`：先不加 `-Apply` 看差异，确认后 `-Apply`；脚本替换、`AGENTS.md`/`harness-required.json` 只自动合并已知行/键；要同步已装技能正文再加 `-MergeSkills`（新版通用段 + 保留项目绑定，按 frontmatter name 匹配改名技能）；默认重装 git hook，旧 hook 的 gate 行会被修好；不要重跑第 0 步 |
+| "升级 harness""更新到新版" | **升级** | 从**新包**跑 `<新包>\assets\upgrade\upgrade-harness.ps1 -Root <项目根>`：它调用新包自带的 `update-harness.ps1`，项目里的旧 updater 被绕过；先不加 `-Apply` 看差异，确认后 `-Apply`。脚本替换、`AGENTS.md`/`harness-required.json` 只自动合并已知行/键，`AGENTS.md` 的 `start-command` 标记块自动插入或替换；要同步已装技能正文再加 `-MergeSkills`（新版通用段 + 保留项目绑定，按 frontmatter name 匹配改名技能）；`.harness/rules/开发流程规范.md` 的 `flow-start-command` 块缺失时只标 MANUAL、不自动改写；默认重装 git hook；升级后再跑 `verify-harness -UpgradeReport`；不要重跑第 0 步 |
 
 > **只有第一种需要跑完整流程**——其余都是小操作，把它们做成大工程是最常见的误判。
 >
@@ -389,34 +389,36 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 ### 2.4 升级已有项目（**不是重装**）
 
-第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级走独立入口：
+第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级从**新包**运行引导脚本：
 
 ```powershell
-# 先看差异，不改任何文件
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <新包根目录>
+# 先看差异，不改任何文件（项目里的旧 updater 被绕过）
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <项目根>
 
 # 确认后执行：备份旧脚本、写版本标记、重装 hook、跑 verify-harness
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <新包根目录> -Apply
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <项目根> -Apply
 ```
 
-> **从 1.30.0 及更早升级一次**：包布局已从 `templates/` 改为 `assets/`，旧项目里的 `scripts\update-harness.ps1` 只认旧名。第一次请直接运行**新包内**的脚本：`assets\scripts\update-harness.ps1 -Root <项目根> -PackagePath <新包根目录>`；执行成功后项目内脚本就是新版，之后照常走上面的命令。新版脚本同时兼容旧布局（读 `templates/` 并提示一次），所以不会两头卡住。
+> 引导脚本调用**新包自带**的 `update-harness.ps1`，所以升级逻辑永远是下载到的这一版；项目里的 `scripts\update-harness.ps1` 只是一个被替换的机制文件，不再作为首选入口。
+>
+> **从 1.30.0 及更早升级一次**：包布局已从 `templates/` 改为 `assets/`，旧项目里的 `scripts\update-harness.ps1` 只认旧名。新包脚本同时兼容旧布局（读 `templates/` 并提示一次），加上引导脚本本身就指向新包，首次升级不会两头卡住。
 
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
 - `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked` / `requireTaskStart`），其余键保留并在 dry-run 里点名"by hand"；`-NoMergeKnown` 退回只打印差异。`groundingStrict` 是迁移默认值：新装 `true`，升级固定写 `false`（等存量技能补上锚点后再手动打开）。`requireTaskStart` 升级固定写 `false`（含说明键），团队采用 `harness-start` 后再手动改 `true`
-- `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
+- `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留；`开发流程规范.md` 的 `flow-start-command` 标记块在项目已有时原地替换，缺失时只标 MANUAL，**不自动插入**）
 - `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING，都不写盘（合并后行数不设上限）；frontmatter 只有一处例外：1.31.8 前 `description` 里那句「需求已明确…」会被读成可以跳过 `request-analysis` 和 summary，命中即换成新版 description 并在明细里点名；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
-- `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异
+- `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），`start-command` 标记块缺失时插入到标题后、存在时原地替换（旧的无标记副本会被换掉，不重复），其余行保留；平台 agents 只报告差异
 - `.harness\changes|metrics`：L2/L3 历史**永不触碰**；旧 L1 summary 目录 COMPACT 到升级备份（验证后随备份删除，`-KeepL1` 保留）；`_small.md` 缺失时才补模板；`_template` 视为包资产，有新版会替换并备份；`lessons.md` / `lessons-promoted.txt` 从旧 `metrics\` 迁移一次
 - `.gitignore` 只追加缺的 `.harness/metrics/` 与 `.harness/upgrade/` 两行，不重写用户文件
 - **git hook 默认重装**（旧 hook 备份为 `.bak-harness`），修好早于 summary-order guard 的 gate 行；`-SkipHooks` 保留旧 hook，此时 `verify-harness` 的 gate 行会继续失败
 - 验证通过后**默认删除** `.harness\upgrade\<时间戳>` 备份，审计写进 `.harness\.installed-version`；需要回滚点加 `-KeepBackup`，清理旧备份加 `-PruneBackups`
 - 首次安装会写 `.harness\.installed-version`；老项目没有也能升级，脚本会从技能目录的 `VERSION` 推断旧版本
 
-升级后先跑阶段 3/5/7/10：新的编译/测试判据会真跑 `AGENTS.md` 的命令。缺行 BLOCKED、占位 SKIP，这是机制在生效，不是回归。
+升级后先跑阶段 3/5/7/10：新的编译/测试判据会真跑 `AGENTS.md` 的命令。缺行 BLOCKED、占位 SKIP，这是机制在生效，不是回归。再跑一次 `scripts\verify-harness.ps1 -UpgradeReport`，按报告逐条处理仍为 MANUAL / PENDING 的文件与块。
 
 ## 第三部分：约束与坑
 

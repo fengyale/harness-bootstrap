@@ -30,7 +30,13 @@
                            when missing; L2/L3 history is kept; old L1 summaries
                            are COMPACTed to the upgrade backup (deleted with it
                            after verification)
-    AGENTS.md              known framework lines MERGE; other lines are kept
+    AGENTS.md              known framework lines MERGE; marked harness:upgrade
+                           blocks are inserted (missing) or replaced in place;
+                           all other lines are kept
+    .harness/rules/flow    the flow-start-command block is replaced when the
+                           project already has it; when it is missing the file
+                           is MANUAL (copy the block from the package by hand)
+                           -- a project rules file is never rewritten
     harness-required.json  known keys MERGE (required / requiredAnyOf / sqlGate)
     platform agents        ADD missing, MANUAL when different
     .harness/lessons.md    moved once from .harness/metrics/lessons.md;
@@ -423,6 +429,165 @@ function Merge-RedlineRows {
     return $changed
 }
 
+# ------------------------------------------------- marked upgrade blocks
+# Some framework paragraphs are copied into project files verbatim but carry no
+# table row to match on (the entry command in AGENTS.md, the flow entry line in
+# the process rules). The package wraps them in harness:upgrade blocks with an
+# id, so the upgrade can replace exactly that paragraph and keep every other
+# project line. Project text is never moved: a missing block in a rules file is
+# reported as MANUAL instead of being inserted into a hand-written file.
+function Get-UpgradeBlocks {
+    param([string[]]$Lines)
+    $blocks = @()
+    $open = -1
+    $openId = ''
+    $beginPat = '<!--\s*harness:upgrade:begin\s+id=([A-Za-z0-9][A-Za-z0-9-]*)\s*-->'
+    $endPat = '<!--\s*harness:upgrade:end(?:\s+id=[A-Za-z0-9-]+)?\s*-->'
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($open -lt 0) {
+            if ($Lines[$i] -match $beginPat) {
+                $open = $i
+                $openId = $matches[1]
+            }
+        } elseif ($Lines[$i] -match $endPat) {
+            $blocks += [pscustomobject]@{ Id = $openId; Begin = $open; End = $i }
+            $open = -1
+        }
+    }
+    return $blocks
+}
+
+function Test-UpgradeBlockFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $lines = [System.IO.File]::ReadAllLines($Path, [System.Text.Encoding]::UTF8)
+    return (@(Get-UpgradeBlocks $lines).Count -gt 0)
+}
+
+# Replace every block the package owns; insert a missing block after the first
+# heading (and drop an unmarked older copy of the same paragraph so the upgrade
+# does not leave it twice). -PlanOnly computes the same detail without writing.
+function Merge-MarkedBlocks {
+    param([string]$DstPath, [string]$SrcPath, [switch]$PlanOnly)
+    $srcLines = [System.IO.File]::ReadAllLines($SrcPath, [System.Text.Encoding]::UTF8)
+    $srcBlocks = @(Get-UpgradeBlocks $srcLines)
+    if ($srcBlocks.Count -eq 0) {
+        return [pscustomobject]@{ Changed = $false; Detail = '' }
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($l in [System.IO.File]::ReadAllLines($DstPath, [System.Text.Encoding]::UTF8)) { $out.Add($l) }
+    $changed = $false
+    $notes = @()
+
+    foreach ($b in $srcBlocks) {
+        $block = @()
+        for ($k = $b.Begin; $k -le $b.End; $k++) { $block += $srcLines[$k] }
+
+        $lines = @($out)
+        $here = @(Get-UpgradeBlocks $lines | Where-Object { $_.Id -eq $b.Id }) | Select-Object -First 1
+        if ($here) {
+            $same = (($here.End - $here.Begin + 1) -eq $block.Count)
+            if ($same) {
+                for ($k = 0; $k -lt $block.Count; $k++) {
+                    if ($lines[$here.Begin + $k] -ne $block[$k]) { $same = $false; break }
+                }
+            }
+            if ($same) {
+                $notes += ($b.Id + ' block current')
+                continue
+            }
+            $newLines = @()
+            if ($here.Begin -gt 0) { $newLines += $lines[0..($here.Begin - 1)] }
+            $newLines += $block
+            if ($here.End + 1 -lt $lines.Count) { $newLines += $lines[($here.End + 1)..($lines.Count - 1)] }
+            $out = New-Object System.Collections.Generic.List[string]
+            foreach ($l in $newLines) { $out.Add($l) }
+            $changed = $true
+            $notes += ($b.Id + ' block replaced')
+            continue
+        }
+
+        # Missing block: insert after the first heading line, one blank line on
+        # each side, and keep the rest of the file untouched.
+        $heading = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^#\s') { $heading = $i; break }
+        }
+        if ($heading -lt 0) {
+            # No heading at all: fall back to "after the first line" instead of
+            # dropping the block above the file's own opening line.
+            if ($lines.Count -gt 0) {
+                $head = @($lines[0])
+                $rest = if ($lines.Count -gt 1) { @($lines[1..($lines.Count - 1)]) } else { @() }
+            } else {
+                $head = @()
+                $rest = @()
+            }
+        } else {
+            $at = $heading + 1
+            while ($at -lt $lines.Count -and $lines[$at].Trim() -eq '') { $at++ }
+            $head = @($lines[0..$heading])
+            $rest = if ($at -lt $lines.Count) { @($lines[$at..($lines.Count - 1)]) } else { @() }
+        }
+        $newLines = @($head) + @('') + @($block) + @('') + @($rest)
+
+        # An install that predates the marker carries the same paragraph without
+        # it; keeping both would duplicate the rule on every upgraded project.
+        $content = @()
+        for ($k = $b.Begin + 1; $k -lt $b.End; $k++) { $content += $srcLines[$k] }
+        if ($content.Count -gt 0) {
+            $marked = @(Get-UpgradeBlocks $newLines)
+            $hit = -1
+            $seen = $false
+            for ($i = 0; $i -lt $newLines.Count; $i++) {
+                if ($newLines[$i] -ne $content[0]) { continue }
+                $inside = $false
+                foreach ($mb in $marked) {
+                    if ($i -ge $mb.Begin -and $i -le $mb.End) { $inside = $true; break }
+                }
+                if ($inside) { continue }
+                $seen = $true
+                if (($i + $content.Count) -gt $newLines.Count) { continue }
+                $ok = $true
+                for ($k = 0; $k -lt $content.Count; $k++) {
+                    if ($newLines[$i + $k] -ne $content[$k]) { $ok = $false; break }
+                }
+                if ($ok) { $hit = $i; break }
+            }
+            if ($hit -ge 0) {
+                $trimmed = @()
+                if ($hit -gt 0) { $trimmed += $newLines[0..($hit - 1)] }
+                $after = $hit + $content.Count
+                if ($after -lt $newLines.Count) {
+                    # Do not leave two blank lines where the old copy was.
+                    if ($trimmed.Count -gt 0 -and $trimmed[$trimmed.Count - 1].Trim() -eq '' -and
+                        $newLines[$after].Trim() -eq '') { $after++ }
+                    $trimmed += $newLines[$after..($newLines.Count - 1)]
+                }
+                $newLines = $trimmed
+            } elseif ($seen) {
+                # De-duplication is an exact match. A hand-edited older copy is
+                # close but not identical, so it stays and the file may now hold
+                # the paragraph twice; that needs a human, not a guess.
+                Write-Host ("[WARN] $DstPath may duplicate the old unmarked " + $b.Id + " paragraph; confirm by hand") -ForegroundColor Yellow
+            }
+        }
+
+        $out = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $newLines) { $out.Add($l) }
+        $changed = $true
+        $notes += ($b.Id + ' block inserted')
+    }
+
+    if ($changed -and -not $PlanOnly) {
+        $raw = [System.IO.File]::ReadAllText($DstPath, [System.Text.Encoding]::UTF8)
+        $nl = if ($raw -match "`r`n") { "`r`n" } else { "`n" }
+        [System.IO.File]::WriteAllText($DstPath, ((@($out) -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
+    }
+    $detail = (@($notes) -join ', ') + '; other lines kept'
+    return [pscustomobject]@{ Changed = $changed; Detail = $detail }
+}
+
 # Merge known keys into scripts/harness-required.json; keep every project-owned
 # key and value that is not part of the known set.
 function Merge-RequiredJson {
@@ -536,6 +701,19 @@ foreach ($sub in @('rules', 'wiki', 'modules')) {
             Add-Plan 'ADD' $rel $src 'new project asset'
         } elseif ((Get-Hash $src) -eq (Get-Hash $dst)) {
             Add-Plan 'SAME' $rel $src ''
+        } elseif ($MergeKnown -and $sub -eq 'rules' -and (Test-UpgradeBlockFile $src)) {
+            # Branch order must mirror the apply phase: an upgrade block wins
+            # over the red-line row merge, otherwise the dry run promises a
+            # red-line merge and the apply only replaces the block.
+            # A rules file is hand-written: only an existing block may be
+            # replaced. Without it the project has to copy the text itself.
+            if (Test-UpgradeBlockFile $dst) {
+                $mb = Merge-MarkedBlocks -DstPath $dst -SrcPath $src -PlanOnly
+                $blockDetail = if ($mb.Detail) { $mb.Detail } else { 'upgrade block current; other lines kept' }
+                Add-Plan 'MERGE' $rel $src $blockDetail
+            } else {
+                Add-Plan 'MANUAL' $rel $src 'flow-start-command block missing; copy from package'
+            }
         } elseif ($MergeKnown -and $sub -eq 'rules' -and (Test-RedlineTable $src) -and
                   (Test-RedlineTable $dst)) {
             Add-Plan 'MERGE' $rel $src 'known red-line rows merged; other content kept'
@@ -977,7 +1155,14 @@ if (Test-Path -LiteralPath $srcAgents) {
         Add-Plan 'SAME' 'AGENTS.md' $srcAgents ''
     } else {
         $action = if ($MergeKnown) { 'MERGE' } else { 'MANUAL' }
-        Add-Plan $action 'AGENTS.md' $srcAgents 'known framework lines merged; other lines kept'
+        $detail = 'known framework lines merged; other lines kept'
+        if ($MergeKnown) {
+            # Only claim a block change when one actually happens; otherwise the
+            # dry run would show a change on every already-merged project.
+            $mb = Merge-MarkedBlocks -DstPath $dstAgents -SrcPath $srcAgents -PlanOnly
+            if ($mb.Changed -and $mb.Detail) { $detail = $mb.Detail + '; known framework lines merged' }
+        }
+        Add-Plan $action 'AGENTS.md' $srcAgents $detail
     }
 }
 
@@ -1151,8 +1336,21 @@ foreach ($p in $plan) {
                 $manifest.Add(('MERGE {0} (known keys; old copy in backup)' -f $p.Rel))
             } elseif ($p.Rel -eq 'AGENTS.md') {
                 $merged = Merge-AgentsKnown $dst $p.Source
-                if ($merged) { $manifest.Add(('MERGE {0} (known lines; old copy in backup)' -f $p.Rel)) }
-                else { $manifest.Add(('KEEP {0} (no known lines matched)' -f $p.Rel)) }
+                # Marked blocks are merged after the known lines: the block text
+                # is framework-owned, everything around it stays project-owned.
+                $mb = Merge-MarkedBlocks $dst $p.Source
+                if ($merged -or $mb.Changed) {
+                    $why = if ($mb.Detail) { 'known lines; ' + $mb.Detail } else { 'known lines' }
+                    $manifest.Add(('MERGE {0} ({1}; old copy in backup)' -f $p.Rel, $why))
+                } else {
+                    $manifest.Add(('KEEP {0} (no known lines matched)' -f $p.Rel))
+                }
+            } elseif (Test-UpgradeBlockFile $p.Source) {
+                # A rules file that already carries the block: replace only the
+                # block, never the surrounding project prose.
+                $mb = Merge-MarkedBlocks $dst $p.Source
+                if ($mb.Changed) { $manifest.Add(('MERGE {0} ({1}; old copy in backup)' -f $p.Rel, $mb.Detail)) }
+                else { $manifest.Add(('KEEP {0} ({1})' -f $p.Rel, $mb.Detail)) }
             } elseif (Test-RedlineTable $p.Source) {
                 $merged = Merge-RedlineRows $dst $p.Source
                 if ($merged) { $manifest.Add(('MERGE {0} (known red-line rows; old copy in backup)' -f $p.Rel)) }

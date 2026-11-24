@@ -30,6 +30,7 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1 -Root D:\proj
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-harness.ps1 -Quiet
+    ... -UpgradeReport            (also print the post-upgrade activation report)
 
   EXIT CODE
     0 = all checks passed, 1 = at least one FAIL
@@ -45,6 +46,7 @@ param(
     [int]$MaxAgentsLines = 150,
     [switch]$Quiet,
     [switch]$IgnoreHooks,
+    [switch]$UpgradeReport,
     [switch]$NoExit
 )
 
@@ -1058,6 +1060,20 @@ if (-not $Quiet) {
 
 Write-Host ("RESULT pass={0} warn={1} fail={2}" -f $passCount, $warnCount, $failCount) `
     -ForegroundColor $(if ($failCount -gt 0) { 'Red' } elseif ($warnCount -gt 0) { 'Yellow' } else { 'Green' })
+
+# Post-upgrade activation report: "installed" and "switched on" are different
+# questions, so the report is delegated instead of being re-implemented here.
+# Its exit code is advisory and never changes this script's result.
+if ($UpgradeReport) {
+    $reportPath = Join-Path $rootPath 'scripts\upgrade-report.ps1'
+    if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+        Write-Host ''
+        & $PS -NoProfile -ExecutionPolicy Bypass -File $reportPath -Root $rootPath
+    } else {
+        Write-Host ''
+        Write-Host '[MISSING] scripts\upgrade-report.ps1' -ForegroundColor Yellow
+    }
+}
 
 if ($failCount -gt 0) {
     Write-Host ""

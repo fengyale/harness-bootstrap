@@ -217,7 +217,7 @@ function Update-DocsVersions {
 function Get-Ps1Count {
     param([string]$RootPath)
     $n = 0
-    foreach ($d in @('assets\scripts', 'tools', 'tests')) {
+    foreach ($d in @('assets\scripts', 'assets\upgrade', 'tools', 'tests')) {
         $dp = Join-Path $RootPath $d
         if (-not (Test-Path -LiteralPath $dp)) { continue }
         $n += @(Get-ChildItem -LiteralPath $dp -Filter *.ps1 -File -Force).Count

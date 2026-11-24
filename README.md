@@ -41,12 +41,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      33 .ps1 file(s) parse
+[PASS] parse      35 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
-[PASS] markers    25 template skill(s) carry balanced package/project blocks
+[PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
 [PASS] contract   67 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
@@ -113,15 +113,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 ### 5. 升级已有项目
 
-不要重跑第 0 步：它是 Copy-Missing，旧脚本不会被覆盖。升级走独立入口：
+不要重跑第 0 步：它是 Copy-Missing，旧脚本不会被覆盖。升级从**新包**运行引导脚本（它调用新包自带的 `update-harness.ps1`，项目里的旧 updater 被绕过）：
 
 ```powershell
 # 先看差异，不改文件
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <新包根目录> -MergeSkills
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <项目根> -MergeSkills
 # 确认后执行
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-  -PackagePath <新包根目录> -Apply -MergeSkills
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-harness.ps1 `
+  -Root <项目根> -Apply -MergeSkills
 ```
 
 `-MergeSkills` 让已装技能跟进新版正文：以新模板为骨架，只把 `harness:project` 区块换回项目自己的。**按 frontmatter 的 `name` 匹配**，所以目录被项目改过名也能找到（如项目里的 `04-sql-review` 对应模板的 `14-sql-review`）；找不到对应章节就标 `PENDING`，不会覆盖。不加 `-MergeSkills` 时已装技能只报 `MANUAL`，机制脚本照常升级。
@@ -131,13 +131,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`：
 
 - `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`
+- `AGENTS.md` 里包自带的 `harness:upgrade` 标记块（「开工第一件事」命令）自动插入或原地替换，旧的无标记副本会被换掉而不是重复一遍；`.harness/rules/开发流程规范.md` 的 `flow-start-command` 块只在项目已有时替换，缺失时标 `MANUAL`，不自动改写项目规则文件
 - 红线汇总只替换 R5/R6 的脚本检查格
 - 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动
 - 技能正文默认只提示差异；`-MergeSkills` 只换回项目自己的 `harness:project` 区块，定位不到或仍有 slot 标 `PENDING`（不设合并后行数上限），都不写盘；frontmatter 默认原样保留，唯一例外是 1.31.8 前 `description` 里那句「需求已明确…」（会被读成可以跳过 `request-analysis` 和 summary），命中即换成新版 description，并在 MERGE 明细里点名
 - `-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖，但覆盖后是含 slot 的骨架，要重新编译再跑 `verify-harness.ps1`（重置那一步可配 `-SkipVerify`）
 - 技能索引与 `_template` 分开对待：前者是项目资产，后者是包资产
 
-升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令。
+升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令；再跑一次 `scripts\verify-harness.ps1 -UpgradeReport`，按新包生成的报告逐条处理仍为 MANUAL 的文件。
 
 升级后第一次跑 `verify-harness.ps1` 可能报 `skills-registry`：老项目里存在、但从未登记或建入口的技能会被点名。它们此前一直不可达，不是升级弄坏的——按提示补 `.harness\skills\README.md` 登记与平台入口，或删除不再使用的技能目录。`skills-index` 在存量项目里通常先报 `WARN`（`AGENTS.md` 还没有生成标记块），跑一次 `scripts\sync-skills-index.ps1 -Root . -Write` 即可；报 `FAIL` 才是真有漂移。若升级本身失败，输出里会带上从备份恢复的完整 `Copy-Item` 命令。
 
