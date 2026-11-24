@@ -14,6 +14,8 @@
                     generated from the directory (sync-skills-index.ps1 -Check)
     5. red lines    IDs identical in AGENTS.md, the spec file and red-line-rules.json
     6. gate         git pre-commit / pre-merge-commit hooks installed and call the scanner
+    6b. tracked     AGENTS.md / scripts / records / flow rules are under git (WARN when
+                    ignored or never added: records and history cannot be shared)
     7. runnable     red-line-scan.ps1 actually runs and returns a clean result
     8. resident     AGENTS.md stays under the size budget
     9. grounding    skill paths and evidence anchors (delegates to verify-grounding.ps1)
@@ -64,6 +66,14 @@ $PS = if (Get-Command powershell -ErrorAction SilentlyContinue) { 'powershell' }
 function Add-Result {
     param([string]$Check, [string]$Status, [string]$Detail)
     $results.Add([pscustomobject]@{ Check = $Check; Status = $Status; Detail = $Detail })
+}
+
+# Markdown plumbing, not a template slot: AGENTS.md carries marker comments such
+# as <!-- skills-index:begin -->. Strip single- and multi-line comments before
+# any "<...>" placeholder scan, or every filled project reads as a template.
+function Remove-HtmlComment {
+    param([string]$Text)
+    return [regex]::Replace($Text, '<!--.*?-->', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
 }
 
 function Test-RelativePath {
@@ -466,6 +476,10 @@ if (-not $hooksDir) { $hooksDir = Join-Path $rootPath '.git\hooks' }
 
 $hookPath  = Join-Path $hooksDir 'pre-commit'
 $mergePath = Join-Path $hooksDir 'pre-merge-commit'
+$requireTaskStart = $false
+if ($cfg -and ($cfg.PSObject.Properties.Name -contains 'requireTaskStart')) {
+    $requireTaskStart = [bool]$cfg.requireTaskStart
+}
 if ($IgnoreHooks) {
     # update-harness -SkipHooks deliberately leaves the old hook in place; the
     # upgrade must not fail on a check the user explicitly opted out of.
@@ -491,13 +505,13 @@ if ($IgnoreHooks) {
         }
         if (-not $execOk) {
             Add-Result 'gate' 'FAIL' 'pre-commit hook is not executable (chmod +x .git/hooks/pre-commit)'
-        } elseif (($hookBody -notmatch 'LATE_SUMMARY') -or ($hookBody -notmatch 'REPLAY_CONTEXT') -or ($hookBody -notmatch 'ASSOC_MISS')) {
-            # A hook installed before the summary-order guard existed still looks
-            # like the harness gate, so report exactly one FAIL instead of a PASS
-            # plus a FAIL for the same hook.
-            Add-Result 'gate' 'FAIL' 'pre-commit hook predates the summary-order guard; re-run install-git-hooks.ps1'
+        } elseif (($hookBody -notmatch 'LATE_SUMMARY') -or ($hookBody -notmatch 'REPLAY_CONTEXT') -or ($hookBody -notmatch 'ASSOC_MISS') -or ($requireTaskStart -and ($hookBody -notmatch 'check-task-start'))) {
+            # A hook installed before the summary-order / task-start guards
+            # existed still looks like the harness gate, so report exactly one
+            # FAIL instead of a PASS plus a FAIL for the same hook.
+            Add-Result 'gate' 'FAIL' 'pre-commit hook predates the summary-order/task-start guard; re-run install-git-hooks.ps1'
         } else {
-            Add-Result 'gate' 'PASS' 'git pre-commit hook calls red-line-scan and enforces summary order'
+            Add-Result 'gate' 'PASS' 'git pre-commit hook calls red-line-scan and enforces summary order + task start'
         }
     } else {
         Add-Result 'gate' 'FAIL' 'pre-commit hook exists but is not the harness gate (marker or scanner missing; re-run install-git-hooks.ps1)'
@@ -548,6 +562,40 @@ if (-not $recordsTracked) {
             Add-Result 'gate' 'WARN' '.harness/changes is ignored by .gitignore: the summary-order audit cannot see committed records'
         }
     } catch { }
+}
+
+# ------------------------------------------------------------ 6b tracked core
+# A .harness / scripts tree that is git-ignored (or simply never added) still
+# works on one machine, so nothing else here fails -- but its records and gate
+# history never leave it, and a cross-repo linked_records pointer cannot resolve.
+# WARN only: a local-only harness is legal, it just cannot be shared.
+if (-not $gitDir) {
+    Add-Result 'tracked' 'WARN' 'not a git work tree; tracked check skipped'
+} else {
+    $coreTracked = @(
+        'AGENTS.md',
+        'scripts/check-summary.ps1',
+        '.harness/changes/README.md',
+        ('.harness/rules/' + (-join ([char]0x5F00, [char]0x53D1, [char]0x6D41, [char]0x7A0B, [char]0x89C4, [char]0x8303)) + '.md')
+    )
+    $untrackedCore = @()
+    # native git reports "did not match any file(s) known to git" on stderr; with
+    # EAP=Stop that line would abort the whole check, so relax it for the probe.
+    $savedEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        foreach ($rel in $coreTracked) {
+            $null = & git -C $rootPath ls-files --error-unmatch -- $rel 2>&1
+            if ($LASTEXITCODE -ne 0) { $untrackedCore += $rel }
+        }
+    } finally {
+        $ErrorActionPreference = $savedEap
+    }
+    if ($untrackedCore.Count -gt 0) {
+        Add-Result 'tracked' 'WARN' ('harness core files are not tracked; cross-repo records/history will not be shared. Remove the ignore or track them. Untracked: ' + ($untrackedCore -join ', '))
+    } else {
+        Add-Result 'tracked' 'PASS' 'harness core files are tracked'
+    }
 }
 
 # ----------------------------------------------------------------- 7 runnable
@@ -787,7 +835,9 @@ if ($agentsSections.Count -gt 0 -and (Test-Path -LiteralPath $agentsPath)) {
     }
     # template residue: any "<...>" slot must be replaced by facts or TODO.
     # Matching only the ASCII example prefix let a "# <project>" title survive.
-    if ($agentsText -match '<[^<>\r\n]+>') {
+    # Comments are stripped first: the skills-index marker pair is plumbing and
+    # must not make a filled AGENTS.md look like a template.
+    if ((Remove-HtmlComment $agentsText) -match '<[^<>\r\n]+>') {
         Add-Result 'agents' 'FAIL' 'template placeholder left in AGENTS.md (replace every <...> with project facts or TODO)'
     }
 
@@ -860,8 +910,9 @@ foreach ($agentDir in @('.trae\agents', '.claude\agents', '.codebuddy\agents')) 
             if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
             if ($inFence) { continue }
             # Output templates use <feature> etc. inside inline code; those are
-            # runtime substitutions, not project facts.
-            $stripped = $line -replace '`[^`]*`', ''
+            # runtime substitutions, not project facts. HTML comments are
+            # markdown plumbing, not slots.
+            $stripped = Remove-HtmlComment ($line -replace '`[^`]*`', '')
             if ($stripped -match '<[^<>\r\n]+>') { $hit = $true; break }
         }
         if ($hit) { $agentPlaceholderFiles += ($agentDir + '\' + $af.Name) }

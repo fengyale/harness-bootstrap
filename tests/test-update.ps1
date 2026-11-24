@@ -441,6 +441,10 @@ Check 'dry-run reports the strict migration default' ($dry -match 'add grounding
 Check 'dry-run reports the review ledger migration default' ($dry -match 'add reviewLedgerStrict: false')
 Check 'dry-run reports the delivery config' ($dry -match 'add deliveryStatus')
 Check 'dry-run reports the delivery strict default' ($dry -match 'add deliveryStatusStrict: false')
+# The task-start gate is an adoption switch: the upgrade must offer it as false
+# so an existing project's commits are not blocked before it runs harness-start.
+Check 'dry-run reports the task-start migration default' ($dry -match 'add requireTaskStart: false')
+Check 'dry-run reports the task-start config note' ($dry -match 'add _requireTaskStart')
 Check 'dry-run names keys outside the merge whitelist' (($dry -match 'by hand \(not in the merge whitelist\)') -and ($dry -match 'futureBlock'))
 Check 'a merged key is not reported as manual' ($dry -notmatch 'merge whitelist[^;]*sqlGate')
 Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\red-line-scan\.py')
@@ -511,6 +515,13 @@ Check 'required JSON merged: reviewLedger added' ($mergedConfig.PSObject.Propert
 Check 'required JSON merged: reviewLedgerStrict is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'reviewLedgerStrict' -and $mergedConfig.reviewLedgerStrict -eq $false)
 Check 'required JSON merged: deliveryStatus added' ($mergedConfig.PSObject.Properties.Name -contains 'deliveryStatus')
 Check 'required JSON merged: deliveryStatusStrict is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'deliveryStatusStrict' -and $mergedConfig.deliveryStatusStrict -eq $false)
+# The task-start gate is merged as false: it is off by default on a fresh install
+# too, and the team turns it on after adopting the entry point.
+Check 'required JSON merged: requireTaskStart is false on upgrade' ($mergedConfig.PSObject.Properties.Name -contains 'requireTaskStart' -and $mergedConfig.requireTaskStart -eq $false)
+# The explanatory note travels with the switch, otherwise the merged key is a
+# bare false with no guidance for the team that adopts harness-start.
+$noteName = @($mergedConfig.PSObject.Properties.Name | Where-Object { $_.StartsWith('_requireTaskStart') })
+Check 'required JSON merged: the task-start note follows the key' ($noteName.Count -eq 1)
 Check 'summaryContent keeps the acceptance needles' (@($mergedConfig.summaryContent.acceptance).Count -gt 0)
 Check 'required JSON merged: project note kept' ($mergedConfig._note -eq 'old install')
 Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.required) -contains 'scripts/red-line-scan.ps1'))

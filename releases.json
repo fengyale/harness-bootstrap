@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.31.21",
+    "title": "(开工入口与假红修复)",
+    "body": [
+      "- 新增 scripts/harness-start.ps1：一条命令跑 harness-plan、建 summary 骨架（预填 flow/touched_modules）、过 Stage 1、写 .git/harness-task-started；Stage 1 未过不写 marker",
+      "- 新增 scripts/check-task-start.ps1：requireTaskStart=true 时，summary 提交要求 marker 存在、feature 一致、at 晚于 HEAD；harness-only/docs/L0/merge 提交不检查",
+      "- pre-commit 从 index/HEAD 读 requireTaskStart，只对含 .harness/changes/*/summary.md 的提交校验；工作区未暂存 false 不能绕过；删除 check-task-start.ps1 会被拒",
+      "- harness-required.json 新增 requireTaskStart（默认 false，团队 adoption 后手动 true）；update-harness 合并并把升级迁移为 false",
+      "- verify-grounding：中文模板占位词（特性名/模块名/路径/文件名）不再当真实路径；真实缺失的中文路径仍 FAIL；$agentsFilled 先剥 HTML 注释，结构树占位检查不再被 skills-index 注释跳过",
+      "- verify-harness：剥离 HTML 注释后再查占位符；新增 tracked WARN：AGENTS.md / scripts/check-summary.ps1 / .harness/changes/README.md / .harness/rules 开发流程规范未跟踪时提示跨仓记录不会共享",
+      "- 新增 gate-auto 11 条断言（harness-only 通过、summary 无 marker 被拒、错特性 marker 被拒、工作区 false/index true 不能绕过、git rm 被拒、Feature 穿越/L0/多模块）、test-probe/update 断言",
+      "- .ps1 计数 31→33；技能总行数不变 1935；README/质量分级/AGENTS/流程规范/SKILL 同步"
+    ]
+  },
+  {
     "version": "1.31.20",
     "title": "(多模块编译/测试覆盖)",
     "body": [

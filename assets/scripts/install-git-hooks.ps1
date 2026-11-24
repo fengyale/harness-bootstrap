@@ -12,7 +12,10 @@
       - .trae/hooks.json     -> fast feedback inside the editor
 
     The hook enforces four things at commit time: red-line scan, SQL review,
-    summary field validity, and summary ORDER. The order check exists because
+    summary field validity, and summary ORDER. An optional fifth check (task
+    start) runs only when requireTaskStart is on and the commit lands a summary:
+    the marker .git/harness-task-started must then exist and be current. The
+    order check exists because
     "write the summary before coding" cannot be observed from file contents:
     git records commit order, not edit order. So a commit that ADDS a summary
     while also changing anything outside .harness/ is refused; the initial
@@ -140,6 +143,12 @@ assert_tool_in_sync() {
   fi
 }
 
+# Task-start marker check (opt-in). scripts/harness-start.ps1 records "this task
+# has a record and passed stage 1" in .git/harness-task-started; the check itself
+# lives in check-task-start.ps1 so stage-gate, the hook and a manual run cannot
+# drift. requireTaskStart stays false on upgraded projects (update-harness adds
+# false) so an existing workflow is not interrupted until the team opts in.
+
 # check-summary.ps1 is a required gate. A commit that deletes it from the
 # tracked tree must fail even if a worktree copy is still lying around.
 if git cat-file -e HEAD:scripts/check-summary.ps1 2>/dev/null && ! git cat-file -e :scripts/check-summary.ps1 2>/dev/null; then
@@ -147,6 +156,13 @@ if git cat-file -e HEAD:scripts/check-summary.ps1 2>/dev/null && ! git cat-file 
 fi
 if [ ! -f "$ROOT/scripts/check-summary.ps1" ]; then
   gate_fail 'scripts/check-summary.ps1 is missing'
+fi
+
+# check-task-start.ps1 is the opt-in task-start gate. A commit that deletes the
+# tracked copy must fail; a project that never had it (legacy fixture, manual
+# install) is not blocked, so the hook keeps working where the script is absent.
+if git cat-file -e HEAD:scripts/check-task-start.ps1 2>/dev/null && ! git cat-file -e :scripts/check-task-start.ps1 2>/dev/null; then
+  gate_fail 'scripts/check-task-start.ps1 was deleted in this commit'
 fi
 
 # The commit must leave at least one tracked scanner. Deleting one of two
@@ -173,11 +189,60 @@ fi
 # worktree-vs-index trust boundary: without it, an unstaged empty script
 # silently disables the red-line scan, the SQL gate or the summary check.
 assert_tool_in_sync scripts/check-summary.ps1
+assert_tool_in_sync scripts/check-task-start.ps1
 assert_tool_in_sync scripts/red-line-rules.json
+# The task-start flag and the SQL policy live in this config; a staged/unstaged
+# disagreement must not be able to weaken either gate.
+assert_tool_in_sync scripts/harness-required.json
 assert_tool_in_sync scripts/red-line-scan.ps1
 assert_tool_in_sync scripts/red-line-scan.py
 assert_tool_in_sync scripts/sql-review-gate.ps1
 assert_tool_in_sync scripts/sql-review-gate.py
+
+# Task-start marker check (opt-in through scripts/harness-required.json
+# requireTaskStart, default false). Only a commit that lands a change record is
+# checked: harness-start creates that record, so the marker must exist before the
+# summary is committed. Code commits rely on the summary-order and
+# record-association checks below; harness-only / docs / L0 / merge commits are
+# untouched. The flag is read from the index first, then HEAD, and passed to
+# check-task-start as -Require: an unstaged edit to the worktree config cannot
+# switch the gate off.
+if [ -f "$ROOT/scripts/check-task-start.ps1" ]; then
+  TASK_SUMMARIES=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMR 2>/dev/null | grep -E '^\.harness/changes/[^/]+/summary\.md$' | grep -v '^\.harness/changes/_template/' || true)
+  if [ -n "$TASK_SUMMARIES" ]; then
+    TASK_CFG=""
+    if git cat-file -e :scripts/harness-required.json 2>/dev/null; then
+      TASK_CFG=$(git show :scripts/harness-required.json 2>/dev/null)
+    elif git cat-file -e HEAD:scripts/harness-required.json 2>/dev/null; then
+      TASK_CFG=$(git show HEAD:scripts/harness-required.json 2>/dev/null)
+    fi
+    TASK_REQ=0
+    case "$(printf '%s' "$TASK_CFG" | tr -d '[:space:]')" in
+      *'"requireTaskStart":true'*) TASK_REQ=1 ;;
+    esac
+    TASK_PS=""
+    if command -v powershell >/dev/null 2>&1; then TASK_PS=powershell
+    elif command -v pwsh >/dev/null 2>&1; then TASK_PS=pwsh
+    fi
+    if [ -z "$TASK_PS" ] && [ "$TASK_REQ" = "1" ]; then
+      gate_fail 'requireTaskStart is on but no PowerShell host can verify the task-start marker'
+    fi
+    for TASK_SUMMARY in $TASK_SUMMARIES; do
+      TASK_FEATURE=$(printf '%s' "$TASK_SUMMARY" | sed -E 's#^\.harness/changes/([^/]+)/summary\.md$#\1#')
+      TASK_START_STATUS=0
+      if [ "$TASK_PS" = "powershell" ]; then
+        powershell -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/check-task-start.ps1" -Root "$ROOT" -Require "$TASK_REQ" -Feature "$TASK_FEATURE"
+        TASK_START_STATUS=$?
+      elif [ "$TASK_PS" = "pwsh" ]; then
+        pwsh -NoProfile -File "$ROOT/scripts/check-task-start.ps1" -Root "$ROOT" -Require "$TASK_REQ" -Feature "$TASK_FEATURE"
+        TASK_START_STATUS=$?
+      fi
+      if [ "$TASK_START_STATUS" -ne 0 ]; then
+        gate_fail 'run scripts/harness-start.ps1 before committing the summary (task-start marker missing or stale)'
+      fi
+    done
+  fi
+fi
 
 # The rule table is the scanner's input, so a changed table must not ride along
 # with source code: one `git add` could otherwise lower a rule and land the

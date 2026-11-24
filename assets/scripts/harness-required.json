@@ -6,6 +6,8 @@
   "recordsTracked": true,
   "_groundingStrict说明": "true = 有代码的项目里，技能没有 E1/E2 锚点直接 FAIL（新装默认）。false = 只报 WARN（默认给升级项目，等锚点补齐后再打开）。升级不会自动改成 true。",
   "groundingStrict": true,
+  "_requireTaskStart说明": "默认 false：首次安装与升级都不启用，L0 / 纯文档 / harness-only / merge 提交不会被误拦。团队采用 scripts/harness-start.ps1 后手动改 true；开启后 pre-commit 只在提交 .harness/changes/<特性>/summary.md 时校验 .git/harness-task-started（feature 与提交路径一致、at 晚于 HEAD 提交），其余提交放行。",
+  "requireTaskStart": false,
   "sqlGate": true,
   "sqlReview": {
     "_说明": "check-summary.ps1 -Stage final 用它检查 sql_review 的结论与证据是否自相矛盾：结论写通过/已改写，但四层或计划里仍有已定义的未验证标记，就直接 FAIL；值里引用的 .harness 路径必须存在。noneMarkers 命中则视为本条不适用。",
@@ -95,6 +97,8 @@
     "scripts/install-git-hooks.ps1",
     "scripts/stage-gate.ps1",
     "scripts/stage-gate-rules.json",
+    "scripts/harness-start.ps1",
+    "scripts/check-task-start.ps1",
     "scripts/check-summary.ps1",
     "scripts/setup-links.ps1",
     "scripts/sync-skills-index.ps1",

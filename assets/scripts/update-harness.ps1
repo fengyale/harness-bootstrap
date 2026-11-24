@@ -97,7 +97,7 @@ $MergeKnown = -not $NoMergeKnown
 # One list for both the delta report and the actual merge. Two copies used to be
 # maintained by hand, so adding a key could report "by hand" while the merge
 # quietly did it (or vice versa). Keep this the only place to edit.
-$script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict', 'reviewLedger', 'reviewLedgerStrict', 'deliveryStatus', 'deliveryStatusStrict')
+$script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict', 'reviewLedger', 'reviewLedgerStrict', 'deliveryStatus', 'deliveryStatusStrict', 'requireTaskStart')
 
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $pkgPath = (Resolve-Path -LiteralPath $PackagePath).Path
@@ -242,6 +242,20 @@ function Get-RequiredDelta {
         if (($src.PSObject.Properties.Name -contains 'deliveryStatusStrict') -and
             -not ($dst.PSObject.Properties.Name -contains 'deliveryStatusStrict')) {
             $parts += 'add deliveryStatusStrict: false (upgrade keeps WARN; set true after the first delivery_status is filled)'
+        }
+        # requireTaskStart is an adoption switch, not a copy: the pre-commit gate
+        # would block every commit of a project that never ran harness-start, so
+        # the upgrade adds false and the team turns it on after adopting it.
+        if (($src.PSObject.Properties.Name -contains 'requireTaskStart') -and
+            -not ($dst.PSObject.Properties.Name -contains 'requireTaskStart')) {
+            $parts += 'add requireTaskStart: false (upgrade keeps WARN; set true after the team adopts harness-start)'
+        }
+        # Documentation keys are skipped by the unknown-key report, so the note
+        # that explains a new switch has to be named here or it disappears.
+        foreach ($p in @($src.PSObject.Properties)) {
+            if (-not $p.Name.StartsWith('_requireTaskStart')) { continue }
+            if ($dst.PSObject.Properties.Name -contains $p.Name) { continue }
+            $parts += ('add ' + $p.Name + ' (config note)')
         }
         # Old projects that followed the previous "delete the rule" opt-out may
         # have left the gate scripts behind. Without this hint the new pair
@@ -438,7 +452,7 @@ function Merge-RequiredJson {
     # are new keys in 1.29-1.31; without them the new check-summary silently
     # returns early, so an upgrade would ship the script but not the gate.
     # Derived from $script:MergeKeys so the report and the merge cannot drift.
-    $copyKeys = @($script:MergeKeys | Where-Object { @('required', 'requiredAnyOf', 'sqlGate', 'groundingStrict', 'reviewLedgerStrict', 'deliveryStatusStrict') -notcontains $_ })
+    $copyKeys = @($script:MergeKeys | Where-Object { @('required', 'requiredAnyOf', 'sqlGate', 'groundingStrict', 'reviewLedgerStrict', 'deliveryStatusStrict', 'requireTaskStart') -notcontains $_ })
     foreach ($key in $copyKeys) {
         if (($src.PSObject.Properties.Name -contains $key) -and
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
@@ -462,6 +476,19 @@ function Merge-RequiredJson {
     if (($src.PSObject.Properties.Name -contains 'deliveryStatusStrict') -and
         -not ($cfg.PSObject.Properties.Name -contains 'deliveryStatusStrict')) {
         $cfg | Add-Member -NotePropertyName deliveryStatusStrict -NotePropertyValue $false
+    }
+    # Same migration default for the task-start gate: an upgraded project has no
+    # harness-task-started marker, so true would block every commit immediately.
+    if (($src.PSObject.Properties.Name -contains 'requireTaskStart') -and
+        -not ($cfg.PSObject.Properties.Name -contains 'requireTaskStart')) {
+        $cfg | Add-Member -NotePropertyName requireTaskStart -NotePropertyValue $false
+    }
+    # Copy the explanatory note for the new switch (name is matched by prefix so
+    # this script stays pure ASCII).
+    foreach ($p in @($src.PSObject.Properties)) {
+        if (-not $p.Name.StartsWith('_requireTaskStart')) { continue }
+        if ($cfg.PSObject.Properties.Name -contains $p.Name) { continue }
+        $cfg | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value
     }
     [System.IO.File]::WriteAllText($DstPath, (($cfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
     return $true

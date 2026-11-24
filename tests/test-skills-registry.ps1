@@ -167,6 +167,49 @@ $gCode = $LASTEXITCODE
 Check 'long skill: verify-grounding still exits 0' ($gCode -eq 0)
 Check 'long skill: reported as a size WARN' ($g -match 'consider moving examples')
 
+Step 'grounding: Chinese stand-in words are not missing paths'
+# A real project writes "the record lives in .harness/changes/<feature>/" as a
+# bare Chinese word, not as an openable path. It must not FAIL the reference
+# check; a genuinely missing harness path still must.
+$phSkillDir = New-Skill 'main-dev' 'placeholder-probe' 'placeholder-probe'
+$phSkillFile = Join-Path $phSkillDir 'SKILL.md'
+$wFeature = (-join ([char]0x7279, [char]0x6027, [char]0x540D))
+$wModule  = (-join ([char]0x6A21, [char]0x5757, [char]0x540D))
+$phBody = @(
+    '---',
+    'name: placeholder-probe',
+    'description: demo skill whose body names a feature and a module',
+    '---',
+    '',
+    '# placeholder probe',
+    '',
+    ('- record: `.harness/changes/' + $wFeature + '/summary.md`'),
+    ('- card: `.harness/modules/' + $wModule + '.md`'),
+    '- real: `.harness/skills/README.md`'
+)
+[System.IO.File]::WriteAllLines($phSkillFile, $phBody, (New-Object System.Text.UTF8Encoding($false)))
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'stand-in words do not fail the reference check' (($LASTEXITCODE -eq 0) -and (-not ($g -match 'FAIL\]\s+references')))
+Add-Content -LiteralPath $phSkillFile -Value '- broken: `.harness/rules/does-not-exist.md`' -Encoding UTF8
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'a real missing harness path still fails' (($LASTEXITCODE -eq 1) -and ($g -match 'does-not-exist\.md'))
+$keptPh = @([System.IO.File]::ReadAllLines($phSkillFile, [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'does-not-exist' })
+[System.IO.File]::WriteAllLines($phSkillFile, $keptPh, (New-Object System.Text.UTF8Encoding($false)))
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'removing the missing path clears the failure' ($LASTEXITCODE -eq 0)
+# Only real template slots are skipped: a genuine Chinese file name that is
+# missing must still be reported, or the stand-in list would hide a broken link.
+$wRule = (-join ([char]0x7F16, [char]0x7801, [char]0x89C4, [char]0x8303)) + '.md'
+Add-Content -LiteralPath $phSkillFile -Value ('- broken zh: `.harness/rules/' + $wRule + '`') -Encoding UTF8
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'a real Chinese path that is missing still fails' (($LASTEXITCODE -eq 1) -and ($g -match [regex]::Escape($wRule)))
+$keptPh = @([System.IO.File]::ReadAllLines($phSkillFile, [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'broken zh' })
+[System.IO.File]::WriteAllLines($phSkillFile, $keptPh, (New-Object System.Text.UTF8Encoding($false)))
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'removing the Chinese path clears the failure' ($LASTEXITCODE -eq 0)
+
 Step 'coverage: a placeholder structure tree is a failure'
 # verify-grounding cannot see that a long wiki page is still the template, so the
 # coverage check reads the structure tree: a fenced line that still starts with
@@ -177,7 +220,17 @@ $structPath = Join-Path "$proj\.harness\rules" $structName
 [System.IO.File]::WriteAllLines($structPath, @(
     '# structure', '', '```text', '<project>/', '+-- src/', '```', ''
 ), (New-Object System.Text.UTF8Encoding($false)))
-Set-Content -LiteralPath "$proj\AGENTS.md" -Value '# demo project', 'no placeholders here' -Encoding UTF8
+# A real AGENTS.md keeps the skills-index marker pair. Those comments used to
+# count as "<...>" placeholders, so agentsFilled stayed false and this check
+# never ran -- a placeholder tree passed silently.
+[System.IO.File]::WriteAllLines("$proj\AGENTS.md", @(
+    '# demo project',
+    '',
+    '<!-- skills-index:begin -->',
+    '| cat | skill |',
+    '<!-- skills-index:end -->',
+    ''
+), (New-Object System.Text.UTF8Encoding($false)))
 New-Item -ItemType Directory -Force -Path "$proj\src" | Out-Null
 Set-Content -LiteralPath "$proj\src\Main.java" -Value 'class Main { }' -Encoding ASCII
 New-Item -ItemType Directory -Force -Path "$proj\baseline" | Out-Null
@@ -340,6 +393,56 @@ $fixed = @([System.IO.File]::ReadAllLines($agentFile, [System.Text.Encoding]::UT
 [System.IO.File]::WriteAllLines($agentFile, $fixed, (New-Object System.Text.UTF8Encoding($false)))
 $out = RunVerify
 Check 'filling the placeholder clears the warn' (-not ($out -match 'placeholders'))
+
+Step 'AGENTS.md: an html comment is not a placeholder'
+# The skills-index marker pair is a comment, not a slot. A filled AGENTS.md that
+# keeps it must not be read as a template; a real <category>/<name> slot still must.
+$agentsKeep = [System.IO.File]::ReadAllText("$proj\AGENTS.md", [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllLines("$proj\AGENTS.md", @(
+    '# demo project',
+    '',
+    '<!-- skills-index:begin -->',
+    '| cat | skill |',
+    '<!-- skills-index:end -->',
+    ''
+), (New-Object System.Text.UTF8Encoding($false)))
+$out = RunVerify
+Check 'the skills-index comment is not a placeholder' (-not ($out -match 'template placeholder left in AGENTS\.md'))
+$slotWord = (-join ([char]0x5206, [char]0x7C7B))
+$nameWord = [char]0x540D
+[System.IO.File]::AppendAllText("$proj\AGENTS.md", ('# <' + $slotWord + '>/<' + $nameWord + '>' + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+$out = RunVerify
+Check 'a real slot is still a placeholder' ($out -match 'template placeholder left in AGENTS\.md')
+[System.IO.File]::WriteAllText("$proj\AGENTS.md", $agentsKeep, (New-Object System.Text.UTF8Encoding($false)))
+
+Step 'tracked: ignored core files warn, tracked ones do not'
+# .harness can be git-ignored (or never added) and the harness still works on one
+# machine -- but its records and gate history never leave it. WARN, not FAIL.
+$out = RunVerify
+Check 'not a git repo: the tracked check is skipped' ($out -match 'not a git work tree')
+$tr = Join-Path $TestRoot 'tracked'
+New-Item -ItemType Directory -Force -Path $tr | Out-Null
+Copy-Item "$pkg\assets\scripts" "$tr\scripts" -Recurse
+New-Item -ItemType Directory -Force -Path "$tr\.harness\rules" | Out-Null
+New-Item -ItemType Directory -Force -Path "$tr\.harness\changes" | Out-Null
+$flowName = (-join ([char]0x5F00, [char]0x53D1, [char]0x6D41, [char]0x7A0B, [char]0x89C4, [char]0x8303)) + '.md'
+Set-Content -LiteralPath "$tr\AGENTS.md" -Value '# tracked probe' -Encoding UTF8
+Set-Content -LiteralPath (Join-Path "$tr\.harness\rules" $flowName) -Value '# flow' -Encoding UTF8
+Set-Content -LiteralPath "$tr\.harness\changes\README.md" -Value '# changes' -Encoding UTF8
+git -C $tr init -q
+git -C $tr config user.email t@t.t
+git -C $tr config user.name t
+# Keep the add quiet: a "LF will be replaced by CRLF" warning reaches stderr and,
+# under EAP=Stop, aborts the suite as a NativeCommandError.
+git -C $tr config core.autocrlf false
+Add-Content -LiteralPath "$tr\.gitignore" -Value '.harness/' -Encoding ASCII
+$null = & git -C $tr add -A 2>$null
+$out = Invoke-Harness "$tr\scripts\verify-harness.ps1" @{ Root = $tr } | Out-String
+Check 'an ignored harness tree is reported as untracked' ($out -match 'harness core files are not tracked')
+$null = & git -C $tr add -f .harness 2>$null
+$out = Invoke-Harness "$tr\scripts\verify-harness.ps1" @{ Root = $tr } | Out-String
+Check 'a tracked harness tree is not reported' (-not ($out -match 'harness core files are not tracked'))
+Check 'the tracked check passes when every core file is tracked' ($out -match '\[PASS\]\s+tracked')
 
 Step 'productivity: four proxies, unknown is not a pass'
 # This fixture has no gate.jsonl and is not a git repository, so every

@@ -33,6 +33,19 @@ New-Item -ItemType Directory -Force -Path $TestRoot | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Null
 New-Item -ItemType Directory -Force -Path "$proj\.harness\rules" | Out-Null
 Copy-Item "$pkg\assets\scripts" "$proj\scripts" -Recurse
+
+# The task-start gate is opt-in. This suite commits dozens of times without ever
+# running harness-start, so switch it off in every fixture that copies scripts;
+# the dedicated step at the end turns it back on and asserts the block.
+function Disable-TaskStartGate {
+    param([string]$ProjPath)
+    $cfg = Join-Path $ProjPath 'scripts\harness-required.json'
+    if (-not (Test-Path -LiteralPath $cfg)) { return }
+    $t = Get-Content -LiteralPath $cfg -Raw -Encoding UTF8
+    $t = $t -replace '"requireTaskStart"\s*:\s*true', '"requireTaskStart": false'
+    Set-Content -LiteralPath $cfg -Value $t -Encoding UTF8
+}
+Disable-TaskStartGate $proj
 # The template harness-required.json ships sqlGate=true. The hook is fail-closed
 # when the rule is missing, so the fixture must carry a rule for the normal
 # summary commits below to pass.
@@ -550,6 +563,7 @@ $ig = Join-Path $TestRoot 'proj-ignore'
 New-Item -ItemType Directory -Force -Path "$ig\.harness\changes\demo", "$ig\.harness\metrics", "$ig\.harness\rules" | Out-Null
 [System.IO.File]::WriteAllText("$ig\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change is committed.`n", (New-Object System.Text.UTF8Encoding($false)))
 Copy-Item "$pkg\assets\scripts" "$ig\scripts" -Recurse
+Disable-TaskStartGate $ig
 [System.IO.File]::WriteAllText("$ig\.gitignore", ".harness/`n", (New-Object System.Text.UTF8Encoding($false)))
 [System.IO.File]::WriteAllText("$ig\AGENTS.md", "# demo`n", (New-Object System.Text.UTF8Encoding($false)))
 git -C $ig init -q
@@ -578,6 +592,7 @@ $ruleProj = Join-Path $TestRoot 'proj-rule'
 New-Item -ItemType Directory -Force -Path "$ruleProj\.harness\changes", "$ruleProj\.harness\metrics", "$ruleProj\.harness\rules" | Out-Null
 [System.IO.File]::WriteAllText("$ruleProj\.harness\rules\SQL-review.md", "# SQL review`n`nRequired before a SQL change.`n", (New-Object System.Text.UTF8Encoding($false)))
 Copy-Item "$pkg\assets\scripts" "$ruleProj\scripts" -Recurse
+Disable-TaskStartGate $ruleProj
 [System.IO.File]::WriteAllText("$ruleProj\AGENTS.md", "# demo`n", (New-Object System.Text.UTF8Encoding($false)))
 git -C $ruleProj init -q
 git -C $ruleProj config user.email t@t.t
@@ -953,6 +968,90 @@ Expect 'an escaped pipe stays inside the command' $LASTEXITCODE 0
 if (Test-Path -LiteralPath "$mm10\pipe.compiled") {
     Write-Host 'ok: the escaped pipe did not split the row'
 } else { Write-Host 'BAD: the escaped pipe truncated the command' -ForegroundColor Red; $fail++ }
+
+Step 'task-start gate: requireTaskStart checks a summary commit'
+# The gate is opt-in and defaults to false, so every earlier commit in this
+# fixture is already unaffected. Turn it on and commit the switch with no
+# summary staged: harness-only commits stay exempt.
+$reqPath = "$proj\scripts\harness-required.json"
+$reqText = Get-Content -LiteralPath $reqPath -Raw -Encoding UTF8
+$reqText = $reqText -replace '"requireTaskStart"\s*:\s*false', '"requireTaskStart": true'
+Set-Content -LiteralPath $reqPath -Value $reqText -Encoding UTF8
+git -C $proj add scripts/harness-required.json
+git -C $proj commit -q -m 'chore: turn on the task-start gate'
+Expect 'a harness-only commit passes with the switch on' $LASTEXITCODE 0
+
+# harness-start guards: path traversal, L0, and the multi-module warning
+$hsScript = "$proj\scripts\harness-start.ps1"
+$savedEap4 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$hsTrav = & powershell -NoProfile -ExecutionPolicy Bypass -File $hsScript -Root $proj -Feature '..\..\evil' -SkipPlan 2>&1 | Out-String
+$travCode = $LASTEXITCODE
+$hsL0 = & powershell -NoProfile -ExecutionPolicy Bypass -File $hsScript -Root $proj -Feature demo -Flow L0 -SkipPlan 2>&1 | Out-String
+$l0Code = $LASTEXITCODE
+New-Item -ItemType Directory -Force -Path "$proj\.harness\modules" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\modules\core.md" -Value '# core' -Encoding UTF8
+$hsMod = & powershell -NoProfile -ExecutionPolicy Bypass -File $hsScript -Root $proj -Feature warn-case -SkipPlan 2>&1 | Out-String
+$ErrorActionPreference = $savedEap4
+Expect 'harness-start refuses a path-traversal feature' $travCode 1
+Expect 'harness-start refuses -Flow L0' $l0Code 1
+if ($hsMod -match 'touched_modules=none') { Write-Host 'ok: an empty -Modules warns when modules are declared' }
+else { Write-Host 'BAD: the multi-module warning is missing' -ForegroundColor Red; $fail++ }
+Remove-Item -LiteralPath "$proj\.harness\modules" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$proj\.harness\changes\warn-case" -Recurse -Force -ErrorAction SilentlyContinue
+
+# A summary commit needs the marker once the switch is on.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\taskgate" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\taskgate\summary.md" -Value $s -Encoding UTF8
+git -C $proj add .harness/changes/taskgate/summary.md
+$savedEap5 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$tgOut = git -C $proj commit -m 'docs: task summary without a marker' 2>&1 | Out-String
+$tgCode = $LASTEXITCODE
+$ErrorActionPreference = $savedEap5
+Expect 'a summary commit without a marker is refused' $tgCode 1
+if ($tgOut -match 'harness-start') { Write-Host 'ok: the task-start failure names harness-start' }
+else { Write-Host 'BAD: the task-start failure does not name harness-start' -ForegroundColor Red; $fail++ }
+
+# A marker for a different feature does not satisfy the check.
+$startMarker = "$proj\.git\harness-task-started"
+$nowIso = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+[System.IO.File]::WriteAllLines($startMarker, @('feature=demo', ('at=' + $nowIso), 'flow=L2'), (New-Object System.Text.UTF8Encoding($false)))
+Start-Sleep -Seconds 2
+git -C $proj commit -q -m 'docs: task summary with the wrong marker'
+Expect 'a marker for another feature is refused' $LASTEXITCODE 1
+
+# The right marker (and a timestamp later than HEAD) lets the summary land.
+$nowIso = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+[System.IO.File]::WriteAllLines($startMarker, @('feature=taskgate', ('at=' + $nowIso), 'flow=L2'), (New-Object System.Text.UTF8Encoding($false)))
+git -C $proj commit -q -m 'docs: task summary with its marker'
+Expect 'the summary commits once its marker exists' $LASTEXITCODE 0
+
+# An unstaged false must not switch the check off: the index still says true.
+$reqText = Get-Content -LiteralPath $reqPath -Raw -Encoding UTF8
+$reqText = $reqText -replace '"requireTaskStart"\s*:\s*true', '"requireTaskStart": false'
+Set-Content -LiteralPath $reqPath -Value $reqText -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\bypass" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\bypass\summary.md" -Value $s -Encoding UTF8
+git -C $proj add .harness/changes/bypass/summary.md
+$savedEap6 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$bypassOut = git -C $proj commit -m 'docs: bypass attempt' 2>&1 | Out-String
+$bypassCode = $LASTEXITCODE
+$ErrorActionPreference = $savedEap6
+Expect 'an unstaged requireTaskStart=false cannot bypass the gate' $bypassCode 1
+if ($bypassOut -match 'differs from the index|harness-start') { Write-Host 'ok: the bypass attempt was refused by the worktree/index boundary' }
+else { Write-Host 'BAD: the bypass attempt failed for an unexpected reason' -ForegroundColor Red; $fail++ }
+git -C $proj reset -q HEAD -- .harness/changes/bypass
+git -C $proj checkout -q -- scripts/harness-required.json
+Remove-Item -LiteralPath "$proj\.harness\changes\bypass" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Deleting the tracked gate script is refused.
+git -C $proj reset --hard HEAD -q
+git -C $proj rm -q scripts/check-task-start.ps1
+git -C $proj commit -q -m 'chore: drop the task gate script'
+Expect 'deleting check-task-start.ps1 is refused' $LASTEXITCODE 1
+git -C $proj reset --hard HEAD -q
 
 if ($Profile) {
     if ($script:stepName) {

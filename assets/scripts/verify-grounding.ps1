@@ -80,6 +80,50 @@ function Test-InternalPath {
     return (Test-Path -LiteralPath $full)
 }
 
+# HTML comments are markdown plumbing (e.g. the skills-index marker pair), not
+# template slots: strip single- and multi-line comments before any "<...>" scan.
+function Remove-HtmlComment {
+    param([string]$Text)
+    return [regex]::Replace($Text, '<!--.*?-->', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+}
+
+# Chinese stand-in words skill prose uses in place of a real name: "the record
+# lives in .harness/changes/<feature>/" is written as a bare word, not a path.
+# Only template slots belong here -- a generic noun ("date", "owner") would hide
+# a genuinely missing Chinese path. Built from code points to stay pure ASCII.
+function New-CjkWord {
+    param([int[]]$Codes)
+    return (-join ($Codes | ForEach-Object { [char]$_ }))
+}
+$PlaceholderSegments = @{}
+foreach ($codes in @(
+        (0x7279, 0x6027, 0x540D),
+        (0x6A21, 0x5757, 0x540D),
+        (0x8DEF, 0x5F84),
+        (0x6587, 0x4EF6, 0x540D)
+    )) {
+    $PlaceholderSegments[(New-CjkWord $codes)] = $true
+}
+
+function Test-PathLikeToken {
+    param([string]$Token)
+    # a file reference has a separator or an extension; a bare word is prose
+    if ($Token -match '[\\/]') { return $true }
+    if ($Token -match '\.[A-Za-z0-9]{1,8}$') { return $true }
+    return $false
+}
+
+function Test-PlaceholderToken {
+    param([string]$Token)
+    foreach ($seg in ($Token -split '[\\/]')) {
+        $s = $seg.Trim()
+        # "module-name.md" is the same stand-in as "module-name"
+        $s = ($s -replace '\.[A-Za-z0-9]{1,8}$', '')
+        if ($s.Length -gt 0 -and $PlaceholderSegments.ContainsKey($s)) { return $true }
+    }
+    return $false
+}
+
 # ------------------------------------------------- config + detected stack
 $cfgPath = Join-Path $PSScriptRoot 'harness-required.json'
 $cfg = $null
@@ -432,6 +476,11 @@ foreach ($s in $skillFiles) {
             $anchorWarn++
             continue
         }
+        if (Test-PlaceholderToken $target) {
+            Add-Result 'anchors' 'WARN' "$($s.Name): [E2] anchor names a stand-in, not a file: $target"
+            $anchorWarn++
+            continue
+        }
         if (-not (Test-Path -LiteralPath (Join-Path $rootPath $target))) {
             Add-Result 'anchors' 'FAIL' "$($s.Name): [E2] target missing: $target"
             $anchorFail++
@@ -504,6 +553,10 @@ foreach ($s in $skillFiles) {
                 $isStaleHarness = $harnessBasenames.ContainsKey($leaf)
             }
             if (-not $isInternal -and -not $isStaleHarness) { continue }
+            # a bare word ("feature-name") is prose, and a Chinese stand-in
+            # segment is a stand-in even inside a real directory prefix
+            if (-not (Test-PathLikeToken $tok)) { continue }
+            if (Test-PlaceholderToken $tok) { continue }
             if ($seen.ContainsKey($tok)) { continue }
             $seen[$tok] = $true
             if (-not (Test-InternalPath $tok)) {
@@ -654,7 +707,11 @@ if ($newProject -and -not $codeExists) {
     $agentsDoc2 = Join-Path $rootPath 'AGENTS.md'
     $agentsFilled = $false
     if (Test-Path -LiteralPath $agentsDoc2) {
-        $agentsFilled = ([System.IO.File]::ReadAllText($agentsDoc2, [System.Text.Encoding]::UTF8) -notmatch '<[^<>\r\n]+>')
+        # Comments are stripped first: the skills-index marker pair is plumbing,
+        # and leaving it in made every real AGENTS.md look like a template, which
+        # skipped the structure-tree check below forever.
+        $agentsText2 = Remove-HtmlComment ([System.IO.File]::ReadAllText($agentsDoc2, [System.Text.Encoding]::UTF8))
+        $agentsFilled = ($agentsText2 -notmatch '<[^<>\r\n]+>')
     }
 
     # (a) structure tree: deterministic, but only once the resident file says

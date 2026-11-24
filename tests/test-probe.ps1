@@ -199,6 +199,66 @@ $hpOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $hpScript -SelfTe
 Check 'harness-plan.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
 Check 'harness-plan.ps1 self test reports OK' ($hpOut -match 'PLAN SELFTEST OK')
 
+Write-Host '=== harness-start.ps1 self test ===' -ForegroundColor Cyan
+$hsScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\harness-start.ps1'
+$hsOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $hsScript -SelfTest 2>&1 | Out-String
+Check 'harness-start.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
+Check 'harness-start.ps1 self test reports OK' ($hsOut -match 'START SELFTEST OK')
+
+Write-Host '=== check-task-start.ps1 gate ===' -ForegroundColor Cyan
+$ctsScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\check-task-start.ps1'
+$ctsRoot = Join-Path $env:TEMP ('hb-cts-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$ctsNoGit = Join-Path $env:TEMP ('hb-cts-nogit-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$ctsUtf8 = New-Object System.Text.UTF8Encoding($false)
+function Invoke-Cts {
+    param([string]$TargetRoot, [string[]]$ExtraArgs)
+    # Not $args: that is an automatic variable.
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ctsScript, '-Root', $TargetRoot) + $ExtraArgs
+    $out = & powershell @argList | Out-String
+    return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+}
+try {
+    New-Item -ItemType Directory -Force -Path (Join-Path $ctsRoot 'scripts') | Out-Null
+    & git -C $ctsRoot init -q
+    & git -C $ctsRoot config user.email t@t.t
+    & git -C $ctsRoot config user.name t
+    $ctsCfg = Join-Path $ctsRoot 'scripts\harness-required.json'
+    $ctsMarker = Join-Path $ctsRoot '.git\harness-task-started'
+    [System.IO.File]::WriteAllText($ctsCfg, '{"requireTaskStart": true}', $ctsUtf8)
+    [System.IO.File]::WriteAllText((Join-Path $ctsRoot 'seed.txt'), "seed`n", $ctsUtf8)
+    & git -C $ctsRoot add -A
+    & git -C $ctsRoot commit -q -m seed
+    $seedOk = ($LASTEXITCODE -eq 0)
+
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @('-Require', '1')
+    Check 'check-task-start refuses a missing marker' ($seedOk -and $r.Code -eq 1)
+    Check 'check-task-start names harness-start' ($r.Text -match 'harness-start\.ps1')
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @('-Require', '0')
+    Check 'check-task-start exits 0 when -Require is 0' ($r.Code -eq 0)
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @()
+    Check 'a manual run reads the config fallback (true here)' ($r.Code -eq 1)
+
+    Start-Sleep -Seconds 2
+    $nowIso = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    [System.IO.File]::WriteAllText($ctsMarker, ("feature=demo`nat=" + $nowIso + "`nflow=L2`n"), $ctsUtf8)
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @('-Require', '1', '-Feature', 'demo')
+    Check 'a current marker for the matching feature passes' ($r.Code -eq 0)
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @('-Require', '1', '-Feature', 'other')
+    Check 'a marker for another feature is refused' ($r.Code -eq 1)
+
+    [System.IO.File]::WriteAllText($ctsMarker, ("feature=demo`nat=2000-01-01T00:00:00Z`nflow=L2`n"), $ctsUtf8)
+    $r = Invoke-Cts -TargetRoot $ctsRoot -ExtraArgs @('-Require', '1', '-Feature', 'demo')
+    Check 'a marker older than the last commit is refused' ($r.Code -eq 1)
+
+    New-Item -ItemType Directory -Force -Path $ctsNoGit | Out-Null
+    $r = Invoke-Cts -TargetRoot $ctsNoGit -ExtraArgs @('-Require', '1')
+    Check 'a non-git project fails safely when required' ($r.Code -eq 1)
+} finally {
+    foreach ($d in @($ctsRoot, $ctsNoGit)) {
+        if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 Write-Host '=== metrics.ps1 self test ===' -ForegroundColor Cyan
 $metScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\metrics.ps1'
 $metOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $metScript -SelfTest 2>&1 | Out-String

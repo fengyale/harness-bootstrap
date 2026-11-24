@@ -345,6 +345,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-git-hooks.ps
 只检 `.java/.sql/.xml/.kt/.py/.js/.ts/.vue/.cs`，排除门禁脚本自身与 `.md`；`select *` / `not in` / 前导 `%` 只提示。
 **没有数据库的项目**：在**同一次提交**里把 `scripts/harness-required.json` 的 `sqlGate` 设为 `false`，并删除 `.harness/rules/SQL评审规范.md`、`sql-review` 技能与 `sql-review-gate.*`；分两次提交会被 hook 拦下（先设 false 但残留，或先删但配置仍为 true）。只删文件不改 `sqlGate` 会被 `verify-harness` 判 FAIL（配置与产物不一致）。
 **`sqlGate=true`（新装默认）**：规则与 gate 必须同时存在且可运行；只删一侧会被 hook 或 `verify-harness` 第 13 项拦下，第 13 项还会用 empty-diff + positive probe 验证 gate 真的能跑、且会在“有 SQL 无 summary”时拒绝。
+**任务开工门禁（可选，默认关闭）**：`scripts\harness-start.ps1` 一条命令出上下文、建 `summary.md` 骨架、过 Stage 1，通过后写 `.git/harness-task-started`。`harness-required.json` 的 `requireTaskStart` **默认 `false`**，首次安装与升级都不启用，L0 / 纯文档 / harness-only / merge 提交不受影响；团队 adoption 后手动改 `true`，此后 pre-commit 只在提交 `.harness/changes/<特性>/summary.md` 时校验该 marker（必须存在、特性名与提交路径一致、晚于上次提交）。
 
 #### 第 5 步 · 自检（**跑脚本，不要自述**）
 
@@ -404,7 +405,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`
-- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked`），其余键保留并在 dry-run 里点名"by hand"；`-NoMergeKnown` 退回只打印差异。`groundingStrict` 是迁移默认值：新装 `true`，升级固定写 `false`（等存量技能补上锚点后再手动打开）
+- `scripts\*.json`（项目配置）：**不覆盖**；`harness-required.json` 只自动合并已知键（`required` / `requiredAnyOf` / `sqlGate` / `sqlReview` / `summaryContent` / `recordsTracked` / `requireTaskStart`），其余键保留并在 dry-run 里点名"by hand"；`-NoMergeKnown` 退回只打印差异。`groundingStrict` 是迁移默认值：新装 `true`，升级固定写 `false`（等存量技能补上锚点后再手动打开）。`requireTaskStart` 升级固定写 `false`（含说明键），团队采用 `harness-start` 后再手动改 `true`
 - `.harness\rules|wiki|modules`：只补缺失文件；有差异的项目文件标 MANUAL（红线汇总只替换 R5/R6 的脚本检查格，规则名和其余内容保留）
 - `.harness\skills`：README 是项目索引，有差异只标 MANUAL；**已装技能正文**默认标 MANUAL；`-MergeSkills` 以新模板为骨架，只把 `harness:project` 区块换回项目自己的（frontmatter 保留，项目独有区块追加），**按 frontmatter `name` 匹配**，项目改过目录名也能找到（`04-sql-review` ↔ 模板 `14-sql-review`），无法定位或仍有 slot 时 PENDING，都不写盘（合并后行数不设上限）；frontmatter 只有一处例外：1.31.8 前 `description` 里那句「需求已明确…」会被读成可以跳过 `request-analysis` 和 summary，命中即换成新版 description 并在明细里点名；`-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 强制覆盖（会把技能重置为骨架，需重新编译后再跑 `verify-harness.ps1`，重置步骤用 `-SkipVerify`）；未安装的模板技能不会补装
 - `AGENTS.md`、平台 agents：`AGENTS.md` 只自动合并已知框架行（扫描命令、R5/R6、summary 分工、SQL 评审、lesson_id、源码归因），其余行保留；平台 agents 只报告差异
