@@ -1,0 +1,108 @@
+{
+  "_说明": "verify-harness.ps1 的必需文件清单、AGENTS.md 必含章节与平台入口。agentsSections 顺序固定：[0]技术栈 [1]必跑命令 [2]红线 [3]文件索引 [4]AI 编码纪律。",
+  "_sqlGate说明": "true = SQL 门禁必须启用：规则文件 + 至少一个 gate 运行时 + hook 调用 + 本机可运行；false = 项目明确关闭（同时应删除 SQL 规则与 gate 脚本）；字段缺省 = 旧项目，按「规则与 gate 必须成对」判定，不做强启用。",
+  "_requiredAnyOf说明": "每组至少存在一个文件；用于「同一能力有多个运行时」的场景。扫描器的 ps1/py 只保留一个也算完整。",
+  "_recordsTracked说明": "true = .harness/changes 必须被 git 跟踪（默认）。false = 项目明确放弃源码归因审计：audit-order 跳过并说明原因，verify-harness 报 WARN。若目录被 .gitignore 忽略却未声明 false，audit-order 直接 FAIL——否则门禁会静默永不生效。",
+  "recordsTracked": true,
+  "_groundingStrict说明": "true = 有代码的项目里，技能没有 E1/E2 锚点直接 FAIL（新装默认）。false = 只报 WARN（默认给升级项目，等锚点补齐后再打开）。升级不会自动改成 true。",
+  "groundingStrict": true,
+  "sqlGate": true,
+  "sqlReview": {
+    "_说明": "check-summary.ps1 -Stage final 用它检查 sql_review 的结论与证据是否自相矛盾：结论写通过/已改写，但四层或计划里仍有已定义的未验证标记，就直接 FAIL；值里引用的 .harness 路径必须存在。noneMarkers 命中则视为本条不适用。",
+    "keys": {
+      "syntax": "语法",
+      "structure": "结构",
+      "binding": "绑定",
+      "result": "结果",
+      "plan": "计划",
+      "verdict": "结论"
+    },
+    "unknownMarkers": ["未验证", "未跑"],
+    "passVerdicts": ["通过", "已改写"],
+    "noneMarkers": ["no SQL change", "无 SQL 变更", "未涉及 SQL", "不涉及 SQL", "无 SQL"],
+    "datasourceLabel": "数据源",
+    "sourceTokenPattern": "[A-Z][A-Z0-9]*_[A-Z0-9_]+"
+  },
+  "_reviewLedgerStrict说明": "true = 新装默认：summary.md 缺「评审结论」表或表格式坏直接 FAIL。false = 升级项目默认：缺表只 WARN，补完第一张表后手动改 true。表存在但格式坏无论 true/false 都 FAIL。",
+  "reviewLedgerStrict": true,
+  "reviewLedger": {
+    "_说明": "check-summary.ps1 与 metrics.ps1 共用的评审台账词表。中文值只放这里，脚本保持纯 ASCII。列顺序固定：严重度 / 范围 / 状态 / 指纹 / 问题 / 证据 / 处置。",
+    "section": ["评审结论"],
+    "reviewerField": "评审人",
+    "dimensionsField": "六维结论",
+    "severities": ["P0", "P1", "P2"],
+    "noIssueSeverity": "-",
+    "scopes": ["本次", "存量"],
+    "noIssueScope": "-",
+    "statuses": ["未修", "已修", "转待办", "接受", "不适用"],
+    "noIssueStatus": "不适用",
+    "openStatuses": ["未修", "转待办"],
+    "p0FinalStatuses": ["已修"],
+    "p1FinalStatuses": ["已修", "转待办", "接受"],
+    "p2FinalStatuses": ["已修", "转待办", "接受", "不适用"],
+    "fingerprintPattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+    "columns": ["severity", "scope", "status", "fingerprint", "problem", "evidence", "disposition"]
+  },
+  "summaryContent": {
+    "_说明": "check-summary.ps1 用它校验「编码前必须存在」的三节内容：功能点与验收标准、影响面（或技术变更清单，二者至少一节有内容）、任务拆分。每节至少要有一行真实内容（不是占位符，不是表头）。只写字段名不写内容，等于没做需求分析。中文节名放在这里，脚本保持纯 ASCII。",
+    "acceptance": ["功能点与验收标准"],
+    "impact": ["影响面", "业务影响", "技术变更清单"],
+    "tasks": ["任务拆分"]
+  },
+  "_deliveryStatus说明": "check-summary.ps1 -Stage final 用它校验交付终态：delivery_status 必填且值在 statuses 内；值等于 deployed 时「部署记录」表必须至少一行真实内容。已交付未提交 / 已提交未部署 / 不适用 不检查部署记录。中文值只放这里，脚本保持纯 ASCII。",
+  "deliveryStatusStrict": true,
+  "deliveryStatus": {
+    "field": "delivery_status",
+    "statuses": ["已交付未提交", "已提交未部署", "已部署", "不适用"],
+    "deployed": "已部署",
+    "deployRecordSections": ["部署记录"]
+  },
+  "requiredAnyOf": [
+    ["scripts/red-line-scan.ps1", "scripts/red-line-scan.py"]
+  ],
+  "agentsSections": ["技术栈", "必跑命令", "红线", "文件索引", "AI 编码纪律"],
+  "requiredRuleSections": [
+    { "file": ".harness/rules/开发流程规范.md", "sections": ["1.1"] }
+  ],
+  "_requiredRuleSections说明": "技能按节号引用规则文件时，项目里的那份必须含这些小节。规则是项目资产（升级不覆盖），所以缺失只报 WARN 并提示人工合并，不阻断。",
+  "platformEntries": {
+    "skillDirs": [".trae/skills", ".claude/skills", ".agents/skills", ".codebuddy/skills"],
+    "agentDirs": [".trae/agents", ".claude/agents", ".codebuddy/agents"]
+  },
+  "stackTermRules": [
+    { "field": "orm", "whenNotEquals": "mybatis", "forbid": ["MyBatis", "@Mapper", "@Entity", "JPA"] },
+    { "field": "mq", "whenNotEquals": "present", "forbid": ["RocketMQ", "Kafka", "RabbitMQ", "@RabbitListener"] },
+    { "field": "frontend", "whenNotEquals": "vue", "forbid": ["Pinia", "Vuex"] }
+  ],
+  "negationWords": ["不要", "禁止", "无需", "不适用", "不是", "不用", "改用", "替代", "删掉"],
+  "patternSections": ["模式", "反例", "证据"],
+  "moduleSections": ["职责", "关键入口", "依赖与数据", "重点", "难点", "坑点", "验证方式", "证据锚点"],
+  "required": [
+    "AGENTS.md",
+    ".harness/rules/编码规范.md",
+    ".harness/rules/工程结构.md",
+    ".harness/rules/开发流程规范.md",
+    ".harness/skills/README.md",
+    ".harness/wiki/领域术语.md",
+    ".harness/wiki/业务模型.md",
+    ".harness/wiki/数据模型.md",
+    ".harness/wiki/接口协议.md",
+    ".harness/changes/README.md",
+    ".harness/modules/README.md",
+    "scripts/red-line-rules.json",
+    "scripts/probe-stack.ps1",
+    "scripts/probe-project.ps1",
+    "scripts/install-git-hooks.ps1",
+    "scripts/stage-gate.ps1",
+    "scripts/stage-gate-rules.json",
+    "scripts/check-summary.ps1",
+    "scripts/setup-links.ps1",
+    "scripts/sync-skills-index.ps1",
+    "scripts/verify-grounding.ps1",
+    "scripts/agents-delta.ps1",
+    "scripts/metrics.ps1",
+    "scripts/audit-order.ps1",
+    "scripts/update-harness.ps1",
+    "scripts/promote-pattern.ps1"
+  ]
+}

@@ -89,9 +89,17 @@ Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value $tpl -E
 Step 'check-summary initial / final'
 # CLI parity: the first run keeps a real -File call, and the in-process run of
 # the same input must agree on the exit code.
-& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage initial
+$initialOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$proj\scripts\check-summary.ps1" -Root $proj -Feature demo -Stage initial 2>&1 | Out-String -Width 4096)
+Write-Host $initialOut
 if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL FAILED" -ForegroundColor Red; $script:fail++ }
 $cliInitialCode = $LASTEXITCODE
+# The attribution pointer used to be written silently; the operator must see
+# that the file exists and where it lives.
+if ($initialOut -notmatch 'current task pointer') { Write-Host "POINTER WRITE WAS NOT REPORTED" -ForegroundColor Red; $script:fail++ }
+$ptrFile = Join-Path $proj '.git\harness-current-task'
+$ptrText = ''
+if (Test-Path -LiteralPath $ptrFile) { $ptrText = ([System.IO.File]::ReadAllText($ptrFile, [System.Text.Encoding]::UTF8)).Trim() }
+if ($ptrText -ne 'demo') { Write-Host "CURRENT TASK POINTER MISSING OR WRONG" -ForegroundColor Red; $script:fail++ }
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'initial' } | Out-Null
 if ($LASTEXITCODE -ne $cliInitialCode) { Write-Host "IN-PROCESS INITIAL DISAGREES WITH -File" -ForegroundColor Red; $script:fail++ }
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
@@ -165,6 +173,16 @@ Remove-Item -LiteralPath $badDir, $countDir -Recurse -Force
 Step 'stage-gate -All'
 Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; All = $true; Feature = 'demo' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "STAGE GATE FAILED" -ForegroundColor Red; $script:fail++ }
+# Stage 10 refreshes the tracked indexes before the lesson gate. No manual
+# metrics run happens before this point, so their presence proves the refresh.
+$lessonsIdx = Join-Path $proj '.harness\lessons.md'
+$reviewsIdx = Join-Path $proj '.harness\reviews.md'
+if (-not (Test-Path -LiteralPath $lessonsIdx)) {
+    Write-Host "STAGE 10 DID NOT REFRESH lessons.md" -ForegroundColor Red; $script:fail++
+} elseif (([System.IO.File]::ReadAllText($lessonsIdx, [System.Text.Encoding]::UTF8)) -notmatch 'demo-lesson') {
+    Write-Host "STAGE 10 lessons.md DOES NOT LIST THE TASK LESSON" -ForegroundColor Red; $script:fail++
+}
+if (-not (Test-Path -LiteralPath $reviewsIdx)) { Write-Host "STAGE 10 DID NOT REFRESH reviews.md" -ForegroundColor Red; $script:fail++ }
 
 Step 'metrics -Days 14 -Compare'
 Invoke-Harness "$proj\scripts\metrics.ps1" @{ Root = $proj; Days = 14; Compare = $true } | Out-Null

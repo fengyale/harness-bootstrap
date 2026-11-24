@@ -870,6 +870,134 @@ Check 'legacy templates/ layout accepted' ($LASTEXITCODE -eq 0)
 Check 'legacy layout is reported' ($outLegacy -match 'legacy package layout')
 
 Write-Host ''
+Write-Host '=== real legacy installs (1.31.20 / 1.31.22) ===' -ForegroundColor Cyan
+# The fixtures under tests\fixtures are exact tag snapshots (AGENTS.md, the
+# process rules, the change template, harness-required.json, one skill). They
+# prove the real upgrade path, not just a synthetic old/new pair.
+# The rules file name is Chinese; this test must stay pure ASCII.
+$cnFlow = (-join @([char]0x5F00, [char]0x53D1, [char]0x6D41, [char]0x7A0B, [char]0x89C4, [char]0x8303)) + '.md'
+# Banner of the start paragraph; the discipline bullets below also mention the
+# command, so counting the command alone would count them too.
+$cnBanner = -join @([char]0x5F00, [char]0x5DE5, [char]0x7B2C, [char]0x4E00, [char]0x4EF6, [char]0x4E8B)
+function New-LegacyProject {
+    param([string]$VersionTag, [string]$Dest)
+    $fx = Join-Path $PSScriptRoot ('fixtures\legacy-' + $VersionTag)
+    if (-not (Test-Path -LiteralPath $fx)) { return $false }
+    if (Test-Path -LiteralPath $Dest) { Remove-Item -LiteralPath $Dest -Recurse -Force }
+    Copy-Item -LiteralPath $fx -Destination $Dest -Recurse
+    New-Item -ItemType Directory -Force -Path "$Dest\scripts" | Out-Null
+    New-Item -ItemType Directory -Force -Path "$Dest\.harness\rules" | Out-Null
+    New-Item -ItemType Directory -Force -Path "$Dest\.harness\changes" | Out-Null
+    New-Item -ItemType Directory -Force -Path "$Dest\.harness\skills\main-dev" | Out-Null
+    Move-Item -LiteralPath (Join-Path "$Dest\rules" $cnFlow) -Destination (Join-Path "$Dest\.harness\rules" $cnFlow)
+    Move-Item -LiteralPath "$Dest\changes\_template" -Destination "$Dest\.harness\changes\_template"
+    Move-Item -LiteralPath "$Dest\skills\coding-skill" -Destination "$Dest\.harness\skills\main-dev\coding-skill"
+    Move-Item -LiteralPath "$Dest\harness-required.json" -Destination "$Dest\scripts\harness-required.json"
+    Remove-Item -LiteralPath "$Dest\rules", "$Dest\changes", "$Dest\skills" -Recurse -Force
+    # Compile the one installed skill: -MergeSkills must be able to locate it,
+    # and a remaining slot would make the merge PENDING instead of a write.
+    $skillPath = "$Dest\.harness\skills\main-dev\coding-skill\SKILL.md"
+    $skillText = [System.IO.File]::ReadAllText($skillPath, [System.Text.Encoding]::UTF8)
+    $skillText = [regex]::Replace($skillText, '<!--\s*slot:[^>]*-->', 'PROJECT-FACT')
+    $at = $skillText.IndexOf('<!-- harness:project:end -->')
+    if ($at -ge 0) {
+        $skillText = $skillText.Substring(0, $at) + "- project-marker: keep-me`r`n" + $skillText.Substring($at)
+    }
+    [System.IO.File]::WriteAllText($skillPath, $skillText, (New-Object System.Text.UTF8Encoding($false)))
+    return $true
+}
+
+$bootstrapScript = Join-Path $pkg 'assets\upgrade\upgrade-harness.ps1'
+$pkgSkillText = [System.IO.File]::ReadAllText((Join-Path $pkg 'assets\.harness\skills\main-dev\coding-skill\SKILL.md'), [System.Text.Encoding]::UTF8)
+$skillBlockPat = '(?s)<!--\s*harness:package:begin\s+[A-Za-z0-9-]+\s*-->.*?<!--\s*harness:package:end\s*-->'
+$pkgSkillBlocks = (@([regex]::Matches($pkgSkillText, $skillBlockPat)) | ForEach-Object { $_.Value }) -join "`n"
+
+foreach ($ver in @('1.31.20', '1.31.22')) {
+    $dst = Join-Path $base ('legacy-' + ($ver -replace '\.', '-'))
+    $built = New-LegacyProject -VersionTag $ver -Dest $dst
+    Check ("real " + $ver + " fixture present") $built
+    if (-not $built) { continue }
+    $flowPath = Join-Path "$dst\.harness\rules" $cnFlow
+    $flowBefore = [System.IO.File]::ReadAllText($flowPath, [System.Text.Encoding]::UTF8)
+    $outReal = & powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrapScript -Root $dst -PackagePath $pkg `
+        -Apply -MergeSkills -SkipHooks -SkipVerify 2>&1 | Out-String -Width 4096
+    $codeReal = $LASTEXITCODE
+    Write-Host $outReal
+    Check ("real " + $ver + " upgrade exits 0") ($codeReal -eq 0)
+
+    $agentsReal = @([System.IO.File]::ReadAllLines("$dst\AGENTS.md", [System.Text.Encoding]::UTF8))
+    Check ("real " + $ver + " start-command block inserted once") (
+        (@($agentsReal | Where-Object { $_ -match 'harness:upgrade:begin\s+id=start-command' }).Count -eq 1) -and
+        (@($agentsReal | Where-Object { $_ -match 'harness:upgrade:end\s+id=start-command' }).Count -eq 1))
+    # 1.31.22 carries the same paragraph without markers; an exact-match dedupe
+    # must leave one copy of the banner, not two.
+    Check ("real " + $ver + " start banner appears once") (
+        @($agentsReal | Where-Object { $_ -match ('^> \*\*' + [regex]::Escape($cnBanner)) }).Count -eq 1)
+
+    $cfgReal = (Get-Content -LiteralPath "$dst\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+    Check ("real " + $ver + " config gains summaryContent") ($cfgReal.PSObject.Properties.Name -contains 'summaryContent')
+    Check ("real " + $ver + " config gains recordsTracked") ($cfgReal.PSObject.Properties.Name -contains 'recordsTracked')
+    Check ("real " + $ver + " config gains sqlGate") ($cfgReal.PSObject.Properties.Name -contains 'sqlGate')
+    Check ("real " + $ver + " requireTaskStart stays false") (
+        ($cfgReal.PSObject.Properties.Name -contains 'requireTaskStart') -and ($cfgReal.requireTaskStart -eq $false))
+
+    $tplReal = [System.IO.File]::ReadAllText("$dst\.harness\changes\_template\summary.md", [System.Text.Encoding]::UTF8)
+    Check ("real " + $ver + " template refreshed") ($tplReal -match 'Gate result: BLOCKED')
+    Check ("real " + $ver + " flow rules left untouched (MANUAL)") (
+        [System.IO.File]::ReadAllText($flowPath, [System.Text.Encoding]::UTF8) -eq $flowBefore)
+    Check ("real " + $ver + " report marks agents-start-command ACTIVE") ($outReal -match '\[ACTIVE\]\s+agents-start-command')
+    Check ("real " + $ver + " report marks summary-template ACTIVE") ($outReal -match '\[ACTIVE\]\s+summary-template')
+    Check ("real " + $ver + " report marks flow-start-command MANUAL") ($outReal -match '\[MANUAL\]\s+flow-start-command')
+
+    $skillReal = [System.IO.File]::ReadAllText("$dst\.harness\skills\main-dev\coding-skill\SKILL.md", [System.Text.Encoding]::UTF8)
+    Check ("real " + $ver + " skill project binding kept") ($skillReal -match 'project-marker: keep-me')
+    Check ("real " + $ver + " skill package block matches the new package") (
+        ((@([regex]::Matches($skillReal, $skillBlockPat)) | ForEach-Object { $_.Value }) -join "`n") -eq $pkgSkillBlocks)
+}
+
+Write-Host ''
+Write-Host '=== workspace manifest (multi-repo) ===' -ForegroundColor Cyan
+$ws = Join-Path $base 'ws'
+if (Test-Path -LiteralPath $ws) { Remove-Item -LiteralPath $ws -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $ws | Out-Null
+$wsBackend = Join-Path $ws 'backend'
+$null = New-LegacyProject -VersionTag '1.31.20' -Dest $wsBackend
+$wsWeb = Join-Path $ws 'web'
+New-Item -ItemType Directory -Force -Path $wsWeb | Out-Null
+$wsManifest = @'
+{
+  "repos": [
+    { "name": "backend", "path": "backend", "role": "record-owner" },
+    { "name": "web", "path": "web", "role": "consumer" }
+  ]
+}
+'@
+Set-Content -LiteralPath (Join-Path $ws 'harness.workspace.json') -Value $wsManifest -Encoding UTF8
+$wsScript = Join-Path $pkg 'assets\upgrade\upgrade-workspace.ps1'
+Check 'workspace script present' (Test-Path -LiteralPath $wsScript)
+$wsOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $wsScript -Root $ws -Install -Apply -MergeSkills -SkipHooks -SkipVerify -SkipReport 2>&1 | Out-String -Width 4096
+$wsCode = $LASTEXITCODE
+Write-Host $wsOut
+Check 'workspace run exits 0' ($wsCode -eq 0)
+Check 'workspace upgraded the installed repo' (
+    (@([System.IO.File]::ReadAllLines("$wsBackend\AGENTS.md", [System.Text.Encoding]::UTF8) |
+        Where-Object { $_ -match 'id=start-command' }).Count -ge 1))
+Check 'workspace installed the missing repo' (
+    (Test-Path -LiteralPath "$wsWeb\AGENTS.md") -and (Test-Path -LiteralPath "$wsWeb\.harness\.installed-version"))
+Check 'workspace summary names both repos' (($wsOut -match 'backend') -and ($wsOut -match 'web'))
+$wsVerA = @([System.IO.File]::ReadAllLines("$wsBackend\.harness\.installed-version", [System.Text.Encoding]::UTF8))[0].Trim()
+$wsVerB = @([System.IO.File]::ReadAllLines("$wsWeb\.harness\.installed-version", [System.Text.Encoding]::UTF8))[0].Trim()
+Check 'workspace leaves both repos on one version' ($wsVerA -eq $wsVerB)
+# Version drift is a real multi-repo failure: -Strict must refuse it.
+Set-Content -LiteralPath "$wsWeb\.harness\.installed-version" -Value '0.0.1' -Encoding ASCII
+$null = & powershell -NoProfile -ExecutionPolicy Bypass -File $wsScript -Root $ws -Strict -SkipHooks -SkipVerify -SkipReport 2>&1 | Out-String -Width 4096
+Check 'workspace -Strict fails on a version mismatch' ($LASTEXITCODE -ne 0)
+# A manifest pointing at a missing directory must fail even without -Strict.
+Set-Content -LiteralPath (Join-Path $ws 'harness.workspace.json') -Value '{"repos":[{"name":"gone","path":"missing-repo"}]}' -Encoding UTF8
+$null = & powershell -NoProfile -ExecutionPolicy Bypass -File $wsScript -Root $ws -SkipReport 2>&1 | Out-String -Width 4096
+Check 'workspace fails on a missing repository' ($LASTEXITCODE -ne 0)
+
+Write-Host ''
 if ($fail -eq 0) { Write-Host 'UPDATE TEST OK' -ForegroundColor Green; exit 0 }
 Write-Host ("UPDATE TEST FAILURES: {0}" -f $fail) -ForegroundColor Red
 exit 1

@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.31.25",
+    "title": "(多仓升级、真实旧版回归与两处可观测性)",
+    "body": [
+      "- 新增 assets/upgrade/upgrade-workspace.ps1 与 harness.workspace.example.json：按 harness.workspace.json 逐仓升级；未装仓可用 -Install 拷模板；-Strict 在任一分仓失败、报告 MISSING 或各仓 .installed-version 不一致时退出 1",
+      "- 新增 tests/fixtures/legacy-1.31.20 与 legacy-1.31.22 真实 tag 快照（AGENTS / 流程规范 / summary 模板 / harness-required / coding-skill），test-update 断言新键合并、start-command 去重插入、技能 package 块刷新、报告 ACTIVE / MANUAL；刷新方法见 tests/fixtures/README.md",
+      "- check-summary 写完 .git/harness-current-task 后打印指针路径与特性名（-Quiet 抑制），归因机制不再静默",
+      "- stage-gate 阶段 10 先跑一次 metrics.ps1 刷新 .harness/lessons.md 与 reviews.md，再执行 lesson 门禁；开发流程规范补一句说明",
+      "- 测试：regression 增补指针输出与索引刷新断言；test-update 增补真实旧版升级与 workspace 多仓用例；package-contract 增加 workspace-manifest 契约"
+    ]
+  },
+  {
     "version": "1.31.24",
     "title": "(任务开工体验与门禁语义修复)",
     "body": [

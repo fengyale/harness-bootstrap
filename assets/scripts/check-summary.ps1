@@ -789,6 +789,9 @@ if ($Feature -and -not $File) {
             $ptrPath = ([string]$ptrRel).Trim()
             if (-not [System.IO.Path]::IsPathRooted($ptrPath)) { $ptrPath = Join-Path $rootPath $ptrPath }
             [System.IO.File]::WriteAllText($ptrPath, $Feature + "`n", (New-Object System.Text.UTF8Encoding($false)))
+            # Attribution reads this pointer before it reads a trailer; writing it
+            # silently made the mechanism invisible. -Quiet keeps hook output clean.
+            if (-not $Quiet) { Write-Host ('[OK] current task pointer: ' + $ptrPath + ' (feature=' + $Feature + ')') }
         }
     } catch { }
 }

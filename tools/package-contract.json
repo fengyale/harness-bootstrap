@@ -31,6 +31,9 @@
     "assets/scripts/verify-grounding.ps1",
     "assets/scripts/metrics.ps1",
     "assets/scripts/probe-project.ps1",
+    "assets/upgrade/upgrade-harness.ps1",
+    "assets/upgrade/upgrade-workspace.ps1",
+    "assets/upgrade/harness.workspace.example.json",
     "references/接地协议.md",
     "references/新项目初始化.md",
     "references/平台适配.md"
@@ -426,6 +429,12 @@
       "file": "assets/.trae/agents/code-reviewer.md",
       "patterns": ["\\| 严重度 \\| 范围 \\| 状态 \\| 指纹 \\| 问题 \\| 证据 \\| 处置 \\|", "P0", "P1", "P2"],
       "why": "评审子智能体与技能必须输出同一张表，否则委派评审的意见仍不会落到 KPI 台账。"
+    },
+    {
+      "id": "workspace-manifest",
+      "file": "assets/upgrade/upgrade-workspace.ps1",
+      "patterns": ["harness.workspace.json", "repos", "\\.installed-version"],
+      "why": "多仓升级靠 manifest 列仓；脚本、示例与文档三处的文件名和版本对齐判据必须一致，否则另一个仓库会被静默漏升。"
     },
     {
       "id": "summary-review-table",

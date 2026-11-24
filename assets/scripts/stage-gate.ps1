@@ -731,6 +731,10 @@ function Test-Criterion {
             # Delegated to metrics.ps1 so the count and the gate cannot drift.
             $mp = Join-Path $ProjectRoot 'scripts\metrics.ps1'
             if (-not (Test-Path -LiteralPath $mp)) { return @{ Ok=$false; Detail='missing scripts\metrics.ps1' } }
+            # -LessonGate is side-effect free on purpose, so the tracked indexes
+            # are refreshed here first; otherwise stage 10 closes while
+            # lessons.md / reviews.md still describe the previous task.
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $mp -Root $ProjectRoot 2>&1 | Out-Null
             $lg = & powershell -NoProfile -ExecutionPolicy Bypass -File $mp -Root $ProjectRoot -LessonGate 2>&1
             if ($LASTEXITCODE -eq 0) { return @{ Ok=$true; Detail='repeated lessons have checks' } }
             $first = @($lg | Where-Object { $_ -match '\[FAIL\]' } | Select-Object -First 1)

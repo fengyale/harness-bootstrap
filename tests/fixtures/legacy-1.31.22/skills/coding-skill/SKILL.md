@@ -1,0 +1,112 @@
+---
+name: coding-skill
+description: 编码实现：任何源码写操作前必须使用；第 0 步先跑 harness-start 并贴 DECLARE，未贴不得 Edit/Write。
+---
+
+<!-- harness:package:begin body -->
+
+# 编码
+
+> **硬前置**：L2/L3 第一次 Edit/Write 前先跑 `scripts\harness-start.ps1`；它内部会跑 `stage-gate.ps1 -Stage 1`，没有 `DECLARE` 不得改代码。L0/L1 按第 0 步表格走轻量路径。
+
+> 目标：用最小改动实现需求，并让改动可编译、可验证、可评审。
+
+## 何时用
+
+- 需求已分析完，进入实现或重构；准备第一次 Edit/Write 源码
+
+> **开工前先定档**：只有「1 个文件 · diff ≤30 行 · 不碰公共层 / DB / 配置 / 接口」才是 `L1`，其余都是 `L2 / L3`（判据见 `.harness/rules/开发流程规范.md` 第 1.1 节）。拿不准就升档。
+
+<!-- harness:package:end -->
+
+<!-- harness:project:begin bindings -->
+## 项目绑定（编译时替换）
+
+- 分层与包路径：<!-- slot:layering -->
+- 数据访问方式（唯一入口）：<!-- slot:data.access -->
+- 模块卡片（改某个 module 前先读）：<!-- slot:module.cards -->
+- 异常处理方式（统一入口）：<!-- slot:error.handling -->
+- 缓存访问方式（如项目有缓存）：<!-- slot:cache.api -->
+- 编译命令：<!-- slot:build.cmd -->
+- 测试现状：<!-- slot:test.reality -->
+
+<!-- harness:project:end -->
+
+<!-- harness:package:begin body-2 -->
+## 模式（跨技术栈不变）
+### 第 0 步：先证明记录已存在（动任何**写操作**之前）
+
+允许先做**只读探索**（读代码、Grep、看接口）来确认档位与影响面；但一旦开始写代码 / 生成文件，必须先贴出 `DECLARE`。**读完代码再补声明，等于事后追认**——所以探索完、动笔前，先跑 `harness-start`（L2/L3；它内部会跑 `stage-gate.ps1 -Stage 1`）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"
+```
+
+跑完把脚本打印的 `DECLARE: record=… | flow=… | next=…` 那行**原样贴进回复**（贴不出来就说明第 0 步没做）。
+`L0` / `L1` 没有 summary，脚本不会给 `DECLARE`：直接写明档位（`L0：无记录` / `L1：写 _small.md`）再动手。
+> 只想单独复核 Stage 1 时，可跑 `scripts\stage-gate.ps1 -Stage 1 -Feature 特性名`。
+
+| 命令结果 | 下一步 |
+| --- | --- |
+| `READY` 且输出 `DECLARE: record=...` | 记录已在盘，进入步骤 1 |
+| `[FAIL] summary-exists`（带 `[HINT]`） | **先加载 `request-analysis`**：复制**整个** `_template/summary.md`（保留第二阶段字段位）并写三节 → `check-summary.ps1 -Feature 特性名 -Stage initial` → 单独提交一次 → 再回来 |
+| 档位 `L1` | 先在 `.harness/changes/_small.md` 追加一行，和代码一起提交 |
+| 档位 `L0` | 声明「L0：纯文档 / 注释 / 格式，无记录」，再改 |
+
+> 只有「1 个文件 · diff ≤30 行 · 不碰公共层 / DB / 配置 / 接口」才是 `L1`，其余都是 `L2 / L3`（判据见 `.harness/rules/开发流程规范.md` 第 1.1 节）。拿不准就升档。
+> 提交时 pre-commit 会按**真实 diff** 校验 L1 声明：超过 1 个文件或 30 行仍标 L1，直接拒绝并提示改走 summary。
+
+### 步骤（第 0 步通过后）
+
+1. 确认模块与包路径；有 `.harness/modules/模块名.md` 就先读它
+2. **先读同模块一个同类实现**，照它的写法（最可靠的一致性来源）
+3. 写最小可用改动；跨模块改动写进 `summary.md` 影响面
+4. 编译；编译不过先修编译，不"先放着"
+5. 自测：跑必跑命令，并手工走一遍失败路径；**前端改动至少对每个改动文件跑 `node --check`**（项目有 lint / 类型检查就按项目命令跑）
+6. 红线自查
+
+### 三类改动怎么下手
+
+| 改动类型 | 做法 | 不要做 |
+| --- | --- | --- |
+| 新增 | 找同类实现照抄结构，只改业务差异 | 自创分层、引入第二套技术栈 |
+| 修改 | 先搜调用方，确认行为变更影响面 | 改公共方法签名不查调用方 |
+| 重构 | 行为不变为前提，先补测试或验证步骤 | 与需求改动混在同一次提交 |
+
+### 动笔前先定三件事
+
+1. **事务边界**：一次写多表 / 多资源时，失败要整体回滚（见 `.harness/rules/编码规范.md`）
+2. **并发与幂等**：同一请求重试会不会写重（消息、回调、支付类必查）
+3. **失败路径**：下游超时、缓存不可用、唯一键冲突时返回什么、留什么日志
+
+### 编译 / 测试失败的处理顺序
+
+1. 读完整错误，定位第一个真实错误，不看后续连带报错
+2. 同一错误最多修 2 轮；第 3 次仍失败就停下来，报告「已尝试 + 现象 + 怀疑点」
+3. 禁止用注释掉代码、跳过测试、`--no-verify` 让门禁变绿
+
+### 检查项
+
+- [ ] 记录已落盘：L0 无 / L1 有 `_small.md` 行 / L2-L3 有 `summary.md` 且 initial 校验通过
+- [ ] 没有新增项目禁止的写法（见红线）
+- [ ] 数据访问 / 缓存走统一入口
+- [ ] 没有调试残留（临时打印、开关、测试数据）
+- [ ] 日志不含敏感信息，关键失败路径有日志
+- [ ] 编译通过；测试通过，或写清未跑原因
+- [ ] 单次变更 ≤ 文件总量的 40%，超过已拆分
+
+### 常见错误
+
+- 在控制层写业务规则 → 应落在服务层或规则链
+- 引入项目没有的第二套技术栈
+- 改完只"看了一眼"不编译
+- 顺手改无关代码 → 评审无法区分需求改动与格式化
+- 为了过编译注释掉测试或校验
+
+<!-- harness:package:end -->
+
+<!-- harness:project:begin evidence -->
+## 证据锚点（编译后填写）
+
+<!-- slot:evidence - 至少一条 - [E2] 真实文件路径 :: 证明了什么 -->
+<!-- harness:project:end -->

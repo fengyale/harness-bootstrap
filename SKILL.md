@@ -405,6 +405,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 >
 > **从 1.30.0 及更早升级一次**：包布局已从 `templates/` 改为 `assets/`，旧项目里的 `scripts\update-harness.ps1` 只认旧名。新包脚本同时兼容旧布局（读 `templates/` 并提示一次），加上引导脚本本身就指向新包，首次升级不会两头卡住。
 
+#### 多仓工作区（前端 / 后端各装一份）
+
+工作区根放 `harness.workspace.json`（示例：`assets\upgrade\harness.workspace.example.json`），从新包一条命令处理所有仓库：
+
+```powershell
+# dry-run：逐仓列出将改的文件
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-workspace.ps1 -Root <工作区根>
+
+# 执行：未装的仓拷模板，已装的仓升级并跑激活报告
+powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgrade-workspace.ps1 `
+  -Root <工作区根> -Install -Apply -MergeSkills -Strict
+```
+
+- 清单里 `path` 相对清单文件所在目录；`name` 用于输出与摘要，`role` 只作文档提示。
+- `-Strict`：任一仓失败、`-Apply` 后报告仍有 `MISSING`、或各仓 `.harness\.installed-version` 不一致时退出 1；适合提交前对齐与 CI。
+- 新装仓只拷模板：`AGENTS.md` 与技能仍需按第 1–2 步编译，编译前不要开工。
+- 跨仓任务在**记录归属仓**写 `summary.md`，另一仓用 `linked_records` 指过来；门禁只校验本仓。
+
 更新边界：
 
 - `scripts\*.ps1` / `*.py`（机制）：替换，旧文件先备份到 `.harness\upgrade\<时间戳>\`

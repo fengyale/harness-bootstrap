@@ -1,0 +1,7 @@
+{
+  "_说明": "多仓工作区清单：放到工作区根目录并改名为 harness.workspace.json。path 相对本文件所在目录；role 只作文档提示。",
+  "repos": [
+    { "name": "backend", "path": ".", "role": "record-owner" },
+    { "name": "web", "path": "..\\product-web", "role": "consumer" }
+  ]
+}
