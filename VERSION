@@ -1,7 +1,15 @@
-HARNESS-BOOTSTRAP VERSION 1.31.25
+HARNESS-BOOTSTRAP VERSION 1.31.26
 
 changelog
 ---------
+1.31.26  (开工前置检查、教训回读与排查型记录)
+- harness-start 增加只读 pre-flight：打印 git status、git diff --stat HEAD、最近提交；需求关键词命中历史时提示「疑似已实现」，用于拦截重复实现
+- 开工时回显 .harness/lessons.md 中与需求相关的条目，并要求在 summary 的 lesson_id / 待补短板 中回应
+- 模块预填只取强匹配（score>=2）；弱匹配只列候选，不再写进 touched_modules，避免阶段 3/5/7/8 跑到错误模块
+- 新增排查型记录：harness-start -Investigation 生成 flow: L1 + record_kind: investigation + delivery_status: 不适用；check-summary 与 stage-gate 阶段 2 跳过验收 / 影响 / 任务三节，未带标记的普通任务不受影响
+- run-all -Changed 映射补齐 harness-start / assets/upgrade / AGENTS.md / rules / tests fixtures，开发期不再误判为全量
+- 测试：harness-start 自检新增 pre-flight、lessons 回显、弱模块不预填、排查型记录四组用例；regression 新增排查型正反用例
+
 1.31.25  (多仓升级、真实旧版回归与两处可观测性)
 - 新增 assets/upgrade/upgrade-workspace.ps1 与 harness.workspace.example.json：按 harness.workspace.json 逐仓升级；未装仓可用 -Install 拷模板；-Strict 在任一分仓失败、报告 MISSING 或各仓 .installed-version 不一致时退出 1
 - 新增 tests/fixtures/legacy-1.31.20 与 legacy-1.31.22 真实 tag 快照（AGENTS / 流程规范 / summary 模板 / harness-required / coding-skill），test-update 断言新键合并、start-command 去重插入、技能 package 块刷新、报告 ACTIVE / MANUAL；刷新方法见 tests/fixtures/README.md

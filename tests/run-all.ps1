@@ -106,6 +106,7 @@ function Get-ChangedSuites {
         $p = ($raw -replace '\\', '/')
         if ($p -eq 'tests/run-all.ps1') { Add-Suite $allSuites; continue }
         if ($p -eq 'tests/test-lib.ps1') { Add-Suite @('gate-auto.ps1', 'regression.ps1', 'test-update.ps1', 'test-skills-registry.ps1'); continue }
+        if ($p -match '^tests/fixtures/') { Add-Suite @('test-update.ps1'); continue }
         if ($p -match '^tests/') {
             $leaf = Split-Path $p -Leaf
             if ($allSuites -contains $leaf) { Add-Suite @($leaf) }
@@ -120,6 +121,18 @@ function Get-ChangedSuites {
         }
         if ($p -match '^assets/scripts/(suggest-flow|harness-plan)\.ps1$') {
             Add-Suite @('test-probe.ps1'); continue
+        }
+        if ($p -eq 'assets/scripts/harness-start.ps1') {
+            Add-Suite @('gate-auto.ps1', 'test-probe.ps1'); continue
+        }
+        if ($p -match '^assets/upgrade/') {
+            Add-Suite @('test-update.ps1'); continue
+        }
+        if ($p -match '^assets/(AGENTS\.md|\.gitignore)$') {
+            Add-Suite @('test-update.ps1'); continue
+        }
+        if ($p -match '^assets/\.harness/(rules|wiki|modules)/') {
+            Add-Suite @('test-update.ps1'); continue
         }
         if ($p -match '^assets/\.harness/skills/') {
             Add-Suite @('regression.ps1', 'test-skills-registry.ps1'); continue

@@ -670,27 +670,37 @@ elseif (Test-Placeholder $flow) { Add-Fail 'flow' 'empty or placeholder' }
 # an error. U+FF08 is written as \uFF08 so this file stays pure ASCII.
 elseif ($flow -notmatch '^L[123]([ \t]|$|[\(\uFF08])') { Add-Fail 'flow' 'must be L1, L2 or L3' }
 
+# A read-only investigation keeps flow L1 and declares record_kind: investigation.
+# It has no change to specify, so the change-oriented sections are not required;
+# without the marker every normal task still has to answer them.
+$recordKind = Get-FieldRaw 'record_kind'
+$investigationRecord = ($recordKind -and ($recordKind -match '(?i)^investigation\b') -and ($flow -match '^L1([ \t]|$|[\(\uFF08])'))
+
 # ------------------------------------------------------------ content (before code)
 # These three sections are what makes the summary useful while coding: they say
 # what "done" means, what the change touches and how the work is split. A summary
 # with a complete field block and a template table full of <slots> passes every
 # count check and still guides nothing, so the content is checked here.
-if (-not (Test-RealContent -Needles (Get-ContentNeedles 'acceptance') -RequireTableRow)) {
-    Add-Fail 'acceptance' 'feature table has no real row (fill every acceptance criterion, not the template slot)'
-}
-# "Impact" may be written either as the short impact section or as the technical
-# change list; a task that only touches one of them must not be blocked. At least
-# one of the configured sections must carry a real line.
-$impactNeedles = @(Get-ContentNeedles 'impact')
-$impactOk = ($impactNeedles.Count -eq 0)
-foreach ($impactName in $impactNeedles) {
-    if (Test-RealContent -Needles @($impactName)) { $impactOk = $true; break }
-}
-if (-not $impactOk) {
-    Add-Fail 'impact' 'impact is empty (fill the impact section or the technical change list; an explicit "none" also counts)'
-}
-if (-not (Test-RealContent -Needles (Get-ContentNeedles 'tasks') -RequireTableRow)) {
-    Add-Fail 'tasks' 'task table has no real row (split the work into tasks, each <= 4h)'
+if ($investigationRecord) {
+    if (-not $Quiet) { Write-Host '[OK] investigation record: acceptance / impact / tasks are not required' }
+} else {
+    if (-not (Test-RealContent -Needles (Get-ContentNeedles 'acceptance') -RequireTableRow)) {
+        Add-Fail 'acceptance' 'feature table has no real row (fill every acceptance criterion, not the template slot)'
+    }
+    # "Impact" may be written either as the short impact section or as the technical
+    # change list; a task that only touches one of them must not be blocked. At least
+    # one of the configured sections must carry a real line.
+    $impactNeedles = @(Get-ContentNeedles 'impact')
+    $impactOk = ($impactNeedles.Count -eq 0)
+    foreach ($impactName in $impactNeedles) {
+        if (Test-RealContent -Needles @($impactName)) { $impactOk = $true; break }
+    }
+    if (-not $impactOk) {
+        Add-Fail 'impact' 'impact is empty (fill the impact section or the technical change list; an explicit "none" also counts)'
+    }
+    if (-not (Test-RealContent -Needles (Get-ContentNeedles 'tasks') -RequireTableRow)) {
+        Add-Fail 'tasks' 'task table has no real row (split the work into tasks, each <= 4h)'
+    }
 }
 
 $modules = Get-FieldRaw 'touched_modules'

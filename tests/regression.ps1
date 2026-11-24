@@ -166,6 +166,32 @@ Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-P
 if ($LASTEXITCODE -ne 0) { Write-Host "INITIAL REJECTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; File = (Join-Path $countDir 'summary.md'); Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "FINAL ACCEPTED A SUMMARY WITHOUT CLOSE-OUT COUNTS" -ForegroundColor Red; $script:fail++ }
+
+# A read-only investigation (flow L1 + record_kind) has no change to describe:
+# the change-oriented sections may stay empty. Without the marker the same shape
+# must fail, otherwise every task could take this exit.
+$invDir = Join-Path $proj '.harness\changes\inv-probe'
+New-Item -ItemType Directory -Force -Path $invDir | Out-Null
+$invText = @(
+    '# inv-probe',
+    '',
+    '- loaded_skills: request-analysis',
+    '- touched_modules: none',
+    '- flow: L1',
+    '- record_kind: investigation',
+    '- delivery_status: 不适用'
+) -join "`r`n"
+Set-Content -LiteralPath (Join-Path $invDir 'summary.md') -Value $invText -Encoding UTF8
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'inv-probe'; Stage = 'initial' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "INVESTIGATION RECORD REJECTED AT INITIAL" -ForegroundColor Red; $script:fail++ }
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '2'; Feature = 'inv-probe' } | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "INVESTIGATION RECORD REJECTED AT STAGE 2" -ForegroundColor Red; $script:fail++ }
+$plainInv = ($invText -replace '(?m)^.*record_kind:[^\r\n]*\r?\n', '')
+Set-Content -LiteralPath (Join-Path $invDir 'summary.md') -Value $plainInv -Encoding UTF8
+Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'inv-probe'; Stage = 'initial' } | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host "NON-INVESTIGATION SUMMARY SKIPPED THE CONTENT CHECKS" -ForegroundColor Red; $script:fail++ }
+Remove-Item -LiteralPath $invDir -Recurse -Force
+
 # These two fixtures are probes, not tasks: leaving them in .harness/changes
 # would add demo-lesson to the lesson counter and break stage 10 below.
 Remove-Item -LiteralPath $badDir, $countDir -Recurse -Force

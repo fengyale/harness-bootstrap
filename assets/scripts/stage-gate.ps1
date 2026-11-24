@@ -622,6 +622,18 @@ function Test-HasAny {
     return $false
 }
 
+# A read-only investigation is declared by record_kind + flow L1. It has no
+# change to describe, so the change-oriented stage 2 criteria are satisfied by
+# the declaration itself; any other summary still has to write them.
+function Test-InvestigationSummary {
+    param([string]$Text)
+    if (-not $Text) { return $false }
+    $kind = [regex]::Match($Text, '(?m)(?<![A-Za-z0-9_\-])record_kind:\s*`?([A-Za-z][A-Za-z-]*)')
+    if (-not $kind.Success -or $kind.Groups[1].Value -ine 'investigation') { return $false }
+    $flow = [regex]::Match($Text, '(?m)(?<![A-Za-z0-9_\-])flow:\s*`?\s*(L[0-3])')
+    return ($flow.Success -and $flow.Groups[1].Value -eq 'L1')
+}
+
 # A section counts only when it exists as a heading. A passing mention in prose
 # ("risk: low", "reviewed already") used to satisfy the gate without the section
 # being written. Body truth is the reviewer's job; structure is this gate's job.
@@ -674,16 +686,19 @@ function Test-Criterion {
         }
         'tech-impact' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
+            if (Test-InvestigationSummary -Text $summary) { return @{ Ok=$true; Detail='investigation record: change list not required' } }
             if (Test-SectionHeading -Text $summary -Needles $S.techImpact) { return @{ Ok=$true; Detail=$M.present } }
             return @{ Ok=$false; Detail='no technical change list' }
         }
         'risks-listed' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
+            if (Test-InvestigationSummary -Text $summary) { return @{ Ok=$true; Detail='investigation record: risk section not required' } }
             if (Test-SectionHeading -Text $summary -Needles $S.risk) { return @{ Ok=$true; Detail=$M.present } }
             return @{ Ok=$false; Detail='no risk section' }
         }
         'tasks-listed' {
             if (-not $summary) { return @{ Ok=$false; Detail='no summary.md' } }
+            if (Test-InvestigationSummary -Text $summary) { return @{ Ok=$true; Detail='investigation record: task breakdown not required' } }
             if (Test-SectionHeading -Text $summary -Needles $S.tasks) { return @{ Ok=$true; Detail=$M.present } }
             return @{ Ok=$false; Detail='no task breakdown table' }
         }

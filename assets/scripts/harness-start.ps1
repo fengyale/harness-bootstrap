@@ -38,6 +38,7 @@
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 -Feature order-export -Requirement "export orders to excel"
     ... -Feature order-export -Flow L3 -Modules order,report -SkipPlan
+    ... -Feature probe -Requirement "why does export drop rows" -Investigation
     ... -SelfTest
 
   NOTE
@@ -52,6 +53,8 @@ param(
     [string]$Flow = 'L2',
     [string]$Modules = '',
     [switch]$SkipPlan,
+    [switch]$SkipPreflight,
+    [switch]$Investigation,
     [switch]$SelfTest
 )
 
@@ -150,6 +153,130 @@ function Test-HasModuleColumn {
     return $false
 }
 
+# Requirement -> a few literal search terms for history / lesson matching. Same
+# idea as harness-plan (Latin words plus CJK runs), capped so git log is not run
+# dozens of times per start.
+function Get-StartTerms {
+    param([string]$Text)
+    $terms = New-Object 'System.Collections.Generic.HashSet[string]'
+    if ($Text) {
+        foreach ($m in [regex]::Matches($Text, '[A-Za-z][A-Za-z0-9_\-]{2,}')) { [void]$terms.Add($m.Value) }
+        foreach ($m in [regex]::Matches($Text, '[\u4e00-\u9fff]{2,}')) {
+            $run = $m.Value
+            if ($run.Length -le 6) { [void]$terms.Add($run) }
+            for ($i = 0; $i -le $run.Length - 2 -and $terms.Count -lt 16; $i++) {
+                [void]$terms.Add($run.Substring($i, 2))
+            }
+        }
+    }
+    return @($terms | Select-Object -First 10)
+}
+
+# Native stderr becomes a terminating error under $ErrorActionPreference='Stop'
+# in PS 5.1, even with 2>$null. Every read-only git call in this file goes
+# through here so a harmless CRLF warning cannot kill the start.
+function Invoke-GitLines {
+    param([string]$RootPath, [string[]]$Arguments)
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return @(& git -C $RootPath @Arguments 2>$null | ForEach-Object { "$_" }) }
+    finally { $ErrorActionPreference = $saved }
+}
+
+# Read-only pre-flight: working tree, diff against HEAD, recent commits, and
+# whether the requirement terms already appear in history. It never writes and
+# never blocks; duplicate work is the most expensive mistake this can prevent.
+function Invoke-Preflight {
+    param([string]$RootPath, [string]$RequirementText, [string]$FeatureName)
+    Write-Host ''
+    Write-Host '--- pre-flight (read only) ---' -ForegroundColor Cyan
+    $gitDir = Get-GitDir $RootPath
+    if (-not $gitDir) {
+        Write-Host '[preflight] not a git repository: working tree and history checks skipped' -ForegroundColor Yellow
+        Write-Host '--- end of pre-flight ---' -ForegroundColor Cyan
+        return
+    }
+    $status = @(Invoke-GitLines -RootPath $RootPath -Arguments @('status', '--short'))
+    if ($status.Count -eq 0) {
+        Write-Host '[preflight] working tree clean'
+    } else {
+        Write-Host ('[WARN] uncommitted changes (' + $status.Count + '):') -ForegroundColor Yellow
+        foreach ($s in @($status | Select-Object -First 15)) { Write-Host ('  ' + $s) -ForegroundColor Yellow }
+    }
+    $diff = @(Invoke-GitLines -RootPath $RootPath -Arguments @('--no-pager', 'diff', '--stat', 'HEAD'))
+    if ($diff.Count -eq 0) {
+        Write-Host '[preflight] no diff vs HEAD'
+    } else {
+        Write-Host '[preflight] diff vs HEAD:'
+        foreach ($d in @($diff | Select-Object -Last 10)) { Write-Host ('  ' + $d) }
+    }
+    $recent = @(Invoke-GitLines -RootPath $RootPath -Arguments @('--no-pager', 'log', '--oneline', '-8'))
+    if ($recent.Count -gt 0) {
+        Write-Host '[preflight] recent commits:'
+        foreach ($l in $recent) { Write-Host ('  ' + $l) }
+    }
+    $terms = @(Get-StartTerms ($RequirementText + ' ' + $FeatureName))
+    if ($terms.Count -gt 0) {
+        $hits = New-Object System.Collections.Generic.List[string]
+        foreach ($t in $terms) {
+            if (-not $t) { continue }
+            $found = @(Invoke-GitLines -RootPath $RootPath -Arguments @('--no-pager', 'log', '--oneline', '-n', '3', '-i', ('--grep=' + [regex]::Escape($t))))
+            foreach ($f in $found) {
+                if ($f -and -not $hits.Contains($f)) { $hits.Add($f) }
+            }
+        }
+        if ($hits.Count -gt 0) {
+            Write-Host '[WARN] possibly already implemented (requirement terms found in history):' -ForegroundColor Yellow
+            foreach ($h in @($hits | Select-Object -First 5)) { Write-Host ('  ' + $h) -ForegroundColor Yellow }
+            Write-Host '       confirm this is not a duplicate before writing code' -ForegroundColor Yellow
+        } else {
+            Write-Host '[preflight] no commit message matches the requirement terms'
+        }
+    }
+    Write-Host '--- end of pre-flight ---' -ForegroundColor Cyan
+}
+
+# Read the tracked lesson index at task start. Writing it without reading it was
+# the reason the same pit was hit twice; the hit is a prompt, not a gate.
+function Show-Lessons {
+    param([string]$RootPath, [string]$RequirementText, [string]$FeatureName)
+    $path = Join-Path $RootPath '.harness\lessons.md'
+    if (-not (Test-Path -LiteralPath $path)) {
+        Write-Host '[lessons] .harness/lessons.md not found; run scripts\metrics.ps1 once to build it' -ForegroundColor DarkGray
+        return
+    }
+    $terms = @(Get-StartTerms ($RequirementText + ' ' + $FeatureName))
+    if ($terms.Count -eq 0) { return }
+    $rows = New-Object System.Collections.Generic.List[string]
+    foreach ($line in [System.IO.File]::ReadAllLines($path, [System.Text.Encoding]::UTF8)) {
+        if ($line -notmatch '^\|\s*`?([A-Za-z0-9][A-Za-z0-9_.\-]*)`?\s*\|') { continue }
+        if ($matches[1] -eq 'id') { continue }
+        foreach ($t in $terms) {
+            if ($t -and $line.IndexOf($t, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $rows.Add($line)
+                break
+            }
+        }
+    }
+    if ($rows.Count -eq 0) {
+        Write-Host '[lessons] no matching entry for this requirement' -ForegroundColor DarkGray
+        return
+    }
+    Write-Host '[lessons] entries close to this requirement (respond in the summary: lesson_id / shortfall):' -ForegroundColor Yellow
+    foreach ($r in @($rows | Select-Object -First 5)) { Write-Host ('  ' + $r) -ForegroundColor Yellow }
+}
+
+# Investigation records keep flow L1 but carry a machine-readable kind, so the
+# content checks can skip the change-oriented sections instead of forcing prose
+# that nobody believes.
+function Add-InvestigationFields {
+    param([string]$Text)
+    $notApplicable = -join @([char]0x4E0D, [char]0x9002, [char]0x7528)
+    $t = $Text -replace '(?m)(?<![A-Za-z0-9_\-])flow:(\s*L1[^\r\n]*)', ('flow:$1' + "`r`n" + '- record_kind: investigation')
+    $t = $t -replace '(?m)(?<![A-Za-z0-9_\-])delivery_status:[^\r\n]*', ('delivery_status: ' + $notApplicable)
+    return $t
+}
+
 function Invoke-Start {
     param(
         [string]$RootPath,
@@ -159,7 +286,9 @@ function Invoke-Start {
         [string]$ModulesText,
         [bool]$FlowExplicit = $true,
         [bool]$ModulesExplicit = $true,
-        [switch]$NoPlan
+        [switch]$NoPlan,
+        [switch]$NoPreflight,
+        [switch]$Investigation
     )
 
     # ------------------------------------------------------------- 0 guards
@@ -167,8 +296,18 @@ function Invoke-Start {
         Write-Host '[FAIL] -Flow L0 keeps no change record: skip harness-start for L0 work' -ForegroundColor Red
         return 1
     }
-    if ($FlowValue -eq 'L1') {
+    if ($Investigation -and $FlowValue -ne 'L1') {
+        if ($FlowExplicit) {
+            Write-Host '[FAIL] -Investigation records use -Flow L1 (read only, no code change)' -ForegroundColor Red
+            return 1
+        }
+        $FlowValue = 'L1'
+    }
+    if ($FlowValue -eq 'L1' -and -not $Investigation) {
         Write-Host '[WARN] -Flow L1 normally uses .harness/changes/_small.md, not summary.md; continuing because you asked for a full record' -ForegroundColor Yellow
+    }
+    if ($Investigation) {
+        Write-Host '[INFO] investigation record: flow L1, no code change expected; acceptance / impact / tasks are not required' -ForegroundColor DarkGray
     }
     $featureError = Test-FeatureName -FeatureName $FeatureName -RootPath $RootPath
     if ($featureError) {
@@ -178,12 +317,18 @@ function Invoke-Start {
 
     Write-Host ('harness-start: ' + $FeatureName) -ForegroundColor Cyan
 
+    if (-not $NoPreflight) {
+        Invoke-Preflight -RootPath $RootPath -RequirementText $RequirementText -FeatureName $FeatureName
+    }
+    Show-Lessons -RootPath $RootPath -RequirementText $RequirementText -FeatureName $FeatureName
+
     # ---------------------------------------------------------- 1 context pack
     # The plan also carries a flow hint and the module cards it matched. They are
     # read only when the caller did not pass -Flow / -Modules: an explicit
     # argument always wins, so a re-run cannot silently move the declaration.
     $hintFlow = ''
     $hintModules = @()
+    $moduleCandidates = @()
     if (-not $NoPlan) {
         $planScript = Join-Path $RootPath 'scripts\harness-plan.ps1'
         if (Test-Path -LiteralPath $planScript) {
@@ -203,10 +348,24 @@ function Invoke-Start {
                 foreach ($line in $planLines) {
                     $fm = [regex]::Match($line, 'level hint\s*:\s*(L[0-3])')
                     if ($fm.Success) { $hintFlow = $fm.Groups[1].Value }
-                    $mm = [regex]::Match($line, '^\s*-\s+(\S+)\s+\(score\s+\d+\)\s+\[\.harness/modules/')
-                    if ($mm.Success -and -not ($hintModules -contains $mm.Groups[1].Value)) {
-                        $hintModules += $mm.Groups[1].Value
+                    $mm = [regex]::Match($line, '^\s*-\s+(\S+)\s+\(score\s+(\d+)\)\s+\[\.harness/modules/')
+                    if ($mm.Success) {
+                        $candName = $mm.Groups[1].Value
+                        $candScore = [int]$mm.Groups[2].Value
+                        if (-not ($moduleCandidates -contains $candName)) { $moduleCandidates += $candName }
+                        # Only a strong match is written: a score-1 card usually
+                        # shares one common word and would send stage 3/5/7/8 to
+                        # the wrong module.
+                        if ($candScore -ge 2 -and -not ($hintModules -contains $candName)) {
+                            $hintModules += $candName
+                        }
                     }
+                }
+                $weakCandidates = @($moduleCandidates | Where-Object { $hintModules -notcontains $_ })
+                if (@($hintModules).Count -eq 0 -and $weakCandidates.Count -gt 0) {
+                    Write-Host ('[INFO] module candidates not written: ' + ($weakCandidates -join ', ') + '; confirm and pass -Modules if one is real') -ForegroundColor DarkGray
+                } elseif ($weakCandidates.Count -gt 0) {
+                    Write-Host ('[INFO] weaker module candidates: ' + ($weakCandidates -join ', ')) -ForegroundColor DarkGray
                 }
                 Write-Host '--- end of plan ---' -ForegroundColor Cyan
             }
@@ -217,7 +376,8 @@ function Invoke-Start {
     $effectiveFlow = $FlowValue
     $flowSource = 'argument'
     if (-not $FlowExplicit -and $hintFlow) { $effectiveFlow = $hintFlow; $flowSource = 'plan hint' }
-    if ($FlowExplicit -and $hintFlow -and $hintFlow -ne $FlowValue) {
+    if ($Investigation) { $effectiveFlow = 'L1'; $flowSource = 'investigation' }
+    if (-not $Investigation -and $FlowExplicit -and $hintFlow -and $hintFlow -ne $FlowValue) {
         Write-Host ('[INFO] the plan suggests ' + $hintFlow + '; keeping explicit -Flow ' + $FlowValue) -ForegroundColor DarkGray
     }
     $effectiveModules = $ModulesText
@@ -241,6 +401,7 @@ function Invoke-Start {
         }
         $text = [System.IO.File]::ReadAllText($template, [System.Text.Encoding]::UTF8)
         $text = Set-SummaryPrefill -Text $text -FlowValue $effectiveFlow -ModulesValue $modulesValue
+        if ($Investigation) { $text = Add-InvestigationFields -Text $text }
         $dir = Split-Path -Parent $summaryPath
         if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
         [System.IO.File]::WriteAllText($summaryPath, $text, $Utf8NoBom)
@@ -250,7 +411,11 @@ function Invoke-Start {
             $sourceNote = '  (from the plan hint; adjust before committing)'
         }
         Write-Host ('      pre-filled flow: ' + $effectiveFlow + ' / touched_modules: ' + $modulesValue + $sourceNote)
-        Write-Host '      fill loaded_skills / acceptance / impact / tasks, then re-run this command'
+        if ($Investigation) {
+            Write-Host '      fill loaded_skills and the conclusion; acceptance / impact / tasks are not required'
+        } else {
+            Write-Host '      fill loaded_skills / acceptance / impact / tasks, then re-run this command'
+        }
     } else {
         Write-Host ('[KEEP] existing record not overwritten: ' + $summaryPath) -ForegroundColor DarkGray
     }
@@ -384,6 +549,7 @@ function Invoke-StartSelfTest {
             "Write-Host 'harness plan (stub)'",
             "Write-Host '  level hint  : L3 -- stub hint'",
             "Write-Host '  - core  (score 2)  [.harness/modules/core.md]'",
+            "Write-Host '  - weak  (score 1)  [.harness/modules/weak.md]'",
             'exit 0'
         ) -join "`r`n"
         [System.IO.File]::WriteAllText((Join-Path $tmp4 'scripts\harness-plan.ps1'), ($stubPlan + "`r`n"), $Utf8NoBom)
@@ -396,6 +562,8 @@ function Invoke-StartSelfTest {
         Assert-Case 'plan hint fills flow when -Flow is not passed' ($textP -match '(?m)(?<![A-Za-z0-9_\-])flow: L3')
         Assert-Case 'plan hint fills touched_modules when -Modules is not passed' ($textP -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: core')
         Assert-Case 'pre-fill names the plan as its source' ($logP -match 'plan hint')
+        Assert-Case 'weak module candidates are not pre-filled' (($textP -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: core') -and ($textP -notmatch 'touched_modules:[^\r\n]*weak'))
+        Assert-Case 'weak module candidates are listed for confirmation' (($logP -match 'weaker module candidates|module candidates not written') -and ($logP -match 'weak'))
         Assert-Case 'a plan-hinted start still blocks on placeholder content' ($codeP -eq 1)
 
         # --- an explicit argument wins over the hint (and says so)
@@ -407,6 +575,45 @@ function Invoke-StartSelfTest {
         Assert-Case 'explicit -Flow wins over the plan hint' ($textE -match '(?m)(?<![A-Za-z0-9_\-])flow: L2')
         Assert-Case 'explicit -Modules wins over the plan hint' ($textE -match '(?m)(?<![A-Za-z0-9_\-])touched_modules: manual')
         Assert-Case 'a conflicting explicit flow is reported' ($logE -match 'keeping explicit -Flow L2')
+
+        # --- pre-flight, lesson echo and the investigation record
+        $tmp5 = Join-Path ([System.IO.Path]::GetTempPath()) ('hb-start-pre-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Fixture -Path $tmp5 -WithGit -WithTemplate
+        & git -C $tmp5 config user.email 't@t.t'
+        & git -C $tmp5 config user.name 't'
+        [System.IO.File]::WriteAllText((Join-Path $tmp5 'widget.txt'), 'x', $Utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $tmp5 '.harness\lessons.md'), (@(
+            '# Lessons index (generated by metrics.ps1)',
+            '',
+            '| id | summary | tasks | first | last | status |',
+            '| --- | --- | --- | --- | --- | --- |',
+            '| widget-export-lesson | widget export missed a case | 2 | 2026-01-01 | 2026-01-02 | promote |'
+        ) -join "`r`n"), $Utf8NoBom)
+        # Keep git's CRLF warnings off stderr: a caller with
+        # $ErrorActionPreference='Stop' turns any stderr byte into a terminating
+        # NativeCommandError (the same trap the CI workflow documents).
+        $savedEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & git -C $tmp5 add . 2>$null
+        & git -C $tmp5 commit -q -m 'widget-export already implemented' 2>$null
+        $ErrorActionPreference = $savedEap
+        $linesX = @(Invoke-Start -RootPath $tmp5 -FeatureName 'probe' -RequirementText 'widget export drops rows' -FlowValue 'L1' -ModulesText 'none' -Investigation $true 6>&1)
+        $codeX = [int]($linesX[-1])
+        $logX = ($linesX | ForEach-Object { "$_" }) -join "`n"
+        $spX = Join-Path $tmp5 '.harness\changes\probe\summary.md'
+        $textX = ''
+        if (Test-Path -LiteralPath $spX) { $textX = [System.IO.File]::ReadAllText($spX, [System.Text.Encoding]::UTF8) }
+        Assert-Case 'pre-flight sees the requirement in history' ($logX -match 'possibly already implemented' -and $logX -match 'widget-export')
+        Assert-Case 'pre-flight reports a clean tree' ($logX -match 'working tree clean')
+        Assert-Case 'lessons index is echoed at start' ($logX -match 'widget-export-lesson' -and $logX -match 'respond in the summary')
+        Assert-Case 'investigation pre-fills flow L1' ($textX -match '(?m)(?<![A-Za-z0-9_\-])flow: L1')
+        Assert-Case 'investigation pre-fills record_kind' ($textX -match '(?m)(?<![A-Za-z0-9_\-])record_kind: investigation')
+        $cnNotApplicable = -join @([char]0x4E0D, [char]0x9002, [char]0x7528)
+        Assert-Case 'investigation pre-fills delivery_status' ($textX.Contains('delivery_status: ' + $cnNotApplicable))
+        $textX2 = $textX -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: request-analysis'
+        [System.IO.File]::WriteAllText($spX, $textX2, $Utf8NoBom)
+        $codeX2 = Invoke-Start -RootPath $tmp5 -FeatureName 'probe' -RequirementText 'widget export drops rows' -FlowValue 'L1' -ModulesText 'none' -Investigation $true -NoPreflight
+        Assert-Case 'investigation record passes stage 1 without the change sections' ($codeX2 -eq 0)
 
         # --- fill the countable content and pass stage 1
         Set-SummaryContent -Path $sp
@@ -456,7 +663,7 @@ function Invoke-StartSelfTest {
         Assert-Case 'a non-git start exits 0 with a warning' ($codeH -eq 0 -and $logH -match 'not a git repository')
         Assert-Case 'a non-git start writes no marker' (-not (Test-Path -LiteralPath (Join-Path $tmp3 '.git\harness-task-started')))
     } finally {
-        foreach ($d in @($tmp, $tmp2, $tmp3, $tmp4)) {
+        foreach ($d in @($tmp, $tmp2, $tmp3, $tmp4, $tmp5)) {
             if ($d -and (Test-Path -LiteralPath $d)) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
         }
     }
@@ -474,7 +681,7 @@ if ($SelfTest) {
 }
 
 if (-not $Feature -or $Feature.Trim() -eq '') {
-    Write-Host 'usage: harness-start.ps1 -Feature <name> [-Requirement "<raw request>"] [-Flow L0|L1|L2|L3] [-Modules a,b] [-Root <dir>] [-SkipPlan]' -ForegroundColor Red
+    Write-Host 'usage: harness-start.ps1 -Feature <name> [-Requirement "<raw request>"] [-Flow L0|L1|L2|L3] [-Modules a,b] [-Root <dir>] [-SkipPlan] [-SkipPreflight] [-Investigation]' -ForegroundColor Red
     exit 1
 }
 
@@ -488,4 +695,4 @@ catch {
 $flowExplicit = $PSBoundParameters.ContainsKey('Flow')
 $modulesExplicit = $PSBoundParameters.ContainsKey('Modules')
 
-exit (Invoke-Start -RootPath $rootPath -FeatureName $Feature -RequirementText $Requirement -FlowValue $Flow -ModulesText $Modules -FlowExplicit $flowExplicit -ModulesExplicit $modulesExplicit -NoPlan:$SkipPlan)
+exit (Invoke-Start -RootPath $rootPath -FeatureName $Feature -RequirementText $Requirement -FlowValue $Flow -ModulesText $Modules -FlowExplicit $flowExplicit -ModulesExplicit $modulesExplicit -NoPlan:$SkipPlan -NoPreflight:$SkipPreflight -Investigation:$Investigation)
