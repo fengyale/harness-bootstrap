@@ -130,7 +130,7 @@ The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.
 
 `scripts\*.ps1` / `*.py` is replaced (old files are backed up under `.harness\upgrade\`); `scripts\*.json`, project assets and `.harness\changes|metrics` are kept:
 
-- `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead. Keys outside the whitelist are summarized as one `add N key(s) by hand` line in the dry run (empty arrays / null count as missing); `groundingStrict` is always written as `false` on upgrade
+- `AGENTS.md` and `harness-required.json` merge known framework lines/keys only; `-NoMergeKnown` prints the difference instead. Keys outside the whitelist are summarized as one `add N key(s) by hand` line in the dry run (empty arrays / null count as missing); `groundingStrict` is always written as `false` on upgrade; the `summaryContent` arrays (`acceptance` / `impact` / `tasks`) are unioned on upgrade, so renamed package defaults reach older projects while project aliases are kept
 - The package's `harness:upgrade` block in `AGENTS.md` (the entry command) is inserted or replaced in place, and an older unmarked copy is replaced instead of duplicated; the `flow-start-command` block in `.harness/rules/开发流程规范.md` is only replaced when the project already has it — when missing it is `MANUAL` and the project rules file is never rewritten
 - The red-line summary replaces just the R5/R6 checked cell
 - Old L1 summary directories move to the upgrade backup and are deleted after verification; `-KeepL1` keeps them, and L2/L3 history is never touched

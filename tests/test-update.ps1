@@ -451,6 +451,25 @@ Copy-Item -LiteralPath "$pkg\assets\.harness\rules" -Destination "$newPkg\assets
 New-Item -ItemType Directory -Force -Path "$newPkg\assets\.trae\agents" | Out-Null
 Set-Content -LiteralPath "$newPkg\assets\.trae\agents\new-agent.md" -Value '# agent' -Encoding UTF8
 
+# A second project simulates a pre-1.31.19 install: summaryContent already
+# exists, but its impact array predates the template rename and carries a
+# project alias. The upgrade must union the package needle into the existing
+# array instead of treating the whole block as "already present".
+$projOld = Join-Path $base 'old-impact'
+Copy-Item -LiteralPath $proj -Destination $projOld -Recurse
+$pkgCfg = (Get-Content -LiteralPath "$newPkg\assets\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+$oldImpact = @($pkgCfg.summaryContent.impact | Where-Object { $_ -ne $pkgCfg.summaryContent.impact[0] })
+$oldCfg = [pscustomobject]@{
+    _note = 'old install'
+    required = @('AGENTS.md', 'scripts/red-line-scan.ps1')
+    summaryContent = [pscustomobject]@{
+        acceptance = @($pkgCfg.summaryContent.acceptance)
+        impact = @($oldImpact + 'custom-impact-alias')
+        tasks = @($pkgCfg.summaryContent.tasks)
+    }
+}
+[System.IO.File]::WriteAllText("$projOld\scripts\harness-required.json", (($oldCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+
 # ------------------------------------------------------------------ dry run
 Write-Host ''
 Write-Host '=== dry run ===' -ForegroundColor Cyan
@@ -578,6 +597,21 @@ Check 'required JSON merged: legacy ps1 entry removed' (-not (@($mergedConfig.re
 Check 'required JSON merged: package entries added' (@($mergedConfig.required) -contains 'scripts/stage-gate.ps1')
 Check 'no @{...} junk file left in the package root' (@(Get-ChildItem -LiteralPath $pkg -Force -Filter '@{*' -ErrorAction SilentlyContinue).Count -eq 0)
 Check 'AGENTS.md untouched' ((Get-Content -LiteralPath "$proj\AGENTS.md" -Raw) -notmatch 'new template line')
+
+Write-Host ''
+Write-Host '=== legacy summaryContent arrays ===' -ForegroundColor Cyan
+$oldDry = Invoke-Harness "$projOld\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projOld } | Out-String
+Check 'legacy summaryContent: dry-run reports the impact needle' ($oldDry -match 'summaryContent\.impact\s*\+')
+Invoke-Harness "$projOld\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projOld; Apply = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
+if ($LASTEXITCODE -ne 0) { Write-Host 'LEGACY APPLY FAILED' -ForegroundColor Red; $fail++ }
+$oldMerged = (Get-Content -LiteralPath "$projOld\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+$pkgImpactNeedle = $pkgCfg.summaryContent.impact[0]
+Check 'legacy summaryContent: package impact needle added' (@($oldMerged.summaryContent.impact) -contains $pkgImpactNeedle)
+Check 'legacy summaryContent: project impact alias kept' (@($oldMerged.summaryContent.impact) -contains 'custom-impact-alias')
+Check 'legacy summaryContent: acceptance array kept' (@($oldMerged.summaryContent.acceptance) -contains $pkgCfg.summaryContent.acceptance[0])
+Check 'legacy summaryContent: tasks array kept' (@($oldMerged.summaryContent.tasks) -contains $pkgCfg.summaryContent.tasks[0])
+$oldDry2 = Invoke-Harness "$projOld\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projOld } | Out-String
+Check 'legacy summaryContent: second dry-run is clean' (-not ($oldDry2 -match 'summaryContent\.impact\s*\+'))
 
 # R5/R6 check cells and the record-association line are copied into the project
 # by the known-line merge. If the template wraps that prose in <...>, every

@@ -130,7 +130,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 
 替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`：
 
-- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`
+- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`；`summaryContent` 的 `acceptance` / `impact` / `tasks` 三个数组升级时取并集，包内重命名的默认章节会补进老项目，项目自定义别名保留
 - `AGENTS.md` 里包自带的 `harness:upgrade` 标记块（「开工第一件事」命令）自动插入或原地替换，旧的无标记副本会被换掉而不是重复一遍；`.harness/rules/开发流程规范.md` 的 `flow-start-command` 块只在项目已有时替换，缺失时标 `MANUAL`，不自动改写项目规则文件
 - 红线汇总只替换 R5/R6 的脚本检查格
 - 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动

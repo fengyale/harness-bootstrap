@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.31.27",
+    "title": "(summaryContent 升级并集与开工自检加固)",
+    "body": [
+      "- update-harness：summaryContent 的 acceptance / impact / tasks 升级时取并集，包内重命名的默认章节（如「影响面」）会补进老项目，项目自定义别名保留；dry-run 会点名缺失的 needle",
+      "- harness-start：-SelfTest 在 Stage 1 失败、marker 未写入时不再抛 FileNotFoundException；pre-flight 命中列表按提交时间排序并标注命中的词，术语选取改为有序，通用词不再挤掉最相关提交",
+      "- 测试：test-update 新增旧 summaryContent 升级用例（补新值 / 保留别名 / 幂等）；test-probe 新增 Stage 1 失败时自检不抛异常的用例"
+    ]
+  },
+  {
     "version": "1.31.26",
     "title": "(开工前置检查、教训回读与排查型记录)",
     "body": [

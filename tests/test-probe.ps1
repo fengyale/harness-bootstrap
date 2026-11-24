@@ -205,6 +205,26 @@ $hsOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $hsScript -SelfTe
 Check 'harness-start.ps1 self test exits 0' ($LASTEXITCODE -eq 0)
 Check 'harness-start.ps1 self test reports OK' ($hsOut -match 'START SELFTEST OK')
 
+Write-Host '=== harness-start.ps1 self test: failing stage 1 ===' -ForegroundColor Cyan
+# A broken template makes every stage 1 fail. The self test must report the
+# failed assertions instead of throwing while reading the marker that was never
+# written; a stale project config used to trigger exactly that path.
+$hsBadRoot = Join-Path $env:TEMP ('hb-start-badtpl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    $hsBadScripts = Join-Path $hsBadRoot 'scripts'
+    New-Item -ItemType Directory -Force -Path $hsBadScripts | Out-Null
+    Copy-Item -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\*') -Destination $hsBadScripts -Recurse -Force
+    $hsBadTpl = Join-Path $hsBadRoot '.harness\changes\_template'
+    New-Item -ItemType Directory -Force -Path $hsBadTpl | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $hsBadTpl 'summary.md'), "# broken template`n", (New-Object System.Text.UTF8Encoding($false)))
+    $hsBadOut = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $hsBadScripts 'harness-start.ps1') -SelfTest 2>&1 | Out-String
+    Check 'a failing self test exits 1' ($LASTEXITCODE -eq 1)
+    Check 'a failing self test reports the failed cases' ($hsBadOut -match 'START SELFTEST FAILED')
+    Check 'a failing self test does not throw FileNotFoundException' ($hsBadOut -notmatch 'FileNotFoundException')
+} finally {
+    if (Test-Path -LiteralPath $hsBadRoot) { Remove-Item -LiteralPath $hsBadRoot -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 Write-Host '=== check-task-start.ps1 gate ===' -ForegroundColor Cyan
 $ctsScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets\scripts\check-task-start.ps1'
 $ctsRoot = Join-Path $env:TEMP ('hb-cts-' + [guid]::NewGuid().ToString('N').Substring(0, 8))

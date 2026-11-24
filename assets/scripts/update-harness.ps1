@@ -105,6 +105,12 @@ $MergeKnown = -not $NoMergeKnown
 # quietly did it (or vice versa). Keep this the only place to edit.
 $script:MergeKeys = @('required', 'requiredAnyOf', 'sqlGate', 'sqlReview', 'summaryContent', 'recordsTracked', 'groundingStrict', 'reviewLedger', 'reviewLedgerStrict', 'deliveryStatus', 'deliveryStatusStrict', 'requireTaskStart')
 
+# summaryContent is the section vocabulary of the package-owned summary template.
+# A renamed template heading must reach an upgraded project, but project aliases
+# must survive; upgrade unions these arrays instead of copying or replacing the
+# whole block. Scalars and adoption flags are deliberately not in this list.
+$script:SummaryContentUnionFields = @('acceptance', 'impact', 'tasks')
+
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $pkgPath = (Resolve-Path -LiteralPath $PackagePath).Path
 $assets = Join-Path $pkgPath 'assets'
@@ -195,6 +201,16 @@ function Add-Plan {
     })
 }
 
+# Read a string array from a parsed JSON node. Missing / null / empty values are
+# an empty list, so the delta report and the merge see the same input.
+function Get-JsonStringArray {
+    param($Node, [string]$Name)
+    if ($null -eq $Node) { return @() }
+    $prop = $Node.PSObject.Properties[$Name]
+    if (-not $prop -or $null -eq $prop.Value) { return @() }
+    return @($prop.Value | Where-Object { $null -ne $_ -and ([string]$_).Length -gt 0 } | ForEach-Object { [string]$_ })
+}
+
 # JSON config is project-owned, so the upgrade never rewrites it. It must still
 # tell the user WHAT to merge: a new required entry or the sqlGate flag that an
 # old install does not have yet is otherwise invisible.
@@ -231,6 +247,20 @@ function Get-RequiredDelta {
             $srcHas = ($src.PSObject.Properties.Name -contains $key)
             $dstHas = ($dst.PSObject.Properties.Name -contains $key)
             if ($srcHas -and -not $dstHas) { $parts += ('add ' + $key + ' (new config block)') }
+        }
+        # summaryContent arrays are unioned by Merge-RequiredJson. If the block
+        # already exists but predates a renamed template heading, the generic
+        # "block present" check above would hide the drift; name the needles.
+        if (($src.PSObject.Properties.Name -contains 'summaryContent') -and
+            ($dst.PSObject.Properties.Name -contains 'summaryContent')) {
+            foreach ($field in $script:SummaryContentUnionFields) {
+                $srcVals = @(Get-JsonStringArray $src.summaryContent $field)
+                $dstVals = @(Get-JsonStringArray $dst.summaryContent $field)
+                $missing = @($srcVals | Where-Object { $dstVals -notcontains $_ })
+                if ($missing.Count -gt 0) {
+                    $parts += ('summaryContent.' + $field + ' + ' + ($missing -join ', '))
+                }
+            }
         }
         # groundingStrict is a migration default, not a copy: a fresh install is
         # strict, but an upgraded project would go red on day one (its installed
@@ -622,6 +652,28 @@ function Merge-RequiredJson {
         if (($src.PSObject.Properties.Name -contains $key) -and
             -not ($cfg.PSObject.Properties.Name -contains $key)) {
             $cfg | Add-Member -NotePropertyName $key -NotePropertyValue $src.$key
+        }
+    }
+    # summaryContent is tied to the package-owned template: a renamed default
+    # heading must reach an upgraded project, while project-specific aliases
+    # stay. Union the known arrays; unknown keys and every other config block
+    # remain project-owned.
+    if (($src.PSObject.Properties.Name -contains 'summaryContent') -and
+        ($cfg.PSObject.Properties.Name -contains 'summaryContent')) {
+        foreach ($field in $script:SummaryContentUnionFields) {
+            $srcVals = @(Get-JsonStringArray $src.summaryContent $field)
+            if ($srcVals.Count -eq 0) { continue }
+            $dstVals = @(Get-JsonStringArray $cfg.summaryContent $field)
+            $merged = @($dstVals)
+            foreach ($v in $srcVals) {
+                if ($merged -notcontains $v) { $merged += $v }
+            }
+            if ($merged.Count -eq $dstVals.Count) { continue }
+            if ($cfg.summaryContent.PSObject.Properties.Name -contains $field) {
+                $cfg.summaryContent.$field = $merged
+            } else {
+                $cfg.summaryContent | Add-Member -NotePropertyName $field -NotePropertyValue $merged
+            }
         }
     }
     # Migration default: false keeps the old WARN behaviour for a project whose
