@@ -1,11 +1,11 @@
-# Harness Bootstrap
+# Harness Lifecycle
 
-给 AI 编程项目安装一套可执行的约束系统：规则、门禁、证据、度量与复盘。
+给 AI 编程项目搭建并维护一套可执行的约束系统：规则、引导、门禁、证据、度量与复盘。
 
 安装时会探测项目事实，按证据生成 `AGENTS.md`、规则、技能和 wiki。装完之后，约定由脚本和 git hook 执行，不需要每轮提醒。
 
-[![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
-[![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
+[![package gate](https://github.com/fengyale/harness-lifecycle/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-lifecycle/actions/workflows/verify.yml)
+[![version](https://img.shields.io/github/v/release/fengyale/harness-lifecycle?display_name=tag)](https://github.com/fengyale/harness-lifecycle/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![powershell](https://img.shields.io/badge/powershell-5.1%20%2B%20pwsh7-blue.svg)](references/平台适配.md)
 
@@ -33,8 +33,8 @@ AI 写代码很快，交付慢。慢的地方大多不在"不会写"，而在下
 装之前先让它自证一次：
 
 ```powershell
-git clone https://github.com/fengyale/harness-bootstrap.git
-cd harness-bootstrap
+git clone https://github.com/fengyale/harness-lifecycle.git
+cd harness-lifecycle
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 ```
 
@@ -47,14 +47,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
-[PASS] contract   68 rule/script/doc contract(s) hold
+[PASS] contract   70 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-68 条契约只查一件事，同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这类改动最常见的失手方式，是改一处、漂五处。
+70 条契约只查一件事，同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这类改动最常见的失手方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -72,11 +72,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite tes
 
 | 平台 | 位置 |
 | --- | --- |
-| TRAE | `.trae/skills/harness-bootstrap/` |
-| Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex CLI | `.agents/skills/harness-bootstrap/`（子代理在 `.codex/agents/*.toml`，需按 TOML 重写） |
-| CodeBuddy | `.codebuddy/skills/harness-bootstrap/`（子代理在 `.codebuddy/agents/*.md`，可直接复用） |
+| TRAE | `.trae/skills/harness-lifecycle/` |
+| Claude Code | `.claude/skills/harness-lifecycle/` |
+| Codex CLI | `.agents/skills/harness-lifecycle/`（子代理在 `.codex/agents/*.toml`，需按 TOML 重写） |
+| CodeBuddy | `.codebuddy/skills/harness-lifecycle/`（子代理在 `.codebuddy/agents/*.md`，可直接复用） |
 | 其它 / 不确定 | 按索引模式引用 `SKILL.md` |
+
+> **架构门面说明（1.32.0）**：统一架构门面与入口命名；历史入口仍可被升级脚本识别。新装请使用当前入口目录；如果历史入口还在，先确认当前入口能正常加载，再删除历史入口。升级脚本只识别、不移动、不删除技能目录。
 
 `tools/` 只用于本包自检，不进安装包。
 
@@ -130,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 
 替换 `scripts\*.ps1` / `*.py`（旧文件备份到 `.harness\upgrade\`），保留 `scripts\*.json`、项目资产与 `.harness\changes|metrics`：
 
-- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`
+- `AGENTS.md` 与 `harness-required.json` 只自动合并已知框架行/键，`-NoMergeKnown` 退回只打印差异；白名单外的键会在 dry-run 汇总成 `add N key(s) by hand`（空数组 / null 视为缺失），`groundingStrict` 升级固定写 `false`；`summaryContent` 的 `acceptance` / `impact` / `tasks` 三个数组升级时取并集，包内重命名的默认章节会补进老项目，项目自定义别名保留
 - `AGENTS.md` 里包自带的 `harness:upgrade` 标记块（「开工第一件事」命令）自动插入或原地替换，旧的无标记副本会被换掉而不是重复一遍；`.harness/rules/开发流程规范.md` 的 `flow-start-command` 块只在项目已有时替换，缺失时标 `MANUAL`，不自动改写项目规则文件
 - 红线汇总只替换 R5/R6 的脚本检查格
 - 旧 L1 summary 目录移到升级备份、随验证删除，`-KeepL1` 保留；L2/L3 历史不动
@@ -229,7 +231,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 ## 和模板包的区别
 
-模板包假设你知道自己要什么，交给你一组文件。这里先从项目取证再决定该有什么，交付的是能拦人的门禁、字段校验和度量。模板包不检查自己，这个仓库有自己的 pre-commit、68 条跨文件契约和行为测试。
+模板包假设你知道自己要什么，交给你一组文件。这里先从项目取证再决定该有什么，交付的是能拦人的门禁、字段校验和度量。模板包不检查自己，这个仓库有自己的 pre-commit、70 条跨文件契约和行为测试。
 
 ## 平台与限制
 

@@ -158,14 +158,20 @@ function Test-HasModuleColumn {
 # dozens of times per start.
 function Get-StartTerms {
     param([string]$Text)
-    $terms = New-Object 'System.Collections.Generic.HashSet[string]'
+    # A List keeps the insertion order: Latin words first, then CJK runs and
+    # 2-grams. A HashSet made the first-10 selection depend on bucket order, so
+    # generic terms could crowd out the one that matters.
+    $terms = New-Object System.Collections.Generic.List[string]
     if ($Text) {
-        foreach ($m in [regex]::Matches($Text, '[A-Za-z][A-Za-z0-9_\-]{2,}')) { [void]$terms.Add($m.Value) }
+        foreach ($m in [regex]::Matches($Text, '[A-Za-z][A-Za-z0-9_\-]{2,}')) {
+            if (-not $terms.Contains($m.Value)) { $terms.Add($m.Value) }
+        }
         foreach ($m in [regex]::Matches($Text, '[\u4e00-\u9fff]{2,}')) {
             $run = $m.Value
-            if ($run.Length -le 6) { [void]$terms.Add($run) }
+            if ($run.Length -le 6 -and -not $terms.Contains($run)) { $terms.Add($run) }
             for ($i = 0; $i -le $run.Length - 2 -and $terms.Count -lt 16; $i++) {
-                [void]$terms.Add($run.Substring($i, 2))
+                $t = $run.Substring($i, 2)
+                if (-not $terms.Contains($t)) { $terms.Add($t) }
             }
         }
     }
@@ -217,17 +223,40 @@ function Invoke-Preflight {
     }
     $terms = @(Get-StartTerms ($RequirementText + ' ' + $FeatureName))
     if ($terms.Count -gt 0) {
-        $hits = New-Object System.Collections.Generic.List[string]
+        # Collect by commit hash so one commit matched by several terms is shown
+        # once. Keep the date and the matched terms, then sort by date: term
+        # order used to let generic words fill the five visible slots.
+        $hits = @{}
         foreach ($t in $terms) {
             if (-not $t) { continue }
-            $found = @(Invoke-GitLines -RootPath $RootPath -Arguments @('--no-pager', 'log', '--oneline', '-n', '3', '-i', ('--grep=' + [regex]::Escape($t))))
+            $found = @(Invoke-GitLines -RootPath $RootPath -Arguments @(
+                '--no-pager', 'log', '-n', '3', '-i', '--date=short',
+                '--format=%h%x1f%ad%x1f%s',
+                ('--grep=' + [regex]::Escape($t))))
             foreach ($f in $found) {
-                if ($f -and -not $hits.Contains($f)) { $hits.Add($f) }
+                if (-not $f) { continue }
+                $parts = @($f -split ([string][char]0x1f))
+                if ($parts.Count -lt 3) { continue }
+                $key = $parts[0]
+                if (-not $hits.ContainsKey($key)) {
+                    $hits[$key] = [pscustomobject]@{
+                        Hash    = $parts[0]
+                        Date    = $parts[1]
+                        Subject = $parts[2]
+                        Terms   = (New-Object System.Collections.Generic.List[string])
+                    }
+                }
+                if (-not $hits[$key].Terms.Contains($t)) { $hits[$key].Terms.Add($t) }
             }
         }
         if ($hits.Count -gt 0) {
             Write-Host '[WARN] possibly already implemented (requirement terms found in history):' -ForegroundColor Yellow
-            foreach ($h in @($hits | Select-Object -First 5)) { Write-Host ('  ' + $h) -ForegroundColor Yellow }
+            $ordered = @($hits.Values | Sort-Object -Property `
+                @{ Expression = 'Date'; Descending = $true }, `
+                @{ Expression = 'Hash'; Descending = $true })
+            foreach ($h in @($ordered | Select-Object -First 5)) {
+                Write-Host ('  ' + $h.Hash + ' ' + $h.Date + ' ' + $h.Subject + '  [' + ($h.Terms -join ',') + ']') -ForegroundColor Yellow
+            }
             Write-Host '       confirm this is not a duplicate before writing code' -ForegroundColor Yellow
         } else {
             Write-Host '[preflight] no commit message matches the requirement terms'
@@ -632,7 +661,12 @@ function Invoke-StartSelfTest {
         $code = Invoke-Start -RootPath $tmp -FeatureName 'demo' -FlowValue 'L3' -NoPlan
         $after = [System.IO.File]::ReadAllText($sp, [System.Text.Encoding]::UTF8)
         Assert-Case 'existing record is not overwritten' ($code -eq 0 -and $before -eq $after)
-        $mText = [System.IO.File]::ReadAllText($marker, [System.Text.Encoding]::UTF8)
+        # A stage-1 failure leaves no marker. Read it defensively so the self test
+        # reports that failure instead of throwing FileNotFoundException.
+        $mText = ''
+        if (Test-Path -LiteralPath $marker) {
+            $mText = [System.IO.File]::ReadAllText($marker, [System.Text.Encoding]::UTF8)
+        }
         Assert-Case 'marker flow follows the record, not -Flow' ($mText -match '(?m)^flow=L2$')
 
         # --- L0 and path traversal are refused before anything is written

@@ -1,5 +1,5 @@
 {
-  "_说明": "harness-bootstrap 自举契约：verify-package.ps1 按本文件检查包自身。中文只放这里，脚本保持纯 ASCII。",
+  "_说明": "harness-lifecycle 自举契约：verify-package.ps1 按本文件检查包自身。中文只放这里，脚本保持纯 ASCII。",
   "_为什么": "同一套门禁语义写在脚本、JSON、SKILL、AGENTS、规则五处；没有机器检查时，改一处就会漂一处。本文件把「五处必须一致」变成可判定的断言。",
 
   "requiredFiles": [
@@ -198,8 +198,20 @@
     {
       "id": "readme-quickstart",
       "file": "README.md",
-      "patterns": ["harness-bootstrap", "verify-package.ps1"],
+      "patterns": ["(?m)^# Harness Lifecycle", "verify-package.ps1"],
       "why": "README 是外部用户的第一入口；技能名和自检命令必须与仓库实际一致。"
+    },
+    {
+      "id": "html-public-name",
+      "file": "docs/usage-and-mechanism.html",
+      "patterns": ["<title>Harness Lifecycle", "eyebrow\">harness-lifecycle"],
+      "why": "说明页标题和 eyebrow 是公开身份；改名漏一处会让页面自相矛盾。"
+    },
+    {
+      "id": "skill-public-name",
+      "file": "SKILL.md",
+      "patterns": ["(?m)^name: harness-lifecycle"],
+      "why": "技能注册名是外部入口；改名漏一处会让平台安装成旧名。"
     },
     {
       "id": "readme-on-demand-loading",

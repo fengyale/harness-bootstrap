@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Harness Bootstrap · 使用与工作机制</title>
+<title>Harness Lifecycle · 使用与工作机制</title>
 <!--
-  Self-contained visual explainer for harness-bootstrap.
+  Self-contained visual explainer for harness-lifecycle.
   Sections: overview, install, daily workflow, internals, metrics/growth, files/acceptance.
   Diagrams: Mermaid with zoom/pan controls (diagram-shell pattern).
   Palette: warm terracotta + sage, IBM Plex Sans + IBM Plex Mono.
@@ -551,16 +551,16 @@
   <div class="main">
 
     <header class="hero">
-      <div class="eyebrow">harness-bootstrap · v1.31.26</div>
+      <div class="eyebrow">harness-lifecycle · v1.32.0</div>
       <h1>把 AI 编码的约定<br>变成可执行的约束</h1>
       <p class="lede">
-        Harness Bootstrap 是一个元技能。它读取一个真实项目，按证据生成
+        Harness Lifecycle 是一个元技能。它读取一个真实项目，按证据生成
         <strong>AGENTS.md、规则、技能、wiki 和模块卡</strong>，再装上一套
         <strong>git 门禁、阶段门、字段校验和度量脚本</strong>。
         装完之后，项目的约定由机器执行，人只确认关键决策。
       </p>
       <div class="chips">
-        <span class="chip"><b>68</b> 条跨文件契约</span>
+        <span class="chip"><b>70</b> 条跨文件契约</span>
         <span class="chip"><b>10</b> 个阶段门</span>
         <span class="chip"><b>3</b> 个 git hook</span>
         <span class="chip"><b>2</b> 条落地路径</span>
@@ -676,7 +676,7 @@
           <div class="step-num">1</div>
           <div>
             <h3>放到技能目录</h3>
-            <p>TRAE 用 <code>.trae/skills/harness-bootstrap/</code>；Claude Code 用 <code>.claude/skills/harness-bootstrap/</code>；Codex 用 <code>.agents/skills/harness-bootstrap/</code>（子代理在 <code>.codex/agents/*.toml</code>）；CodeBuddy 用 <code>.codebuddy/skills/harness-bootstrap/</code>（子代理在 <code>.codebuddy/agents/*.md</code>）；其它平台按索引模式引用 <code>SKILL.md</code>。同一台设备有多个平台时，只建当前平台，其余给 <code>setup-links.ps1 -Dest</code> 命令，不代建。</p>
+            <p>TRAE 用 <code>.trae/skills/harness-lifecycle/</code>；Claude Code 用 <code>.claude/skills/harness-lifecycle/</code>；Codex 用 <code>.agents/skills/harness-lifecycle/</code>（子代理在 <code>.codex/agents/*.toml</code>）；CodeBuddy 用 <code>.codebuddy/skills/harness-lifecycle/</code>（子代理在 <code>.codebuddy/agents/*.md</code>）；其它平台按索引模式引用 <code>SKILL.md</code>。同一台设备有多个平台时，只建当前平台，其余给 <code>setup-links.ps1 -Dest</code> 命令，不代建。</p>
             <pre><code># 包内只有 assets/ 会被复制进项目
 # tools/ 是本包自检用，不随安装分发</code></pre>
           </div>
@@ -714,7 +714,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
           <div class="step-num">5</div>
           <div>
             <h3>升级已有项目（不是重装）</h3>
-            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级从<strong>新包</strong>运行引导脚本 <code>assets\upgrade\upgrade-harness.ps1</code>：它调用新包自带的 <code>update-harness.ps1</code>，项目里的旧 updater 被绕过。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。<code>harness-required.json</code> 只自动合并已知键（<code>required</code> / <code>requiredAnyOf</code> / <code>sqlGate</code> / <code>sqlReview</code> / <code>summaryContent</code> / <code>recordsTracked</code>），白名单外的键会在 dry-run 里汇总成一行 “add N key(s) by hand”；<code>groundingStrict</code> 升级时固定写 <code>false</code>（存量技能补上锚点后再手动打开）。<code>AGENTS.md</code> 的 <code>start-command</code> 标记块缺失时自动插入、存在时原地替换。 <code>-MergeSkills</code> 以新模板为骨架、只保留 <code>harness:project</code> 区块，并按 frontmatter <code>name</code> 匹配改名目录；frontmatter 默认原样保留，唯一例外是 1.31.8 前 <code>description</code> 里那句「需求已明确…」（会被读成可以跳过 <code>request-analysis</code> 和 summary），命中即换成新版并在 MERGE 明细里点名；<code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译技能，已编译技能保持 MANUAL（<code>-ForceSkills</code> 才强制覆盖；它会把技能重置为骨架，需重新编译后再跑 <code>verify-harness.ps1</code>，重置步骤用 <code>-SkipVerify</code>）。升级默认重装 git hook。完整规则见第 6 节。</p>
+            <p>第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级从<strong>新包</strong>运行引导脚本 <code>assets\upgrade\upgrade-harness.ps1</code>：它调用新包自带的 <code>update-harness.ps1</code>，项目里的旧 updater 被绕过。升级替换 <code>scripts\*.ps1</code> / <code>*.py</code>，保留 JSON 配置、项目资产与历史；旧文件备份到 <code>.harness\upgrade\</code>。<code>harness-required.json</code> 只自动合并已知键（<code>required</code> / <code>requiredAnyOf</code> / <code>sqlGate</code> / <code>sqlReview</code> / <code>summaryContent</code> / <code>recordsTracked</code>），白名单外的键会在 dry-run 里汇总成一行 “add N key(s) by hand”；<code>groundingStrict</code> 升级时固定写 <code>false</code>（存量技能补上锚点后再手动打开）；<code>summaryContent</code> 的 <code>acceptance</code> / <code>impact</code> / <code>tasks</code> 三个数组升级时取并集：包内重命名的默认章节会补进老项目，项目自定义别名保留。<code>AGENTS.md</code> 的 <code>start-command</code> 标记块缺失时自动插入、存在时原地替换。 <code>-MergeSkills</code> 以新模板为骨架、只保留 <code>harness:project</code> 区块，并按 frontmatter <code>name</code> 匹配改名目录；frontmatter 默认原样保留，唯一例外是 1.31.8 前 <code>description</code> 里那句「需求已明确…」（会被读成可以跳过 <code>request-analysis</code> 和 summary），命中即换成新版并在 MERGE 明细里点名；<code>-UpdateSkills</code> 只替换仍含 <code>slot:</code> 的未编译技能，已编译技能保持 MANUAL（<code>-ForceSkills</code> 才强制覆盖；它会把技能重置为骨架，需重新编译后再跑 <code>verify-harness.ps1</code>，重置步骤用 <code>-SkipVerify</code>）。升级默认重装 git hook。完整规则见第 6 节。</p>
             <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\assets\upgrade\upgrade-harness.ps1 -Root &lt;项目根&gt; -MergeSkills
 # 确认差异后
 powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\assets\upgrade\upgrade-harness.ps1 -Root &lt;项目根&gt; -Apply -MergeSkills</code></pre>
@@ -1050,30 +1050,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
       </section>
 
       <h3 style="font-size:15px;margin:24px 0 8px">升级（从新包运行引导脚本）</h3>
-      <pre><code>git clone https://github.com/fengyale/harness-bootstrap.git D:\tools\harness-bootstrap
+      <pre><code>git clone https://github.com/fengyale/harness-lifecycle.git D:\tools\harness-lifecycle
 
 # 先看计划，不改文件；项目里的旧 updater 被绕过
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\assets\upgrade\upgrade-harness.ps1 `
+  -File D:\tools\harness-lifecycle\assets\upgrade\upgrade-harness.ps1 `
   -Root D:\your-project -MergeSkills
 
 # 看完计划再执行
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\assets\upgrade\upgrade-harness.ps1 `
+  -File D:\tools\harness-lifecycle\assets\upgrade\upgrade-harness.ps1 `
   -Root D:\your-project -Apply -MergeSkills</code></pre>
 
       <h3 style="font-size:15px;margin:24px 0 8px">兼容：1.30.0 及更早的项目首次升级</h3>
       <p style="font-size:13px;color:#555">这些项目的包布局还是 <code>templates/</code>，旧 updater 只认旧名。引导脚本本身兼容旧布局，所以上面的命令同样可用；如果你要手动按旧方式升级，也可以直接调用新包的 updater（执行成功后项目内脚本就是新版，之后一律走引导脚本）：</p>
       <pre><code>powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\assets\scripts\update-harness.ps1 `
+  -File D:\tools\harness-lifecycle\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
-  -PackagePath D:\tools\harness-bootstrap -MergeSkills
+  -PackagePath D:\tools\harness-lifecycle -MergeSkills
 
 # 看完计划再执行
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File D:\tools\harness-bootstrap\assets\scripts\update-harness.ps1 `
+  -File D:\tools\harness-lifecycle\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
-  -PackagePath D:\tools\harness-bootstrap -Apply -MergeSkills</code></pre>
+  -PackagePath D:\tools\harness-lifecycle -Apply -MergeSkills</code></pre>
 
       <h3 style="font-size:15px;margin:24px 0 8px">旧文件与新文件怎么处理</h3>
       <div class="table-wrap">
@@ -1090,7 +1090,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
             <tr><td><code>.trae\agents</code> / <code>.claude\agents</code></td><td>缺失 ADD；相同 SAME；不同 MANUAL</td><td>你改过的评审智能体不覆盖</td></tr>
             <tr><td><code>.gitignore</code></td><td>缺失 ADD；同时有 <code>.harness/metrics/</code> 与 <code>.harness/upgrade/</code> 则 SAME；否则 MANUAL</td><td>不重写，手工补行</td></tr>
             <tr><td><code>.harness\skills</code></td><td>README 是项目索引，不同 → MANUAL；已装技能不同 → MANUAL；<code>-MergeSkills</code> 用新模板骨架替换通用段、只保留 <code>harness:project</code> 区块（frontmatter 保留，项目独有区块追加），<b>按 frontmatter <code>name</code> 匹配改名目录</b>（04-sql-review ↔ 14-sql-review），定位不到或仍有 slot → PENDING，均不写盘（合并后行数不设上限）；<code>-UpdateSkills</code> 只替换含 <code>slot:</code> 的未编译副本；<code>-ForceSkills</code> 才强制覆盖</td><td>默认保留；未安装的模板技能不会新增；已编译事实不被覆盖</td></tr>
-            <tr><td><code>.trae\skills\harness-bootstrap</code></td><td>不在计划</td><td>手动替换技能包副本</td></tr>
+            <tr><td><code>.trae\skills\harness-lifecycle</code></td><td>不在计划</td><td>手动替换技能包副本</td></tr>
             <tr><td>git hooks</td><td>重装</td><td>旧 hook 自动备份为 <code>.bak-harness</code></td></tr>
             <tr><td><code>.harness\.installed-version</code></td><td>写入</td><td>下一次升级据此识别旧版本</td></tr>
           </tbody>
@@ -1196,7 +1196,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
       </div>
 
       <div class="footer">
-        本页基于仓库当前代码（v1.31.26）整理。原始说明见
+        本页基于仓库当前代码（v1.32.0）整理。原始说明见
         <a href="../README.md">README</a>、
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；

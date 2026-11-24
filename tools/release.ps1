@@ -156,7 +156,7 @@ function Update-VersionFile {
     $text = $read.Text
     $nl = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
 
-    $text = [regex]::Replace($text, '\A[^\r\n]*', ('HARNESS-BOOTSTRAP VERSION ' + $NewVersion))
+    $text = [regex]::Replace($text, '\A[^\r\n]*', ('HARNESS-LIFECYCLE VERSION ' + $NewVersion))
 
     $hasEntry = [regex]::IsMatch($text, ('(?m)^\s*' + [regex]::Escape($NewVersion) + '\s{2,}'))
     if (-not $hasEntry) {
@@ -396,7 +396,7 @@ function Invoke-ReleaseSelfTest {
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
         # VERSION fixture
-        $verText = 'HARNESS-BOOTSTRAP VERSION 1.0.0' + $nl + $nl + 'changelog' + $nl + '---------' + $nl +
+        $verText = 'HARNESS-LIFECYCLE VERSION 1.0.0' + $nl + $nl + 'changelog' + $nl + '---------' + $nl +
                    '1.0.0  (fixture baseline)' + $nl + '- baseline note' + $nl
         [System.IO.File]::WriteAllText((Join-Path $tmp 'VERSION'), $verText, (New-Object System.Text.UTF8Encoding($false)))
 
@@ -418,7 +418,7 @@ function Invoke-ReleaseSelfTest {
 
         # docs fixtures
         New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'docs\case-study') | Out-Null
-        $htmlText = '<div class="eyebrow">harness-bootstrap ' + $mid + ' v1.0.0</div>' + $nl +
+        $htmlText = '<div class="eyebrow">harness-lifecycle ' + $mid + ' v1.0.0</div>' + $nl +
                     'built from v1.0.0 code' + $nl
         [System.IO.File]::WriteAllText((Join-Path $tmp 'docs\usage-and-mechanism.html'), $htmlText, (New-Object System.Text.UTF8Encoding($false)))
         $csText = 'quote;' + $csCn + ' v1.0.0,' + $nl + 'record date v0.9.0 stays' + $nl
@@ -472,7 +472,7 @@ function Invoke-ReleaseSelfTest {
 
         $verAfter = [System.IO.File]::ReadAllText((Join-Path $tmp 'VERSION'), [System.Text.Encoding]::UTF8)
         $verLines = $verAfter -split "\r?\n"
-        Assert-True ($verLines[0] -eq 'HARNESS-BOOTSTRAP VERSION 2.0.0') ('VERSION header is: ' + $verLines[0]) $fails
+        Assert-True ($verLines[0] -eq 'HARNESS-LIFECYCLE VERSION 2.0.0') ('VERSION header is: ' + $verLines[0]) $fails
         Assert-True ([regex]::IsMatch($verAfter, '(?m)^2\.0\.0\s{2,}\(fixture release\)$')) 'new changelog entry missing or malformed' $fails
         Assert-True ($verAfter.Contains('- added line one') -and $verAfter.Contains('- added line two')) 'notes not inserted into VERSION' $fails
 

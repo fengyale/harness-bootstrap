@@ -1,5 +1,5 @@
 <#
-  run-all.ps1 -- run every behavioural test of harness-bootstrap
+  run-all.ps1 -- run every behavioural test of harness-lifecycle
 
   WHY
     verify-package.ps1 -Fast catches static drift before a commit, but the

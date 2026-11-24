@@ -60,7 +60,7 @@ body:
       options:
         - Existing codebase
         - New project (no code yet)
-        - The harness-bootstrap package itself
+        - The harness-lifecycle package itself
     validations:
       required: true
 
