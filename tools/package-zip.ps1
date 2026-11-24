@@ -1,5 +1,5 @@
 <#
-  package-zip.ps1 -- build dist\harness-bootstrap-<version>.zip
+  package-zip.ps1 -- build dist\harness-lifecycle-<version>.zip
 
   WHY
     The release zip is the artifact another project consumes. Building it by hand
@@ -18,7 +18,7 @@
     tests/ and tools/ (maintainer-only), .github/, README*, CONTRIBUTING.md,
     releases.json, the root .gitignore and the "why" essay. Humans who want
     those use the GitHub source archive.
-    The zip root is harness-bootstrap\ and entry names use / (not \), so the
+    The zip root is harness-lifecycle\ and entry names use / (not \), so the
     archive unpacks correctly on non-Windows machines too.
 
   USAGE
@@ -50,10 +50,10 @@ $includeDirs = @('references', 'assets')
 
 if (-not $OutDir) { $OutDir = Join-Path $root 'dist' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$zipPath = Join-Path $OutDir ('harness-bootstrap-' + $version + '.zip')
+$zipPath = Join-Path $OutDir ('harness-lifecycle-' + $version + '.zip')
 
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('hb-pack-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-$dst = Join-Path $stage 'harness-bootstrap'
+$dst = Join-Path $stage 'harness-lifecycle'
 
 try {
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
@@ -90,7 +90,7 @@ try {
     $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
     try {
         foreach ($f in $files) {
-            $rel = 'harness-bootstrap/' + $f.FullName.Substring($dst.Length + 1).Replace('\', '/')
+            $rel = 'harness-lifecycle/' + $f.FullName.Substring($dst.Length + 1).Replace('\', '/')
             $entry = $zip.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
             $out = $entry.Open()
             try {

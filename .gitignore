@@ -9,6 +9,7 @@ baseline/
 
 # local working notes (not part of the package)
 TODO-*.md
+/.trae/documents/
 
 # local tool outputs (scratch; never part of the package)
 .drawio-tmp/

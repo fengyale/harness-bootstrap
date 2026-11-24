@@ -1,5 +1,5 @@
 <#
-  verify-package.ps1 -- harness-bootstrap checks itself before every commit
+  verify-package.ps1 -- harness-lifecycle checks itself before every commit
 
   WHY
     This package installs gates into other projects but had no gate of its own.

@@ -286,7 +286,7 @@ Check 'agents-delta accepts the bold command-table label' ($LASTEXITCODE -eq 0)
 # remove the ps1-only requirement in favour of requiredAnyOf.
 Set-Content -LiteralPath "$proj\scripts\harness-required.json" -Value '{"_note":"old install","required":["AGENTS.md","scripts/red-line-scan.ps1"]}' -Encoding UTF8
 # ------------------------------------------------------------ fake package
-Set-Content -LiteralPath "$newPkg\VERSION" -Value 'HARNESS-BOOTSTRAP VERSION 9.9.9' -Encoding ASCII
+Set-Content -LiteralPath "$newPkg\VERSION" -Value 'HARNESS-LIFECYCLE VERSION 9.9.9' -Encoding ASCII
 # update-harness fails early when the package's checker is missing, so the fake
 # package must carry it even though this test runs with -SkipVerify.
 Copy-Item -LiteralPath "$pkg\assets\scripts\verify-harness.ps1" -Destination "$newPkg\assets\scripts\verify-harness.ps1"
@@ -612,6 +612,62 @@ Check 'legacy summaryContent: acceptance array kept' (@($oldMerged.summaryConten
 Check 'legacy summaryContent: tasks array kept' (@($oldMerged.summaryContent.tasks) -contains $pkgCfg.summaryContent.tasks[0])
 $oldDry2 = Invoke-Harness "$projOld\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projOld } | Out-String
 Check 'legacy summaryContent: second dry-run is clean' (-not ($oldDry2 -match 'summaryContent\.impact\s*\+'))
+
+Write-Host ''
+Write-Host '=== skill dir version inference (old/new) ===' -ForegroundColor Cyan
+$projVer = Join-Path $base 'version-infer'
+Copy-Item -LiteralPath $proj -Destination $projVer -Recurse
+Remove-Item -LiteralPath "$projVer\.harness\.installed-version" -Force -ErrorAction SilentlyContinue
+$oldSkillDir = Join-Path $projVer '.trae\skills\harness-bootstrap'
+$newSkillDir = Join-Path $projVer '.trae\skills\harness-lifecycle'
+New-Item -ItemType Directory -Force -Path $oldSkillDir | Out-Null
+Set-Content -LiteralPath (Join-Path $oldSkillDir 'VERSION') -Value 'HARNESS-BOOTSTRAP VERSION 1.2.3' -Encoding ASCII
+$verOutOld = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+Check 'skill dir inference: legacy path works' ($verOutOld -match 'version:\s+1\.2\.3 ->')
+Check 'skill dir inference: legacy dir is named' ($verOutOld -match 'legacy harness-bootstrap skill dir')
+New-Item -ItemType Directory -Force -Path $newSkillDir | Out-Null
+Set-Content -LiteralPath (Join-Path $newSkillDir 'VERSION') -Value 'HARNESS-LIFECYCLE VERSION 1.2.4' -Encoding ASCII
+$verOutBoth = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+Check 'skill dir inference: new path wins when both exist' ($verOutBoth -match 'version:\s+1\.2\.4 ->')
+Check 'skill dir inference: both dirs are warned' ($verOutBoth -match '\[WARN\] both harness-lifecycle and harness-bootstrap')
+Remove-Item -LiteralPath $oldSkillDir -Recurse -Force
+$verOutNew = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+Check 'skill dir inference: new path works without legacy' ($verOutNew -match 'version:\s+1\.2\.4 ->')
+# Claude Code uses the same platform-entry convention. Cover both the new path
+# and the both-dirs warning so the compatibility promise is not .trae-only.
+$claudeNew = Join-Path $projVer '.claude\skills\harness-lifecycle'
+$claudeOld = Join-Path $projVer '.claude\skills\harness-bootstrap'
+Remove-Item -LiteralPath $newSkillDir -Recurse -Force
+New-Item -ItemType Directory -Force -Path $claudeNew | Out-Null
+Set-Content -LiteralPath (Join-Path $claudeNew 'VERSION') -Value 'HARNESS-LIFECYCLE VERSION 1.2.5' -Encoding ASCII
+$verOutClaude = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+Check 'skill dir inference: claude path works' ($verOutClaude -match 'version:\s+1\.2\.5 ->')
+New-Item -ItemType Directory -Force -Path $claudeOld | Out-Null
+Set-Content -LiteralPath (Join-Path $claudeOld 'VERSION') -Value 'HARNESS-BOOTSTRAP VERSION 1.2.6' -Encoding ASCII
+$verOutClaudeBoth = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+Check 'skill dir inference: claude new path wins' ($verOutClaudeBoth -match 'version:\s+1\.2\.5 ->')
+Check 'skill dir inference: claude both dirs warned' ($verOutClaudeBoth -match '\[WARN\] both harness-lifecycle and harness-bootstrap')
+# Apply must keep both platform entries and advance the version marker: the
+# upgrade only warns, it never deletes a skill directory.
+Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer; Apply = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
+Check 'skill dir inference: apply keeps the legacy dir' (Test-Path -LiteralPath $claudeOld)
+Check 'skill dir inference: apply keeps the new dir' (Test-Path -LiteralPath $claudeNew)
+Check 'skill dir inference: apply advances installed-version' (
+    (Get-Content -LiteralPath "$projVer\.harness\.installed-version" -TotalCount 1 -Encoding ASCII) -eq '9.9.9')
+
+# A project may disable the content checks with summaryContent:null. The merge
+# must preserve that choice instead of failing on Add-Member.
+$projNull = Join-Path $base 'null-summary'
+Copy-Item -LiteralPath $proj -Destination $projNull -Recurse
+$nullCfg = (Get-Content -LiteralPath "$projNull\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+$nullCfg.summaryContent = $null
+[System.IO.File]::WriteAllText("$projNull\scripts\harness-required.json", (($nullCfg | ConvertTo-Json -Depth 10) + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+$nullDry = Invoke-Harness "$projNull\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projNull } | Out-String
+Check 'summaryContent null: dry-run explains it is left as-is' ($nullDry -match 'summaryContent is null/non-object')
+Invoke-Harness "$projNull\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projNull; Apply = $true; SkipHooks = $true; SkipVerify = $true } | Out-String
+Check 'summaryContent null: apply exits 0' ($LASTEXITCODE -eq 0)
+$nullMerged = (Get-Content -LiteralPath "$projNull\scripts\harness-required.json" -Raw -Encoding UTF8) | ConvertFrom-Json
+Check 'summaryContent null: stays null' ($null -eq $nullMerged.summaryContent)
 
 # R5/R6 check cells and the record-association line are copied into the project
 # by the known-line merge. If the template wraps that prose in <...>, every

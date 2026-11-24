@@ -30,7 +30,7 @@ def request(method, path, token, payload=None):
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    req.add_header("User-Agent", "harness-bootstrap-release-tool")
+    req.add_header("User-Agent", "harness-lifecycle-release-tool")
     if data:
         req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -48,7 +48,7 @@ def build_body(rel):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default="fengyale/harness-bootstrap")
+    ap.add_argument("--repo", default="fengyale/harness-lifecycle")
     ap.add_argument("--from", dest="since", default=None,
                     help="only publish this version and older (e.g. 1.8.0)")
     ap.add_argument("--dry-run", action="store_true")

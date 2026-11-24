@@ -54,9 +54,9 @@
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-      -PackagePath D:\path\to\new\harness-bootstrap
+      -PackagePath D:\path\to\new\harness-lifecycle
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\update-harness.ps1 `
-      -PackagePath D:\path\to\new\harness-bootstrap -Apply
+      -PackagePath D:\path\to\new\harness-lifecycle -Apply
     ... -Apply -UpdateSkills
     ... -Apply -MergeSkills                 (keep project bindings, take new package text)
     ... -Apply -UpdateSkills -ForceSkills   (also replace compiled skills)
@@ -141,12 +141,28 @@ if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\verify-harness.ps1'
     Write-Host "package is incomplete: assets\scripts\verify-harness.ps1 missing" -ForegroundColor Red
     Complete-Harness 1
 }
-# A project-level skill install places the package source under .trae/skills.
-# Templates are not project assets; warn instead of silently moving/removing a
-# directory the user may have committed deliberately.
-$projectSkill = Join-Path $rootPath '.trae\skills\harness-bootstrap'
-if (Test-Path -LiteralPath $projectSkill) {
-    Write-Host '[INFO] project-level harness skill found; the assets folder is package source, not project facts (scans exclude .trae).' -ForegroundColor Yellow
+# A project-level skill install places the package source under a platform
+# skills dir. New installs use harness-lifecycle; older installs still use
+# harness-bootstrap. Keep this list in step with the VERSION fallback below.
+$platformSkillDirs = @(
+    (Join-Path $rootPath '.trae\skills'),
+    (Join-Path $rootPath '.claude\skills')
+)
+$skillFound = $false
+foreach ($skillsDir in $platformSkillDirs) {
+    $legacySkill = Join-Path $skillsDir 'harness-bootstrap'
+    $currentSkill = Join-Path $skillsDir 'harness-lifecycle'
+    $hasLegacy = Test-Path -LiteralPath $legacySkill
+    $hasCurrent = Test-Path -LiteralPath $currentSkill
+    if ($hasLegacy -and $hasCurrent) {
+        Write-Host ('[WARN] both harness-lifecycle and harness-bootstrap skill dirs exist under ' + $skillsDir + '; confirm the new one loads, then remove the legacy one (the upgrade does not delete it).') -ForegroundColor Yellow
+    } elseif ($hasLegacy) {
+        Write-Host ('[INFO] legacy harness-bootstrap skill dir found under ' + $skillsDir + '; the upgrade still works, but new installs should use harness-lifecycle.') -ForegroundColor Yellow
+    }
+    if ($hasLegacy -or $hasCurrent) { $skillFound = $true }
+}
+if ($skillFound) {
+    Write-Host '[INFO] project-level harness skill found; the assets folder is package source, not project facts (scans exclude .trae/.claude).' -ForegroundColor Yellow
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $rootPath '.harness'))) {
@@ -180,6 +196,8 @@ if (-not $newVersion) {
 $installedVersion = Read-Version (Join-Path $rootPath '.harness\.installed-version')
 if (-not $installedVersion) {
     foreach ($p in @(
+        (Join-Path $rootPath '.trae\skills\harness-lifecycle\VERSION'),
+        (Join-Path $rootPath '.claude\skills\harness-lifecycle\VERSION'),
         (Join-Path $rootPath '.trae\skills\harness-bootstrap\VERSION'),
         (Join-Path $rootPath '.claude\skills\harness-bootstrap\VERSION')
     )) {
@@ -252,7 +270,9 @@ function Get-RequiredDelta {
         # already exists but predates a renamed template heading, the generic
         # "block present" check above would hide the drift; name the needles.
         if (($src.PSObject.Properties.Name -contains 'summaryContent') -and
-            ($dst.PSObject.Properties.Name -contains 'summaryContent')) {
+            ($dst.PSObject.Properties.Name -contains 'summaryContent') -and
+            ($null -ne $dst.summaryContent) -and
+            ($dst.summaryContent -is [pscustomobject])) {
             foreach ($field in $script:SummaryContentUnionFields) {
                 $srcVals = @(Get-JsonStringArray $src.summaryContent $field)
                 $dstVals = @(Get-JsonStringArray $dst.summaryContent $field)
@@ -261,6 +281,11 @@ function Get-RequiredDelta {
                     $parts += ('summaryContent.' + $field + ' + ' + ($missing -join ', '))
                 }
             }
+        } elseif (($src.PSObject.Properties.Name -contains 'summaryContent') -and
+                  ($dst.PSObject.Properties.Name -contains 'summaryContent')) {
+            # A project may disable the content checks with null (or a malformed
+            # value); the merge preserves that choice instead of failing.
+            $parts += 'summaryContent is null/non-object; left as-is (content checks disabled)'
         }
         # groundingStrict is a migration default, not a copy: a fresh install is
         # strict, but an upgraded project would go red on day one (its installed
@@ -658,8 +683,12 @@ function Merge-RequiredJson {
     # heading must reach an upgraded project, while project-specific aliases
     # stay. Union the known arrays; unknown keys and every other config block
     # remain project-owned.
+    # A project may set summaryContent to null/string to disable the content
+    # checks; preserve that explicit choice instead of failing on Add-Member.
     if (($src.PSObject.Properties.Name -contains 'summaryContent') -and
-        ($cfg.PSObject.Properties.Name -contains 'summaryContent')) {
+        ($cfg.PSObject.Properties.Name -contains 'summaryContent') -and
+        ($null -ne $cfg.summaryContent) -and
+        ($cfg.summaryContent -is [pscustomobject])) {
         foreach ($field in $script:SummaryContentUnionFields) {
             $srcVals = @(Get-JsonStringArray $src.summaryContent $field)
             if ($srcVals.Count -eq 0) { continue }

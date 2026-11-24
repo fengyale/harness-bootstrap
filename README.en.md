@@ -1,11 +1,11 @@
-# Harness Bootstrap
+# Harness Lifecycle
 
-Installs an executable constraint system into an AI coding project: rules, gates, evidence, metrics and review.
+Builds and maintains an executable constraint system for AI coding projects: rules, guidance, gates, evidence, metrics and review.
 
 It probes the project and generates `AGENTS.md`, rules, skills and wiki pages from evidence. After that, the conventions are enforced by scripts and git hooks, not by reminders.
 
-[![package gate](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-bootstrap/actions/workflows/verify.yml)
-[![version](https://img.shields.io/github/v/release/fengyale/harness-bootstrap?display_name=tag)](https://github.com/fengyale/harness-bootstrap/releases)
+[![package gate](https://github.com/fengyale/harness-lifecycle/actions/workflows/verify.yml/badge.svg)](https://github.com/fengyale/harness-lifecycle/actions/workflows/verify.yml)
+[![version](https://img.shields.io/github/v/release/fengyale/harness-lifecycle?display_name=tag)](https://github.com/fengyale/harness-lifecycle/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![powershell](https://img.shields.io/badge/powershell-5.1%20%2B%20pwsh7-blue.svg)](references/平台适配.md)
 
@@ -33,8 +33,8 @@ All six can be decided before delivery. Nobody had written the decision down. `A
 Let it prove itself before installing anything:
 
 ```powershell
-git clone https://github.com/fengyale/harness-bootstrap.git
-cd harness-bootstrap
+git clone https://github.com/fengyale/harness-lifecycle.git
+cd harness-lifecycle
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 ```
 
@@ -47,7 +47,7 @@ Output:
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
-[PASS] contract   68 rule/script/doc contract(s) hold
+[PASS] contract   70 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
@@ -72,11 +72,13 @@ Six suites build throw-away projects under `%TEMP%` and assert real exit codes: 
 
 | Platform | Location |
 | --- | --- |
-| TRAE | `.trae/skills/harness-bootstrap/` |
-| Claude Code | `.claude/skills/harness-bootstrap/` |
-| Codex CLI | `.agents/skills/harness-bootstrap/` (subagents live in `.codex/agents/*.toml` and need to be rewritten as TOML) |
-| CodeBuddy | `.codebuddy/skills/harness-bootstrap/` (subagents live in `.codebuddy/agents/*.md` and can be reused as is) |
+| TRAE | `.trae/skills/harness-lifecycle/` |
+| Claude Code | `.claude/skills/harness-lifecycle/` |
+| Codex CLI | `.agents/skills/harness-lifecycle/` (subagents live in `.codex/agents/*.toml` and need to be rewritten as TOML) |
+| CodeBuddy | `.codebuddy/skills/harness-lifecycle/` (subagents live in `.codebuddy/agents/*.md` and can be reused as is) |
 | Other / unknown | Reference `SKILL.md` in index mode |
+
+> **Architecture facade (1.32.0)**: the architecture facade and entry naming are unified; the upgrade script still recognizes historical entries. New installs should use the current entry directory; if a historical entry still exists, confirm the current one loads before removing it. The upgrade script only detects; it never moves or deletes skill directories.
 
 `tools/` is for this package only and is never copied into a project.
 
@@ -229,7 +231,7 @@ The case is a 12-module Java system with 182 legacy violations and 2 test files.
 
 ## Difference from template packs
 
-A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 68 cross-file contracts and behavioural tests.
+A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 70 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

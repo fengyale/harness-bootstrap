@@ -3,12 +3,12 @@
 
   WHY
     The package sells "the gate is independent of the editor". It must obey the
-    same rule: before every commit of harness-bootstrap itself, verify-package.ps1
+    same rule: before every commit of harness-lifecycle itself, verify-package.ps1
     -Fast runs automatically. That is what turns "we reviewed it once" into
     "no commit can reintroduce the drift".
 
   WHAT IT WRITES
-    <git-dir>/hooks/pre-commit  (POSIX sh, LF), marker: harness-bootstrap self gate
+    <git-dir>/hooks/pre-commit  (POSIX sh, LF), marker: harness-lifecycle self gate
     An existing hook is backed up to pre-commit.bak-harness first and restored by -Remove.
 
   USAGE
@@ -33,7 +33,7 @@ if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 
 # This hook is package-only. If the package was copied under a host project
-# (e.g. <host>/.trae/skills/harness-bootstrap), installing here would write a
+# (e.g. <host>/.trae/skills/harness-lifecycle), installing here would write a
 # hook into the HOST repository that points at a tools/ path that does not exist
 # there -- every host commit would be refused. So require the package to be the
 # repository root, not just any directory inside one.
@@ -57,7 +57,8 @@ if (-not [System.IO.Path]::IsPathRooted($hooksDir)) {
 
 $hookPath = Join-Path $hooksDir 'pre-commit'
 $backup   = "$hookPath.bak-harness"
-$marker   = 'harness-bootstrap self gate'
+$marker   = 'harness-lifecycle self gate'
+$legacyMarker = 'harness-bootstrap self gate'
 
 # --------------------------------------------------------------- remove
 if ($Remove) {
@@ -66,7 +67,8 @@ if ($Remove) {
         exit 0
     }
     $body = [System.IO.File]::ReadAllText($hookPath, [System.Text.Encoding]::UTF8)
-    if ($body -notmatch [regex]::Escape($marker)) {
+    if (($body -notmatch [regex]::Escape($marker)) -and
+        ($body -notmatch [regex]::Escape($legacyMarker))) {
         Write-Host "kept pre-commit: not installed by this package" -ForegroundColor DarkGray
         exit 0
     }
@@ -92,7 +94,7 @@ if ($hooksOverride) {
 
 $hookBody = @'
 #!/bin/sh
-# harness-bootstrap self gate: verify the package before every commit
+# harness-lifecycle self gate: verify the package before every commit
 # installed by tools/install-self-gate.ps1 -- edit that script, not this file
 ROOT="$(git rev-parse --show-toplevel)"
 if command -v powershell >/dev/null 2>&1; then
@@ -105,7 +107,7 @@ else
 fi
 STATUS=$?
 if [ $STATUS -ne 0 ]; then
-  echo "harness-bootstrap package gate blocked: fix the FAIL rows above." >&2
+  echo "harness-lifecycle package gate blocked: fix the FAIL rows above." >&2
 fi
 exit $STATUS
 '@ -replace "`r`n", "`n"
@@ -114,6 +116,8 @@ if (Test-Path -LiteralPath $hookPath) {
     $existing = [System.IO.File]::ReadAllText($hookPath, [System.Text.Encoding]::UTF8)
     if ($existing -match [regex]::Escape($marker)) {
         Write-Host "self gate already present: $hookPath" -ForegroundColor DarkGray
+    } elseif ($existing -match [regex]::Escape($legacyMarker)) {
+        Write-Host "upgrading legacy self gate hook: $hookPath" -ForegroundColor Yellow
     } elseif (-not (Test-Path -LiteralPath $backup)) {
         Copy-Item -LiteralPath $hookPath -Destination $backup
         Write-Host "existing pre-commit backed up to $backup"
