@@ -465,6 +465,25 @@
       "file": "assets/scripts/metrics.ps1",
       "pattern": "\\.harness\\\\reviews\\.md",
       "why": "评审发现必须跨任务沉淀到 tracked 的 .harness/reviews.md，否则指纹只活在单个 summary 里。"
+    },
+    {
+      "id": "skill-evidence-config",
+      "file": "assets/scripts/harness-required.json",
+      "patterns": ["\"skillEvidence\"", "\"core\"", "\"log\"", "skill-calls\\.jsonl"],
+      "why": "core 技能清单与调用日志路径是 loaded_skills 证据链的单一真源；模板/规则/README 都跟它对齐，漂移会让 check-summary 与文档各说一套。"
+    },
+    {
+      "id": "skill-evidence-no-hardcode",
+      "file": "assets/scripts/check-summary.ps1",
+      "pattern": "Get-CoreSkills",
+      "forbid": "@\\('request-analysis', 'coding-skill', 'expert-reviewer'\\)",
+      "why": "core 列表只能来自 harness-required.json；脚本里再写死一份会让配置成为第二副本，升级后静默漂移。"
+    },
+    {
+      "id": "skill-evidence-readme",
+      "file": "README.md",
+      "pattern": "record-skill\\.ps1 -Skill",
+      "why": "README 的已知限制必须与证据链行为一致：说明如何记录、以及它只是结构化申报而非遥测。"
     }
   ]
 }

@@ -28,6 +28,16 @@ All six can be decided before delivery. Nobody had written the decision down. `A
 
 > Deeper root-cause analysis: `references/核心论述.md`; the skill and gate behind each failure mode: `docs/usage-and-mechanism.html` section 3.
 
+## Scope and known limits
+
+It is not a code generator and does not replace human review; it turns "the conditions that must hold before delivery" into executable gates and records.
+
+- `loaded_skills` is **structured self-reporting**, not platform telemetry: call `scripts\record-skill.ps1 -Skill <name>` at the moment a Skill is invoked, and `check-summary` cross-checks the claim against the log (a missing record is a WARN). It proves a record exists, not that the model read the file; the `metrics.ps1` load rate still comes from the summary.
+- Stages 5/7 require `test_skip_reason` in `summary.md` when no runnable test command exists; missing reason is a FAIL, a written reason downgrades to WARN (never PASS), counted separately.
+- `suggest-flow` scopes by the current feature (`.git/harness-current-task` or `-Feature`); module names come from module cards or path inference and are candidates, not project truth.
+- `harness-start` duplicate detection is keyword + path evidence, not code-level analysis; `path-match` outranks `keyword-only`.
+- Stage gates check structure, counts and evidence paths; the semantic truth of a conclusion still relies on review.
+
 ## Quick start
 
 Let it prove itself before installing anything:
@@ -41,13 +51,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 Output:
 
 ```text
-[PASS] parse      36 .ps1 file(s) parse
+[PASS] parse      37 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
-[PASS] contract   70 rule/script/doc contract(s) hold
+[PASS] contract   73 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
@@ -316,7 +326,7 @@ The case is a 12-module Java system with 182 legacy violations and 2 test files.
 
 ## Difference from template packs
 
-A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 70 cross-file contracts and behavioural tests.
+A template pack assumes you know what you need and hands you a set of files. This gathers evidence first, then decides, and ships gates that block, field checks and metrics. A template pack does not check itself; this repository has its own pre-commit, 73 cross-file contracts and behavioural tests.
 
 ## Platforms and limits
 

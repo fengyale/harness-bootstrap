@@ -32,7 +32,7 @@ AI 写代码很快，交付慢。慢的地方大多不在"不会写"，而在下
 
 它不是代码生成器，也不替代人工评审；它把“交付前必须成立的条件”变成可执行的门禁和记录。
 
-- `loaded_skills` 是**自报字段**，不是遥测；门禁无法证明 Skill 工具真的被调用，只能要求记录与事实一致。`metrics.ps1` 的加载率同样来自自报。
+- `loaded_skills` 是**结构化自报**，不是平台遥测：调用 Skill 时用 `scripts\record-skill.ps1 -Skill <名>` 追加一条记录，`check-summary` 会交叉校验“声明”与“记录”是否一致（缺记录只报 WARN）。它证明的是“有一次结构化申报”，不能证明模型真的读过文件；`metrics.ps1` 的加载率仍来自 summary 自报。
 - 阶段 5/7 在**没有可执行测试命令**时，`summary.md` 必须写 `test_skip_reason`，结果降为 `WARN`；没有原因仍 `FAIL`。`WARN` 不是 `PASS`，报告会单独计数。
 - `suggest-flow` 默认按当前特性（`.git/harness-current-task` 或 `-Feature`）过滤；模块名来自模块卡或路径推断，属于候选，不是项目真相。
 - `harness-start` 的重复检测是**关键词 + 路径证据**，不是代码级重复分析；`path-match` 比 `keyword-only` 更值得优先核对。
@@ -51,20 +51,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-package.ps1
 输出：
 
 ```text
-[PASS] parse      36 .ps1 file(s) parse
+[PASS] parse      37 .ps1 file(s) parse
 [PASS] encoding   ASCII without BOM, or UTF-8 with BOM
 [PASS] json       4 JSON file(s) parse
 [PASS] version    VERSION and releases.json both say <version>
 [PASS] structure  required files present, package-only files absent
 [PASS] markers    25 template skill(s) carry balanced package/project blocks; 2 harness:upgrade block(s) well formed
-[PASS] contract   70 rule/script/doc contract(s) hold
+[PASS] contract   73 rule/script/doc contract(s) hold
 [PASS] docs       README counts, reference numbers and page version match the files
 [PASS] smoke      install -> stage 4 -> unfilled summary rejected -> SQL missing/hollow/no-op probes -> uninstall, in a temp copy
 
 package gate: OPEN
 ```
 
-70 条契约只查一件事，同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这类改动最常见的失手方式，是改一处、漂五处。
+73 条契约只查一件事，同一条规则在脚本、JSON、`SKILL.md`、`AGENTS.md` 和规则文件里是否一致。这类改动最常见的失手方式，是改一处、漂五处。
 
 再看行为测试：
 
@@ -327,7 +327,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 `
 
 ## 和模板包的区别
 
-模板包假设你知道自己要什么，交给你一组文件。这里先从项目取证再决定该有什么，交付的是能拦人的门禁、字段校验和度量。模板包不检查自己，这个仓库有自己的 pre-commit、70 条跨文件契约和行为测试。
+模板包假设你知道自己要什么，交给你一组文件。这里先从项目取证再决定该有什么，交付的是能拦人的门禁、字段校验和度量。模板包不检查自己，这个仓库有自己的 pre-commit、73 条跨文件契约和行为测试。
 
 ## 平台与限制
 

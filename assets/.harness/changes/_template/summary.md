@@ -22,7 +22,7 @@
 ## 第一阶段：先落盘（动代码前必填）
 
 - 日期：`YYYY-MM-DD`（`metrics.ps1` 按这个日期分窗口；不写就退回文件修改时间并标 undated）
-- 加载技能：`loaded_skills: <request-analysis, coding-skill>`（记录**全流程**加载过的技能；收尾前再核一次，中后段的 `sql-review` / `expert-reviewer` / 评审子智能体也要补上。列出的技能必须真实存在于 `.harness/skills/`，否则 `check-summary` 会 WARN；项目已安装的 core 技能 `request-analysis` / `coding-skill` / `expert-reviewer` 在阶段 10 应出现在列表，确实跳过就写 `load_skip_reason`）
+- 加载技能：`loaded_skills: <request-analysis, coding-skill>`（记录**全流程**加载过的技能；收尾前再核一次，中后段的 `sql-review` / `expert-reviewer` / 评审子智能体也要补上。列出的技能必须真实存在于 `.harness/skills/`，否则 `check-summary` 会 WARN；项目已安装的 core 技能 `request-analysis` / `coding-skill` / `expert-reviewer` 在阶段 10 应出现在列表，确实跳过就写 `load_skip_reason`。每次真正调用技能时用 `scripts\record-skill.ps1 -Skill <名>` 记一条，阶段 10 会对「声明但没有调用记录」的技能报 WARN）
 - 未加载技能原因：`load_skip_reason: <一句话；loaded_skills 为 none 时必填>`
 - 触及模块：`touched_modules: <module1, module2>`
 - 流程档位：`flow: <L2|L3>`（L2 标准 / L3 完整，判据见 `.harness/rules/开发流程规范.md` 第 1.1 节；L1 不建本文件，只写 `_small.md`）

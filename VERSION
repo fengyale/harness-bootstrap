@@ -1,7 +1,15 @@
-HARNESS-LIFECYCLE VERSION 1.33.2
+HARNESS-LIFECYCLE VERSION 1.33.3
 
 changelog
 ---------
+1.33.3  (技能调用证据链与 core 词表单源化)
+- 新增 scripts/record-skill.ps1：调用技能时追加结构化证据（ts / skill / feature）到 skill-calls.jsonl，feature 缺省读 harness-current-task 指针，-SelfTest 覆盖
+- check-summary：core 技能清单与日志路径改从 harness-required.json 的 skillEvidence 读取，不再在脚本里写死；有调用日志时对「声明了但无调用记录」的技能报 WARN（不 FAIL），保留渐进采用
+- 单一真源：harness-required.json 新增 skillEvidence.core / skillEvidence.log；summary 模板、开发流程规范、SKILL、README（中/英）同步证据链口径，明确它是结构化申报而非平台遥测
+- 升级：skillEvidence 与 record-skill.ps1 纳入自动合并/required，dry-run 会报新增
+- 契约：新增 3 条跨文件契约锁定 skillEvidence 单一真源、禁止脚本内硬编码 core 名单、README 口径同步
+- 回归：regression 新增证据链生效/消失用例；test-update 覆盖新配置块 dry-run
+
 1.33.2  (技能名校验读取 frontmatter)
 - check-summary：技能存在性校验改为读取 SKILL.md frontmatter 的 name；数字前缀目录（14-sql-review、03-redis-cache 等）不再误报，读不到时退回去前缀目录名
 - 测试：regression 增加带数字前缀目录 + frontmatter name 的用例，断言不再误报

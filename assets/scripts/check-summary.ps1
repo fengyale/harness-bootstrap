@@ -38,9 +38,12 @@
 
   SKILL COVERAGE
     loaded_skills names are checked against .harness/skills/; an unknown name
-    is a WARN. At final, installed core skills (request-analysis /
-    coding-skill / expert-reviewer) should be listed, or load_skip_reason
-    should explain the skip; otherwise a WARN is printed.
+    is a WARN. At final, installed core skills (from skillEvidence.core in
+    harness-required.json) should be listed, or load_skip_reason should explain
+    the skip; otherwise a WARN is printed. When the skillEvidence.log file
+    exists, loaded skills without a matching call record are also a WARN. This
+    is structured reporting, not telemetry: it proves a record exists, not that
+    the model read the file.
 
   EXIT CODE
     0 = all required fields valid / 1 = at least one field invalid
@@ -238,6 +241,44 @@ function Get-ContentNeedles {
     $p = $script:contentCfg.PSObject.Properties[$Name]
     if (-not $p) { return @() }
     return @($p.Value | ForEach-Object { [string]$_ } | Where-Object { $_.Length -gt 0 })
+}
+
+# skillEvidence lives in the same config file (Chinese prose + the core list),
+# so this ASCII script has no second copy of the core skill names. An old
+# project without the block falls back to an empty core list and no log check.
+$script:skillEvidence = $null
+if ($cfgAll -and $cfgAll.PSObject.Properties['skillEvidence']) {
+    $script:skillEvidence = $cfgAll.PSObject.Properties['skillEvidence'].Value
+}
+function Get-CoreSkills {
+    if (-not $script:skillEvidence) { return @() }
+    return @($script:skillEvidence.core | ForEach-Object { [string]$_ } | Where-Object { $_.Length -gt 0 })
+}
+function Get-SkillCallLogPath {
+    if (-not $script:skillEvidence -or -not $script:skillEvidence.log) { return '' }
+    return [string]$script:skillEvidence.log
+}
+# Read the skill names recorded by record-skill.ps1 for this feature. The log is
+# append-only JSONL; a malformed line is skipped (never trusted as evidence).
+function Get-RecordedSkillNames {
+    param([string]$FeatureName)
+    $rel = Get-SkillCallLogPath
+    if (-not $rel) { return @() }
+    $full = Join-Path $rootPath ($rel -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $full)) { return @() }
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($line in @([System.IO.File]::ReadAllLines($full, [System.Text.Encoding]::UTF8))) {
+        if (-not $line -or -not $line.Trim()) { continue }
+        try {
+            $entry = $line | ConvertFrom-Json
+            if (-not $entry.skill) { continue }
+            $feat = if ($entry.feature) { [string]$entry.feature } else { '' }
+            if (-not $FeatureName -or -not $feat -or $feat -eq $FeatureName) {
+                $out.Add([string]$entry.skill)
+            }
+        } catch { }
+    }
+    return @($out | Select-Object -Unique)
 }
 
 # Body of a "## heading" section: from the matching heading to the next heading
@@ -730,7 +771,7 @@ if ($installedSkills.Count -gt 0 -and $loadedNames.Count -gt 0) {
         }
     }
     if ($Stage -eq 'final') {
-        $coreSkills = @('request-analysis', 'coding-skill', 'expert-reviewer')
+        $coreSkills = @(Get-CoreSkills)
         $missingCore = @($coreSkills | Where-Object {
             ($installedSkills -contains $_) -and ($loadedNames -notcontains $_)
         })
@@ -740,6 +781,21 @@ if ($installedSkills.Count -gt 0 -and $loadedNames.Count -gt 0) {
                 Write-Host ("[WARN] core skills skipped: " + ($missingCore -join ', ') + " (reason: " + $skipReason + ")")
             } else {
                 Write-Host ("[WARN] core skills not listed in loaded_skills: " + ($missingCore -join ', ') + " (write load_skip_reason if intentionally skipped)")
+            }
+        }
+    }
+
+    # Cross-check the claim against the record-skill log. Only runs when the log
+    # exists, so an upgraded project with no adoption is not flooded with WARNs.
+    $logPath = Get-SkillCallLogPath
+    if ($logPath) {
+        $logFull = Join-Path $rootPath ($logPath -replace '/', '\')
+        if (Test-Path -LiteralPath $logFull) {
+            $recorded = @(Get-RecordedSkillNames -FeatureName $Feature)
+            foreach ($n in $loadedNames) {
+                if ($recorded -notcontains $n) {
+                    Write-Host ("[WARN] loaded_skills has no record-skill call record: " + $n)
+                }
             }
         }
     }

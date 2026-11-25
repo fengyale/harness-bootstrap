@@ -275,6 +275,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 2. **这个项目该启用哪些技能？** 按 `references/落地策略.md` 的默认启用集：
    - **必上 3 个**：`request-analysis`、`coding-skill`、`expert-reviewer`
    - **开工第一条命令**：L2/L3 先跑 `scripts\harness-start.ps1 -Feature 特性名 -Requirement "需求原文"`；它没有通过 Stage 1，不得 Edit/Write 源码。用户说「开始做」不等于跳过这一步。
+   - **每次调用技能后**：跑 `scripts\record-skill.ps1 -Skill <技能名>` 记一条证据；`check-summary` 会拿它和 summary 的 `loaded_skills` 交叉核对（无记录只 WARN）。这是结构化申报，不是模型调用遥测。
    - **按需 1–2 个**：从 `biz-dev/` 挑这个项目**最高频**的专题
    - **其余先不建**——技能清单每轮占上下文。同一条纠正出现第 2 次，再加一个。
 

@@ -51,6 +51,11 @@
     "impact": ["影响面", "业务影响", "技术变更清单"],
     "tasks": ["任务拆分"]
   },
+  "skillEvidence": {
+    "_说明": "loaded_skills 调用证据链的单一真源。core 是阶段 10 应加载的核心技能清单；log 是 record-skill.ps1 追加调用记录的 JSONL 路径。check-summary.ps1 交叉校验 summary 的 loaded_skills 与该日志，只在有日志时对未记录的技能报 WARN；它证明的是「有结构化申报记录」，不是平台遥测或模型真的读过文件。",
+    "core": ["request-analysis", "coding-skill", "expert-reviewer"],
+    "log": ".harness/metrics/skill-calls.jsonl"
+  },
   "_deliveryStatus说明": "check-summary.ps1 -Stage final 用它校验交付终态：delivery_status 必填且值在 statuses 内；值等于 deployed 时「部署记录」表必须至少一行真实内容。已交付未提交 / 已提交未部署 / 不适用 不检查部署记录。中文值只放这里，脚本保持纯 ASCII。",
   "deliveryStatusStrict": true,
   "deliveryStatus": {
@@ -100,6 +105,7 @@
     "scripts/harness-start.ps1",
     "scripts/check-task-start.ps1",
     "scripts/check-summary.ps1",
+    "scripts/record-skill.ps1",
     "scripts/setup-links.ps1",
     "scripts/sync-skills-index.ps1",
     "scripts/verify-grounding.ps1",

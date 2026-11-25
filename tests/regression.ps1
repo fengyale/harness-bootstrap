@@ -135,6 +135,22 @@ $reasonOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts
 if ($reasonOut -notmatch '\[WARN\] core skills skipped:.*expert-reviewer.*reason:') { Write-Host 'LOAD_SKIP_REASON WAS NOT REPORTED' -ForegroundColor Red; $script:fail++ }
 if ($LASTEXITCODE -ne 0) { Write-Host 'SKIP REASON FAILED THE GATE' -ForegroundColor Red; $script:fail++ }
 
+Step 'record-skill evidence chain'
+# A declared skill with no call record is a WARN only once the log exists; with
+# matching records the WARN disappears. record-skill writes append-only JSONL.
+$recOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\record-skill.ps1" -Root $sp -Skill request-analysis -Feature demo 2>&1 | Out-String -Width 4096)
+if ($LASTEXITCODE -ne 0 -or $recOut -notmatch 'skill call recorded') { Write-Host 'RECORD-SKILL FAILED TO WRITE' -ForegroundColor Red; $script:fail++ }
+$logFile = Join-Path $sp '.harness\metrics\skill-calls.jsonl'
+if (-not (Test-Path -LiteralPath $logFile)) { Write-Host 'SKILL CALL LOG MISSING' -ForegroundColor Red; $script:fail++ }
+$claimOnly = $reasonText -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: coding-skill'
+[System.IO.File]::WriteAllText("$sp\.harness\changes\demo\summary.md", $claimOnly, (New-Object System.Text.UTF8Encoding($false)))
+$evOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\check-summary.ps1" -Root $sp -Feature demo -Stage final 2>&1 | Out-String -Width 4096)
+if ($evOut -notmatch '\[WARN\] loaded_skills has no record-skill call record: coding-skill') { Write-Host 'UNRECORDED SKILL CLAIM NOT FLAGGED' -ForegroundColor Red; $script:fail++ }
+if ($LASTEXITCODE -ne 0) { Write-Host 'EVIDENCE WARN FAILED THE GATE' -ForegroundColor Red; $script:fail++ }
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\record-skill.ps1" -Root $sp -Skill coding-skill -Feature demo | Out-Null
+$evOk = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\check-summary.ps1" -Root $sp -Feature demo -Stage final 2>&1 | Out-String -Width 4096)
+if ($evOk -match 'no record-skill call record: coding-skill') { Write-Host 'RECORDED SKILL STILL FLAGGED' -ForegroundColor Red; $script:fail++ }
+
 Step 'delivery_status: close-out terminal state'
 # The record used to demand a deployment row from every task, so L2 either left
 # the table blank (invisible) or invented a deployment. delivery_status is the
