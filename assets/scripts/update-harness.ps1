@@ -1195,8 +1195,23 @@ if (-not $KeepL1) {
                 $summary = Join-Path $_.FullName 'summary.md'
                 if (-not (Test-Path -LiteralPath $summary)) { return }
                 $text = [System.IO.File]::ReadAllText($summary, [System.Text.Encoding]::UTF8)
-                if ($text -match '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?flow:\s*`?\s*L1\b') {
-                    Add-Plan 'COMPACT' ('.harness\changes\' + $_.Name) $_.FullName 'old L1 summary; moved to upgrade backup and deleted with it after verification'
+                if ($text -notmatch '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?flow:\s*`?\s*L1\b') { return }
+                # Only pre-1.25 L1 skeletons are disposable. A modern record can
+                # also carry flow: L1 (investigation) and real evidence, so keep
+                # it when any of these signals is present: record_kind, a stage-2
+                # field, or any file next to summary.md.
+                $isInvestigation = ($text -match '(?im)^[ \t]*(?:[-*][ \t]+)?record_kind:\s*`?investigation\b')
+                $hasStage2 = ($text -match '(?im)^[ \t]*(?:[-*][ \t]+)?(?:lesson_id|corrections|impl_corrections|sql_review|delivery_status|linked_records):')
+                $extra = @(Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -ne 'summary.md' })
+                $keepWhy = ''
+                if ($isInvestigation) { $keepWhy = 'record_kind=investigation; kept as task history' }
+                elseif ($hasStage2) { $keepWhy = 'stage-2 fields present; kept as task history' }
+                elseif ($extra.Count -gt 0) { $keepWhy = 'other files present; kept as task history' }
+                if ($keepWhy) {
+                    Add-Plan 'KEEP' ('.harness\changes\' + $_.Name) $_.FullName $keepWhy
+                } else {
+                    Add-Plan 'COMPACT' ('.harness\changes\' + $_.Name) $_.FullName 'legacy L1 skeleton; moved to upgrade backup and deleted with it after verification'
                 }
             }
     }

@@ -1,7 +1,13 @@
-HARNESS-LIFECYCLE VERSION 1.33.0
+HARNESS-LIFECYCLE VERSION 1.33.1
 
 changelog
 ---------
+1.33.1  (记录保护与技能清单可验证)
+- update-harness：COMPACT 只处理无 record_kind、无第二阶段字段、且目录内只有 summary.md 的旧 L1 骨架；排查型、带证据、现代 L1 记录升级后保留
+- check-summary：loaded_skills 列出的技能必须在 .harness/skills/ 存在（WARN）；阶段 10 已安装 core 技能未列且无有效 load_skip_reason 时 WARN；n/a / - / 无 不算有效原因
+- 文档：summary 模板、开发流程规范、check-summary 帮助同步技能清单校验口径
+- 测试：test-update 新增 investigation / 带证据 / 现代 L1 保留用例；regression 新增未知技能与 core 缺失 WARN 用例
+
 1.33.0  (门禁可信度与工作区过滤)
 - suggest-flow：默认按当前特性（.git/harness-current-task 或 -Feature）与 touched_modules 过滤工作区变更，并忽略构建产物/压缩包，减少整仓未提交改动的干扰
 - stage-gate：阶段 5/7 没有可执行测试命令时，summary.md 必须写 test_skip_reason；缺失仍 FAIL，写了才降为 WARN，报告单列 warn 计数

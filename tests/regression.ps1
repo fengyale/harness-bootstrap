@@ -105,6 +105,31 @@ if ($LASTEXITCODE -ne $cliInitialCode) { Write-Host "IN-PROCESS INITIAL DISAGREE
 Invoke-Harness "$proj\scripts\check-summary.ps1" @{ Root = $proj; Feature = 'demo'; Stage = 'final' } | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "FINAL FAILED" -ForegroundColor Red; $script:fail++ }
 
+Step 'check-summary skill existence and core coverage'
+# loaded_skills can only be verified for existence: the summary cannot prove a
+# call happened. A typo or a removed skill is named; a missing core skill is
+# named at final unless load_skip_reason records why. Both are WARN for now.
+$sp = Join-Path $TestRoot 'skill-warn-proj'
+New-Item -ItemType Directory -Force -Path "$sp\.harness\changes\demo" | Out-Null
+Copy-Item "$pkg\assets\scripts" "$sp\scripts" -Recurse
+foreach ($s in @('request-analysis', 'coding-skill', 'expert-reviewer')) {
+    New-Item -ItemType Directory -Force -Path "$sp\.harness\skills\main-dev\$s" | Out-Null
+    Set-Content -LiteralPath "$sp\.harness\skills\main-dev\$s\SKILL.md" -Value ('---' + "`n" + 'name: ' + $s + "`n" + '---') -Encoding ASCII
+}
+$finalText = [System.IO.File]::ReadAllText("$proj\.harness\changes\demo\summary.md", [System.Text.Encoding]::UTF8)
+$warnText = $finalText -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: request-analysis, ghost-skill'
+$warnText = $warnText -replace '(?m)(?<![A-Za-z0-9_\-])load_skip_reason:[^\r\n]*', 'load_skip_reason: n/a'
+[System.IO.File]::WriteAllText("$sp\.harness\changes\demo\summary.md", $warnText, (New-Object System.Text.UTF8Encoding($false)))
+$warnOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\check-summary.ps1" -Root $sp -Feature demo -Stage final 2>&1 | Out-String -Width 4096)
+if ($warnOut -notmatch '\[WARN\] loaded_skills names a skill that is not installed: ghost-skill') { Write-Host 'UNKNOWN SKILL WAS NOT NAMED' -ForegroundColor Red; $script:fail++ }
+if ($warnOut -notmatch '\[WARN\] core skills not listed in loaded_skills:.*expert-reviewer') { Write-Host 'MISSING CORE SKILL WAS NOT NAMED' -ForegroundColor Red; $script:fail++ }
+if ($LASTEXITCODE -ne 0) { Write-Host 'SKILL WARNINGS FAILED THE GATE' -ForegroundColor Red; $script:fail++ }
+$reasonText = $warnText -replace '(?m)(?<![A-Za-z0-9_\-])load_skip_reason:[^\r\n]*', 'load_skip_reason: reviewer delegated to the reviewer sub-agent later'
+[System.IO.File]::WriteAllText("$sp\.harness\changes\demo\summary.md", $reasonText, (New-Object System.Text.UTF8Encoding($false)))
+$reasonOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\check-summary.ps1" -Root $sp -Feature demo -Stage final 2>&1 | Out-String -Width 4096)
+if ($reasonOut -notmatch '\[WARN\] core skills skipped:.*expert-reviewer.*reason:') { Write-Host 'LOAD_SKIP_REASON WAS NOT REPORTED' -ForegroundColor Red; $script:fail++ }
+if ($LASTEXITCODE -ne 0) { Write-Host 'SKIP REASON FAILED THE GATE' -ForegroundColor Red; $script:fail++ }
+
 Step 'delivery_status: close-out terminal state'
 # The record used to demand a deployment row from every task, so L2 either left
 # the table blank (invisible) or invented a deployment. delivery_status is the

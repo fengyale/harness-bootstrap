@@ -269,6 +269,15 @@ New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\demo" | Out-Nu
 Set-Content -LiteralPath "$proj\.harness\changes\demo\summary.md" -Value 'history-record' -Encoding UTF8
 New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\l1-demo" | Out-Null
 Set-Content -LiteralPath "$proj\.harness\changes\l1-demo\summary.md" -Value @('# l1 demo', '', 'flow: L1') -Encoding UTF8
+# Modern records can also say flow: L1. They must survive an upgrade; only the
+# bare pre-1.25 skeleton (no kind, no stage-2 fields, no other files) is compacted.
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\l1-investigation" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\l1-investigation\summary.md" -Value @('# investigation', '', 'flow: L1', '- record_kind: investigation') -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\l1-evidence\sql-review" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\l1-evidence\summary.md" -Value @('# l1 evidence', '', 'flow: L1') -Encoding UTF8
+Set-Content -LiteralPath "$proj\.harness\changes\l1-evidence\sql-review\explain.md" -Value 'EXPLAIN SELECT 1' -Encoding UTF8
+New-Item -ItemType Directory -Force -Path "$proj\.harness\changes\l1-modern" | Out-Null
+Set-Content -LiteralPath "$proj\.harness\changes\l1-modern\summary.md" -Value @('# l1 modern', '', 'flow: L1', '- lesson_id: L-1') -Encoding UTF8
 
 # A project-owned config that differs from the new package: must stay MANUAL.
 # Keep the exact bytes so the apply phase can prove it was not overwritten.
@@ -512,6 +521,9 @@ Check 'dry-run plans .py UPDATE'           ($dry -match '\[UPDATE\]\s+scripts\\r
 Check 'dry-run plans lessons MOVE'         ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons\.md')
 Check 'dry-run plans promoted MOVE'        ($dry -match '\[MOVE\s*\]\s+\.harness\\lessons-promoted\.txt')
 Check 'dry-run plans L1 COMPACT'           ($dry -match '\[COMPACT\s*\]\s+\.harness\\changes\\l1-demo')
+Check 'dry-run keeps investigation record' (($dry -notmatch '\[COMPACT\s*\]\s+\.harness\\changes\\l1-investigation') -and ($dry -match '\[KEEP\s*\]\s+\.harness\\changes\\l1-investigation'))
+Check 'dry-run keeps L1 record with evidence' ($dry -notmatch '\[COMPACT\s*\]\s+\.harness\\changes\\l1-evidence')
+Check 'dry-run keeps modern L1 record'     ($dry -notmatch '\[COMPACT\s*\]\s+\.harness\\changes\\l1-modern')
 Check 'dry-run marks installed skill MANUAL' ($dry -match '\[MANUAL\]\s+\.harness\\skills\\main-dev\\coding-skill\\SKILL\.md')
 Check 'dry-run marks .gitignore MANUAL'    (($dry -match '\[MANUAL\]\s+\.gitignore') -and ($dry -match 'add by hand: \.harness/upgrade/'))
 Check 'dry-run does not add uninstalled skills' ($dry -notmatch '\[ADD\s*\]\s+\.harness\\skills\\.*request-analysis')
@@ -779,6 +791,9 @@ Check 'old red-line file backed up' (@(Get-ChildItem -LiteralPath (Join-Path $ba
     Where-Object { $_.Name -eq (Split-Path -Leaf $redline) }).Count -eq 1)
 Check 'old template backed up' (Test-Path -LiteralPath (Join-Path $backup.FullName '.harness\changes\_template\summary.md'))
 Check 'L1 summary compacted' ((Test-Path -LiteralPath (Join-Path $backup.FullName 'compact\l1-demo')) -and -not (Test-Path -LiteralPath "$proj\.harness\changes\l1-demo"))
+Check 'investigation record survives upgrade' ((Test-Path -LiteralPath "$proj\.harness\changes\l1-investigation\summary.md") -and ((Get-Content -LiteralPath "$proj\.harness\changes\l1-investigation\summary.md" -Raw) -match 'record_kind: investigation'))
+Check 'L1 record with evidence survives upgrade' (Test-Path -LiteralPath "$proj\.harness\changes\l1-evidence\sql-review\explain.md")
+Check 'modern L1 record survives upgrade'   (Test-Path -LiteralPath "$proj\.harness\changes\l1-modern\summary.md")
 Check 'manifest written' (Test-Path -LiteralPath (Join-Path $backup.FullName 'manifest.txt'))
 
 # ------------------------------------------------------------------ skills

@@ -36,6 +36,12 @@
     reviewLedgerStrict=true (fresh install) fails when the table is missing;
     false (upgraded project) only warns. A malformed table always fails.
 
+  SKILL COVERAGE
+    loaded_skills names are checked against .harness/skills/; an unknown name
+    is a WARN. At final, installed core skills (request-analysis /
+    coding-skill / expert-reviewer) should be listed, or load_skip_reason
+    should explain the skip; otherwise a WARN is printed.
+
   EXIT CODE
     0 = all required fields valid / 1 = at least one field invalid
 
@@ -161,6 +167,43 @@ function Test-Placeholder {
     # counts as an unfilled slot.
     if ($v -match '^\s*<') { return $true }
     return $false
+}
+
+# Installed skill directories are the only verifiable half of loaded_skills: a
+# summary can claim a skill was loaded, but it cannot prove the call. Existence
+# is still checkable, and a typo or a removed skill should be named.
+function Get-InstalledSkillNames {
+    $dir = Join-Path $rootPath '.harness\skills'
+    if (-not (Test-Path -LiteralPath $dir)) { return @() }
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File -Filter 'SKILL.md' -Force -ErrorAction SilentlyContinue) {
+        $n = Split-Path -Leaf (Split-Path -Parent $f.FullName)
+        if ($n -and $n -ne '_template') { $names.Add($n) }
+    }
+    return @($names | Select-Object -Unique)
+}
+
+function Get-LoadedSkillNames {
+    param([string]$Value)
+    $out = New-Object System.Collections.Generic.List[string]
+    if (-not $Value) { return @() }
+    if ($Value -match '(?i)^none\b') { return @() }
+    foreach ($part in ($Value -split '[,;\uFF0C\u3001]')) {
+        $n = ($part -replace '`','').Trim()
+        if (-not $n) { continue }
+        $n = ($n -split '\s+')[0]
+        $n = ($n -replace '[\(\uFF08].*$','').Trim()
+        if ($n -match '^[A-Za-z0-9._-]+$') { $out.Add($n) }
+    }
+    return @($out | Select-Object -Unique)
+}
+
+# The template ships load_skip_reason: n/a, so "n/a" / "-" must not count as an
+# explanation for a skipped core skill.
+function Test-MeaningfulReason {
+    param([string]$Value)
+    if (Test-Placeholder $Value) { return $false }
+    return ($Value.Trim() -notmatch '^(?i)(n/?a|none|-|\u65E0|\u4E0D\u9002\u7528)$')
 }
 
 # ------------------------------------------------------------- content sections
@@ -660,6 +703,34 @@ if ($null -eq $loaded) {
         }
     }
     # "none, because ..." already carries the reason inline
+}
+
+# Existence and core coverage are WARN in this release: the record can name a
+# skill that was later removed, and a minimal install may omit a core skill on
+# purpose. Keep the gate exit code unchanged until projects have adopted the
+# check; the message names exactly what to fix.
+$installedSkills = @(Get-InstalledSkillNames)
+$loadedNames = @(Get-LoadedSkillNames -Value $loaded)
+if ($installedSkills.Count -gt 0 -and $loadedNames.Count -gt 0) {
+    foreach ($n in $loadedNames) {
+        if ($installedSkills -notcontains $n) {
+            Write-Host ("[WARN] loaded_skills names a skill that is not installed: " + $n)
+        }
+    }
+    if ($Stage -eq 'final') {
+        $coreSkills = @('request-analysis', 'coding-skill', 'expert-reviewer')
+        $missingCore = @($coreSkills | Where-Object {
+            ($installedSkills -contains $_) -and ($loadedNames -notcontains $_)
+        })
+        if ($missingCore.Count -gt 0) {
+            $skipReason = Get-FieldRaw 'load_skip_reason'
+            if (Test-MeaningfulReason $skipReason) {
+                Write-Host ("[WARN] core skills skipped: " + ($missingCore -join ', ') + " (reason: " + $skipReason + ")")
+            } else {
+                Write-Host ("[WARN] core skills not listed in loaded_skills: " + ($missingCore -join ', ') + " (write load_skip_reason if intentionally skipped)")
+            }
+        }
+    }
 }
 
 $flow = Get-FieldRaw 'flow'
