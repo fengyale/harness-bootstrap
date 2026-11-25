@@ -14,6 +14,8 @@
 
   INPUT
     -Root <dir>       project root (default: current directory)
+    -Feature <name>   scope the diff to this feature's touched_modules (default:
+                      the .git/harness-current-task pointer written by check-summary)
     (default)         working tree: git status --porcelain + git diff HEAD
     -DiffFromStdin    read a unified diff from stdin
     -Files a,b        explicit changed files (comma list or an array)
@@ -33,6 +35,7 @@
 
   USAGE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\suggest-flow.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\suggest-flow.ps1 -Feature order-export
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\suggest-flow.ps1 -Root D:\proj
     git diff | powershell -NoProfile -ExecutionPolicy Bypass -File scripts\suggest-flow.ps1 -DiffFromStdin
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\suggest-flow.ps1 -Files src\a.cs,b.sql
@@ -43,6 +46,7 @@
 [CmdletBinding()]
 param(
     [string]$Root = (Get-Location).Path,
+    [string]$Feature = '',
     [switch]$DiffFromStdin,
     [string[]]$Files = @(),
     [switch]$SelfTest
@@ -64,6 +68,10 @@ $MigSeg    = @('migration', 'migrations', 'flyway', 'liquibase')
 $ScanExt   = @('.sql', '.java', '.kt', '.cs', '.py', '.js', '.ts', '.vue', '.go', '.xml',
                '.properties', '.yml', '.yaml', '.json')
 $SqlDdlRe  = '(?i)\b(CREATE\s+(UNIQUE\s+)?(TABLE|INDEX|VIEW|DATABASE|SCHEMA)|CREATE\s+(PROCEDURE|TRIGGER|FUNCTION)|ALTER\s+(TABLE|INDEX|VIEW)|DROP\s+(TABLE|INDEX|VIEW|DATABASE|COLUMN)|TRUNCATE\s+TABLE|RENAME\s+TABLE)\b'
+# Build artifacts and archives are not part of a feature diff. They are skipped
+# only in git-status mode; an explicit -Files list is always honoured.
+$IgnoreRe  = '(?i)(^|/)(node_modules|target|build|dist|out|\.git|\.idea|\.vscode|logs?)/|\.(zip|jar|war|class|log|tmp)$'
+$NoneMarker = [string][char]0x65E0
 
 function New-Cn {
     param([int[]]$Codes)
@@ -161,6 +169,100 @@ function Get-ModuleGuess {
         return [pscustomobject]@{ Name = $seg[1]; Source = 'heuristic' }
     }
     return [pscustomobject]@{ Name = $seg[0]; Source = 'heuristic' }
+}
+
+# Resolve the feature scope. An explicit -Feature wins; otherwise use the
+# .git/harness-current-task pointer that check-summary.ps1 writes after a
+# summary validates. No pointer means no filter (the caller may still pass one).
+function Get-FeatureScope {
+    param([string]$RootPath, [string]$FeatureName)
+    $name = $FeatureName
+    $source = 'explicit'
+    if (-not $name) {
+        $ptrRel = @(Invoke-Git -RootPath $RootPath -ArgList @('rev-parse', '--git-path', 'harness-current-task')) | Select-Object -First 1
+        if ($ptrRel) {
+            $ptr = ([string]$ptrRel).Trim()
+            if ($ptr) {
+                if (-not [System.IO.Path]::IsPathRooted($ptr)) { $ptr = Join-Path $RootPath $ptr }
+                if (Test-Path -LiteralPath $ptr) {
+                    $name = (([System.IO.File]::ReadAllText($ptr, [System.Text.Encoding]::UTF8)).Trim())
+                    $source = 'current-task pointer'
+                }
+            }
+        }
+    }
+    if (-not $name) { return [pscustomobject]@{ Name=''; Modules=@(); Source='none' } }
+    $summaryPath = Join-Path $RootPath ('.harness\changes\' + $name + '\summary.md')
+    if (-not (Test-Path -LiteralPath $summaryPath)) {
+        return [pscustomobject]@{ Name=$name; Modules=@(); Source=($source + ', summary missing') }
+    }
+    $text = [System.IO.File]::ReadAllText($summaryPath, [System.Text.Encoding]::UTF8)
+    $modules = New-Object System.Collections.Generic.List[string]
+    $m = [regex]::Match($text, '(?m)^[ \t]*(?:[-*][ \t]+)?[^\r\n:]*touched_modules:\s*`?([^\r\n`]*)')
+    if ($m.Success) {
+        foreach ($piece in ($m.Groups[1].Value -split ',')) {
+            $v = $piece.Trim()
+            if (-not $v) { continue }
+            if ($v -match '(?i)^(none|-)$') { continue }
+            if ($v -eq $NoneMarker) { continue }
+            $modules.Add($v)
+        }
+    }
+    return [pscustomobject]@{ Name=$name; Modules=@($modules.ToArray() | Sort-Object -Unique); Source=$source }
+}
+
+# Keep only records that belong to a touched module (or to the feature name when
+# touched_modules is empty). If nothing matches, keep the full workspace and say
+# so: a silent empty diff is worse than a noisy one.
+function Filter-ChangeSet {
+    param([string]$RootPath, $ChangeSet, $Scope)
+    $records = @($ChangeSet.Records)
+    if (-not $Scope -or -not $Scope.Name) {
+        return [pscustomobject]@{ ChangeSet=$ChangeSet; Applied=$false; Kept=$records.Count; Ignored=0; Note='feature filter not applied (pass -Feature to scope the diff)' }
+    }
+    $kept = New-Object System.Collections.Generic.List[object]
+    $ignored = 0
+    $mods = @($Scope.Modules)
+    foreach ($r in $records) {
+        $p = ([string]$r.Path).ToLower()
+        $hit = $false
+        foreach ($mod in $mods) {
+            $m = ([string]$mod).ToLower()
+            if (-not $m) { continue }
+            if (($p -eq $m) -or $p.StartsWith($m + '/') -or $p.Contains('/' + $m + '/') -or $p.EndsWith('/' + $m)) { $hit = $true; break }
+        }
+        if (-not $hit -and $mods.Count -eq 0) {
+            $f = ([string]$Scope.Name).ToLower()
+            if ($f -and $p.Contains($f)) { $hit = $true }
+        }
+        if ($hit) { $kept.Add($r) } else { $ignored++ }
+    }
+    if ($kept.Count -eq 0) {
+        return [pscustomobject]@{ ChangeSet=$ChangeSet; Applied=$false; Kept=$records.Count; Ignored=0; Note=('no changed files match feature ' + $Scope.Name + '; showing the full workspace') }
+    }
+    $filtered = [pscustomobject]@{
+        Mode = $ChangeSet.Mode
+        Records = $kept.ToArray()
+        AddedText = $ChangeSet.AddedText
+        RemovedText = $ChangeSet.RemovedText
+        LinesKnown = $ChangeSet.LinesKnown
+        Notes = $ChangeSet.Notes
+    }
+    # Re-read the diff for the kept paths so unrelated SQL/DDL text cannot raise
+    # the level. stdin / explicit file modes keep their supplied text.
+    if ($ChangeSet.Mode -eq 'git') {
+        $paths = @($kept.ToArray() | ForEach-Object { [string]$_.Path })
+        $diffText = @(Invoke-Git -RootPath $RootPath -ArgList (@('diff', 'HEAD', '-U0', '--') + $paths))
+        $add = New-Object System.Collections.Generic.List[string]
+        $rem = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $diffText) {
+            if ($l -like '+*' -and $l -notlike '+++*') { $add.Add($l.Substring(1)) }
+            elseif ($l -like '-*' -and $l -notlike '---*') { $rem.Add($l.Substring(1)) }
+        }
+        $filtered.AddedText = $add.ToArray()
+        $filtered.RemovedText = $rem.ToArray()
+    }
+    return [pscustomobject]@{ ChangeSet=$filtered; Applied=$true; Kept=$kept.Count; Ignored=$ignored; Note=('filtered to feature ' + $Scope.Name + ' (' + $Scope.Source + ')') }
 }
 
 function New-Record {
@@ -275,10 +377,11 @@ function Get-ChangeSet {
     # -uall: without it an untracked directory is reported as one "?? dir/" entry,
     # which has no line counts and would flip linesKnown to false.
     $status = @(Invoke-Git -RootPath $RootPath -ArgList @('status', '--porcelain', '-uall'))
+    $ignoredArtifacts = 0
     if ($status.Count -eq 0) {
         return [pscustomobject]@{
             Mode = $mode; Records = @(); AddedText = @(); RemovedText = @()
-            LinesKnown = $true; Notes = $notes.ToArray()
+            LinesKnown = $true; Notes = $notes.ToArray(); IgnoredCount = 0
         }
     }
     $diffText = @(Invoke-Git -RootPath $RootPath -ArgList @('diff', 'HEAD', '-U0'))
@@ -293,6 +396,7 @@ function Get-ChangeSet {
         if ($rest -match ' -> ') { $rest = ($rest -split ' -> ')[-1] }
         $rest = $rest.Trim('"')
         $p = $rest -replace '\\', '/'
+        if ($p -match $IgnoreRe) { $ignoredArtifacts++; continue }
         $a = 0; $r = 0
         $known = $false
         if ($numMap.ContainsKey($p)) { $a = $numMap[$p][0]; $r = $numMap[$p][1]; $known = $true }
@@ -319,9 +423,13 @@ function Get-ChangeSet {
     if ($statOnly.Count -gt 0) {
         $notes.Add(('no textual diff for {0} file(s): {1}' -f $statOnly.Count, ($statOnly.ToArray() -join ', ')))
     }
+    if ($ignoredArtifacts -gt 0) {
+        $notes.Add(('ignored {0} build/archive file(s) in git status' -f $ignoredArtifacts))
+    }
     return [pscustomobject]@{
         Mode = $mode; Records = $records.ToArray(); AddedText = $addedText.ToArray()
         RemovedText = $removedText.ToArray(); LinesKnown = $linesKnown; Notes = $notes.ToArray()
+        IgnoredCount = $ignoredArtifacts
     }
 }
 
@@ -330,12 +438,17 @@ function Invoke-Analyze {
         [string]$RootPath,
         [bool]$FromStdin,
         [string[]]$FileList,
-        [string]$StdinText
+        [string]$StdinText,
+        [string]$FeatureName = ''
     )
     $set = Get-ChangeSet -RootPath $RootPath -FromStdin $FromStdin -FileList $FileList -StdinText $StdinText
+    $scope = Get-FeatureScope -RootPath $RootPath -FeatureName $FeatureName
+    $filter = Filter-ChangeSet -RootPath $RootPath -ChangeSet $set -Scope $scope
+    $set = $filter.ChangeSet
     $records = @($set.Records)
     $notes = New-Object System.Collections.Generic.List[string]
     foreach ($n in @($set.Notes)) { $notes.Add($n) }
+    if ($filter.Note -and ($FeatureName -or $scope.Name)) { $notes.Add($filter.Note) }
 
     $added = 0
     $removed = 0
@@ -465,6 +578,11 @@ function Invoke-Analyze {
         Added = $added
         Removed = $removed
         LinesKnown = $set.LinesKnown
+        Scope = $scope
+        FilterApplied = $filter.Applied
+        FilterKept = $filter.Kept
+        FilterIgnored = $filter.Ignored
+        FilterNote = $filter.Note
         Level = $level
         Reasons = $reasons.ToArray()
         Notes = $notes.ToArray()
@@ -498,6 +616,13 @@ function Format-Report {
     $lines.Add('')
     $lines.Add('--- suggest-flow (read only, nothing was written) ---')
     $lines.Add(('mode        : {0}' -f $Result.Mode))
+    if ($Result.Scope -and $Result.Scope.Name) {
+        $mods = if (@($Result.Scope.Modules).Count -gt 0) { @($Result.Scope.Modules) -join ', ' } else { 'none' }
+        $lines.Add(('feature     : {0} ({1}; touched_modules: {2})' -f $Result.Scope.Name, $Result.Scope.Source, $mods))
+    }
+    if ($Result.FilterApplied) {
+        $lines.Add(('filtered    : {0} file(s), ignored {1} unrelated' -f $Result.FilterKept, $Result.FilterIgnored))
+    }
     $lines.Add(('files       : {0}' -f @($Result.Records).Count))
     $lines.Add(('lines       : {0}' -f $(if ($Result.LinesKnown) { '+{0} -{1}' -f $Result.Added, $Result.Removed } else { 'unknown' })))
     if ($Result.Ddl) { $lines.Add('sql         : yes (DDL / migration)') }
@@ -589,6 +714,20 @@ function Invoke-SuggestSelfTest {
         Assert-Case 'two backend modules -> L3' ($r.Level -eq 'L3')
         Assert-Case 'two modules prefilled' ($rep -match '(?m)^touched_modules: cart, order$')
 
+        # A feature scope keeps the touched module and drops the rest. The same
+        # mixed diff without -Feature must still see both modules.
+        New-Item -ItemType Directory -Force -Path (Join-Path $tmp '.harness\changes\order-export') | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $tmp '.harness\changes\order-export\summary.md'), "touched_modules: order`n", $utf8)
+        $r = Invoke-Analyze -RootPath $tmp -FromStdin $true -FileList @() -StdinText $twoMods -FeatureName 'order-export'
+        $rep = (Format-Report -Result $r) -join "`n"
+        Assert-Case 'feature scope keeps one record' (@($r.Records).Count -eq 1)
+        Assert-Case 'feature scope sets the flag' ($r.FilterApplied -eq $true)
+        Assert-Case 'feature scope is reported' ($rep -match '(?m)^feature     : order-export')
+        Assert-Case 'feature scope keeps only order' ($rep -match '(?m)^touched_modules: order$')
+
+        $rAll = Invoke-Analyze -RootPath $tmp -FromStdin $true -FileList @() -StdinText $twoMods
+        Assert-Case 'no feature keeps both records' (@($rAll.Records).Count -eq 2)
+
         $ddl = New-FakeDiff 'db/migration/V2__order.sql' 5 'ALTER TABLE demo_order ADD COLUMN x INT;'
         $r = Invoke-Analyze -RootPath $tmp -FromStdin $true -FileList @() -StdinText $ddl
         $rep = (Format-Report -Result $r) -join "`n"
@@ -654,6 +793,6 @@ if (-not $DiffFromStdin -and $fileList.Count -eq 0) {
     }
 }
 
-$result = Invoke-Analyze -RootPath $rootPath -FromStdin ([bool]$DiffFromStdin) -FileList $fileList -StdinText $stdinText
+$result = Invoke-Analyze -RootPath $rootPath -FromStdin ([bool]$DiffFromStdin) -FileList $fileList -StdinText $stdinText -FeatureName $Feature
 foreach ($line in @(Format-Report -Result $result)) { Write-Host $line }
 exit 0

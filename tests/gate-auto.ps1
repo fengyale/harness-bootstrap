@@ -142,6 +142,28 @@ $fixed2 = $fixed.Replace('| 跑全部测试 | `exit 1` |', '| 跑全部测试 | 
 Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-Null
 Expect 'stage 5 with passing tests' $LASTEXITCODE 0
 
+# A missing test row is a gap: without a recorded reason it blocks, with one it
+# is a visible WARN (not a silent SKIP and not a PASS).
+$noTest = ($fixed2 -split "`r?`n" | Where-Object { $_ -notmatch '跑全部测试' }) -join "`r`n"
+[System.IO.File]::WriteAllText("$proj\AGENTS.md", $noTest, (New-Object System.Text.UTF8Encoding($true)))
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-String
+Expect 'stage 5 without a test row fails' $LASTEXITCODE 1
+if ($out -match '\[FAIL\].*tests-green') { Write-Host 'ok: missing test row is reported as FAIL' }
+else { Write-Host 'BAD: missing test row was not reported as FAIL' -ForegroundColor Red; $fail++ }
+
+$sumPath = "$proj\.harness\changes\demo\summary.md"
+$sumText = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+$sumText = $sumText -replace '(?m)^.*test_skip_reason:[^\r\n]*', '- 测试跳过原因：`test_skip_reason: no test runner in this fixture`'
+Set-Content -LiteralPath $sumPath -Value $sumText -Encoding UTF8
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-String
+Expect 'stage 5 with a skip reason warns' $LASTEXITCODE 0
+if (($out -match '\[WARN\].*tests-green') -and ($out -notmatch '\[PASS\].*tests-green')) {
+    Write-Host 'ok: documented test skip is a WARN, not a PASS'
+} else {
+    Write-Host 'BAD: documented test skip was not reported as WARN' -ForegroundColor Red; $fail++
+}
+[System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed2, (New-Object System.Text.UTF8Encoding($true)))
+
 Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-Null
 Expect 'stage 3 with passing compile' $LASTEXITCODE 0
 

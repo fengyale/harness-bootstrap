@@ -154,7 +154,7 @@ $stageDefs = @(
     New-Stage '5' 'test (unit + integration)' @(
         @{ Id='compiles';              Kind='AUTO';  Text='compile / type-check command from AGENTS.md exits 0 (placeholder row -> SKIP, missing row -> BLOCKED)' },
         @{ Id='verification-recorded'; Kind='AUTO';  Text='summary.md records how the change was verified' },
-        @{ Id='tests-green';           Kind='AUTO';  Text='test command from AGENTS.md exits 0, 0 tests allowed (placeholder row -> SKIP, missing row -> BLOCKED)' },
+        @{ Id='tests-green';           Kind='AUTO';  Text='test command from AGENTS.md exits 0; missing/placeholder row needs test_skip_reason (WARN), otherwise BLOCKED' },
         @{ Id='coverage';              Kind='HUMAN'; Text='key logic coverage meets the project bar' },
         @{ Id='integration';           Kind='HUMAN'; Text='integration path verified, or the skip reason is recorded' }
     )
@@ -167,7 +167,7 @@ $stageDefs = @(
     )
     New-Stage '7' 'merge (quality gate)' @(
         @{ Id='compiles';    Kind='AUTO';  Text='compile / type-check command from AGENTS.md exits 0 (placeholder row -> SKIP, missing row -> BLOCKED)' },
-        @{ Id='tests-green'; Kind='AUTO';  Text='test command from AGENTS.md exits 0 (placeholder row -> SKIP, missing row -> BLOCKED)' },
+        @{ Id='tests-green'; Kind='AUTO';  Text='test command from AGENTS.md exits 0; missing/placeholder row needs test_skip_reason (WARN), otherwise BLOCKED' },
         @{ Id='red-lines';   Kind='AUTO'; Text='last pre-commit scan passed and the last commit was scanned' },
         @{ Id='gate-proven'; Kind='AUTO'; Text='pre-commit and pre-merge-commit are harness hooks calling red-line-scan' }
     )
@@ -195,6 +195,28 @@ function Get-SummaryText {
     $f = Join-Path $changesRoot "$FeatureName\summary.md"
     if (-not (Test-Path -LiteralPath $f)) { return $null }
     return (Get-Content -LiteralPath $f -Raw -Encoding UTF8)
+}
+
+# Read one ASCII field from summary.md. The pattern matches check-summary.ps1's
+# Get-FieldRaw so the two gates cannot disagree about the field shape.
+function Get-SummaryFieldValue {
+    param([string]$FeatureName, [string]$Name)
+    $summary = Get-SummaryText -FeatureName $FeatureName
+    if (-not $summary) { return $null }
+    $n = [regex]::Escape($Name)
+    $rx = '(?m)^[ \t]*(?:[-*][ \t]+)?(?:[^\r\n:\uFF1A]*?[:\uFF1A][ \t]*`?`?)?`?`?(?<![A-Za-z0-9_\-])' + $n + ':\s*([^\r\n]*)'
+    $m = [regex]::Match($summary, $rx)
+    if (-not $m.Success) { return $null }
+    $raw = $m.Groups[1].Value.Trim()
+    $parts = @($raw -split '`' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
+    if ($parts.Count -gt 0) { return $parts[0] }
+    return $raw
+}
+
+function Test-SummaryTextPlaceholder {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $true }
+    return ($Text -match '<|(?i)\b(TODO|TBD)\b')
 }
 
 # Split one markdown table line into raw cells. An escaped pipe (\|) belongs to
@@ -782,7 +804,18 @@ function Test-Criterion {
             return Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.compile -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
         }
         'tests-green' {
-            return Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            $r = Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            if ($r.Ok) { return $r }
+            # A missing or placeholder test row may be skipped only when the
+            # summary records why. A command that actually ran and failed cannot
+            # be excused by a reason.
+            if ($r.Ran -eq $false -or $r.Found -eq $false) {
+                $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
+                if ($reason -and -not (Test-SummaryTextPlaceholder $reason)) {
+                    return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=('tests skipped: ' + $reason) }
+                }
+            }
+            return $r
         }
         'red-lines' {
             # Read the last pre-commit scan instead of running a full scan: a legacy
@@ -900,7 +933,7 @@ foreach ($d in $targets) {
     Write-Host "Stage $($d.Key) - $($d.Name)" -ForegroundColor Cyan
     Write-Host ("-" * 70)
 
-    $autoFail = 0; $autoPass = 0; $humanCount = 0; $skipCount = 0
+    $autoFail = 0; $autoPass = 0; $humanCount = 0; $skipCount = 0; $warnCount = 0
     $stageHints = @()
     foreach ($c in $d.Criteria) {
         if ($c.Kind -eq 'HUMAN') {
@@ -909,6 +942,13 @@ foreach ($d in $targets) {
             continue
         }
         $r = Test-Criterion -Criterion $c -FeatureName $Feature -ProjectRoot $rootPath
+        # A documented skip is visible and non-blocking (WARN); an undocumented
+        # skip is still a FAIL from Test-Criterion.
+        if ($r.Warn) {
+            $warnCount++
+            Write-Host ("  [WARN]   {0,-20} {1}" -f $c.Id, $r.Detail) -ForegroundColor Yellow
+            continue
+        }
         # A declared row that is not filled in yet: report the gap, do not block.
         if ($r.Ran -eq $false -and $r.Found -eq $true) {
             $skipCount++
@@ -947,10 +987,10 @@ foreach ($d in $targets) {
     Write-Host ("-" * 70)
     if ($autoFail -gt 0) {
         $anyFail = $true
-        Write-Host ("  RESULT: NOT READY  (auto pass={0} fail={1} skip={2}, manual={3})" -f $autoPass, $autoFail, $skipCount, $humanCount) -ForegroundColor Red
+        Write-Host ("  RESULT: NOT READY  (auto pass={0} fail={1} warn={2} skip={3}, manual={4})" -f $autoPass, $autoFail, $warnCount, $skipCount, $humanCount) -ForegroundColor Red
         Write-Host ("  Cannot move past stage {0} until the FAIL rows are fixed." -f $d.Key) -ForegroundColor Red
     } else {
-        Write-Host ("  RESULT: READY  (auto pass={0} skip={1}, manual={2} to confirm yourself)" -f $autoPass, $skipCount, $humanCount) -ForegroundColor Green
+        Write-Host ("  RESULT: READY  (auto pass={0} warn={1} skip={2}, manual={3} to confirm yourself)" -f $autoPass, $warnCount, $skipCount, $humanCount) -ForegroundColor Green
         # One paste-ready line: the agent must echo it before touching code, so a
         # skipped stage 0 becomes visible in the conversation instead of silent.
         if ($Feature -and ($d.Key -eq '1' -or $d.Key -eq '3')) {

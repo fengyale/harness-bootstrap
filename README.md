@@ -28,6 +28,16 @@ AI 写代码很快，交付慢。慢的地方大多不在"不会写"，而在下
 
 > 更细的病根分析见 `references/核心论述.md`；每类失败对应的技能与门禁见 `docs/usage-and-mechanism.html` 第 3 节。
 
+## 适用边界与已知限制
+
+它不是代码生成器，也不替代人工评审；它把“交付前必须成立的条件”变成可执行的门禁和记录。
+
+- `loaded_skills` 是**自报字段**，不是遥测；门禁无法证明 Skill 工具真的被调用，只能要求记录与事实一致。`metrics.ps1` 的加载率同样来自自报。
+- 阶段 5/7 在**没有可执行测试命令**时，`summary.md` 必须写 `test_skip_reason`，结果降为 `WARN`；没有原因仍 `FAIL`。`WARN` 不是 `PASS`，报告会单独计数。
+- `suggest-flow` 默认按当前特性（`.git/harness-current-task` 或 `-Feature`）过滤；模块名来自模块卡或路径推断，属于候选，不是项目真相。
+- `harness-start` 的重复检测是**关键词 + 路径证据**，不是代码级重复分析；`path-match` 比 `keyword-only` 更值得优先核对。
+- 阶段门校验结构、计数和证据路径；结论的语义真假仍由评审兜底。
+
 ## 快速开始
 
 装之前先让它自证一次：
@@ -211,7 +221,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 `
 | --- | --- | --- |
 | 开工 | `scripts\harness-start.ps1 -Feature <name> -Requirement "<需求原文>"` | L2/L3 的第一条命令；`requireTaskStart` 的 pre-commit 硬校验默认关闭，采用后建议常开 |
 | 需求 / 模块 / 门禁预判 | `scripts\harness-plan.ps1 -Requirement "..."` | `harness-start` 内部会跑；也可单独跑，只读 |
-| 改动之后 | `scripts\suggest-flow.ps1` | 按真实 diff 给 L0–L3，并预填 `flow:` / `touched_modules:` |
+| 改动之后 | `scripts\suggest-flow.ps1 [-Feature <名>]` | 按真实 diff 给 L0–L3，并预填 `flow:` / `touched_modules:`；默认按当前特性过滤，避免整仓未提交改动干扰 |
 | 阶段门 | `scripts\stage-gate.ps1 -Stage 1/3/5/6/7/10 -Feature <name>` | 编译 / 测试判据真跑 `AGENTS.md` 的命令 |
 | 收尾 | `scripts\stage-gate.ps1 -Stage 10 -Feature <name>` | 先跑一次 `metrics.ps1` 刷新 `lessons.md` / `reviews.md`，再跑 lesson 门禁（1.31.25 起） |
 | 看指标 | `scripts\metrics.ps1` | 四个代理指标；无数据标 `n/a` / `unknown` |

@@ -314,7 +314,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
   **代码落地后逐条升级为 E1/E2**。非新项目模式下出现 E0，`verify-grounding.ps1` 直接判 FAIL
 
 > **多模块项目**：`AGENTS.md` 必跑命令表可选「模块」列——`| 用途 | 模块 | 命令 |`，`*` 是任何模块都适用的默认行；
-> `stage-gate` 阶段 3/5/7/8 按 `summary.md` 的 `touched_modules` 取并集，逐个模块跑对应编译 / 测试。缺模块行且无 `*` 行 → FAIL；
+> `stage-gate` 阶段 3/5/7/8 按 `summary.md` 的 `touched_modules` 取并集，逐个模块跑对应编译 / 测试。缺模块行且无 `*` 行 → FAIL；无可执行测试命令时必须在 summary.md 写 `test_skip_reason`，阶段 5/7 才降为 WARN，否则仍 FAIL；
 > 只有单条命令、没有模块列的旧表只 WARN。
 
 #### 第 3 步 · 建技能发现入口（**按平台选一种，不要全建**）
@@ -394,7 +394,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 一次任务的四个固定动作：
 
 - **需求进来**：`scripts\harness-plan.ps1 -Requirement "需求原文"` 出上下文包（相关模块卡 / 必上技能 / 预计门禁 / 涉及表与接口）；`harness-start` 会自动调用它
-- **改动完成**：`scripts\suggest-flow.ps1` 按实际 diff 定档，直接给出可粘贴的 `flow:` / `touched_modules:`
+- **改动完成**：`scripts\suggest-flow.ps1` 按实际 diff 定档，直接给出可粘贴的 `flow:` / `touched_modules:`；默认按 `.git/harness-current-task` 过滤，也可显式 `-Feature <名>`
 - **收尾**：`scripts\stage-gate.ps1 -Stage 10`（1.31.25 起先刷新 `.harness/lessons.md` / `reviews.md` 索引，再跑 lesson 门禁）
 - **复盘 / 删技能**：`scripts\metrics.ps1 -Days 28`（四指标：一次通过率 / 门禁往返 / lead time / 复用率；无数据标 `n/a` / `unknown`，`-SelfTest` 自检）
 

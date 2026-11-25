@@ -141,7 +141,7 @@
 | 位置 | 用途 |
 | --- | --- |
 | `.harness/changes/_small.md` | L1 小改滚动记录（一行一次；L0 不写） |
-| `.harness/changes/<特性名>/summary.md` | L2/L3 变更摘要、验收标准、回滚方案、交付状态（`delivery_status`） |
+| `.harness/changes/<特性名>/summary.md` | L2/L3 变更摘要、验收标准、回滚方案、交付状态（`delivery_status`）、测试跳过原因（`test_skip_reason`） |
 | `.harness/changes/<特性名>/evidence/` | 编译日志 / EXPLAIN / 查询结果摘要 / 截图；`summary.md` 只引用路径（可选，不新增硬门禁） |
 | `.harness/changes/<特性名>/db-migrations.sql` | 迁移脚本（与 `rollback.sql` **必须成对**） |
 | `.harness/changes/<特性名>/rollback.sql` | 回滚脚本 |

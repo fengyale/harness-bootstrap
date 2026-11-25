@@ -250,14 +250,42 @@ function Invoke-Preflight {
             }
         }
         if ($hits.Count -gt 0) {
-            Write-Host '[WARN] possibly already implemented (requirement terms found in history):' -ForegroundColor Yellow
+            # A subject match is only a keyword hit. Add the files the commit
+            # touched and label whether any of them matches the requirement /
+            # feature terms: path evidence is stronger than a word in a title.
+            $needles = New-Object System.Collections.Generic.List[string]
+            foreach ($t in @($terms)) { if ($t) { $needles.Add([string]$t) } }
+            if ($FeatureName) { $needles.Add([string]$FeatureName) }
+            foreach ($h in @($hits.Values)) {
+                $files = @(Invoke-GitLines -RootPath $RootPath -Arguments @(
+                    '--no-pager', 'show', '--name-only', '--format=', $h.Hash) |
+                    Where-Object { $_ -and $_.Trim() })
+                $pathHit = $false
+                foreach ($f in $files) {
+                    $fl = ([string]$f).ToLower()
+                    foreach ($n in $needles) {
+                        $nl = ([string]$n).ToLower()
+                        if ($nl -and $fl.Contains($nl)) { $pathHit = $true; break }
+                    }
+                    if ($pathHit) { break }
+                }
+                $h | Add-Member -NotePropertyName Files -NotePropertyValue @($files) -Force
+                $h | Add-Member -NotePropertyName PathMatch -NotePropertyValue $pathHit -Force
+            }
+            Write-Host '[WARN] possible duplicate work (keyword hits; confirm against the listed files):' -ForegroundColor Yellow
             $ordered = @($hits.Values | Sort-Object -Property `
+                @{ Expression = 'PathMatch'; Descending = $true }, `
                 @{ Expression = 'Date'; Descending = $true }, `
                 @{ Expression = 'Hash'; Descending = $true })
             foreach ($h in @($ordered | Select-Object -First 5)) {
-                Write-Host ('  ' + $h.Hash + ' ' + $h.Date + ' ' + $h.Subject + '  [' + ($h.Terms -join ',') + ']') -ForegroundColor Yellow
+                $tag = if ($h.PathMatch) { 'path-match' } else { 'keyword-only' }
+                $line = '  [' + $tag + '] ' + $h.Hash + ' ' + $h.Date + ' ' + $h.Subject + '  [' + ($h.Terms -join ',') + ']'
+                if (@($h.Files).Count -gt 0) {
+                    $line += '  files: ' + ((@($h.Files) | Select-Object -First 3) -join ', ')
+                }
+                Write-Host $line -ForegroundColor Yellow
             }
-            Write-Host '       confirm this is not a duplicate before writing code' -ForegroundColor Yellow
+            Write-Host '       confirm this is not duplicate work; path-match entries are stronger evidence' -ForegroundColor Yellow
         } else {
             Write-Host '[preflight] no commit message matches the requirement terms'
         }
@@ -632,7 +660,8 @@ function Invoke-StartSelfTest {
         $spX = Join-Path $tmp5 '.harness\changes\probe\summary.md'
         $textX = ''
         if (Test-Path -LiteralPath $spX) { $textX = [System.IO.File]::ReadAllText($spX, [System.Text.Encoding]::UTF8) }
-        Assert-Case 'pre-flight sees the requirement in history' ($logX -match 'possibly already implemented' -and $logX -match 'widget-export')
+        Assert-Case 'pre-flight sees the requirement in history' ($logX -match 'possible duplicate work' -and $logX -match 'widget-export')
+        Assert-Case 'pre-flight labels path evidence' ($logX -match '\[path-match\].*widget-export')
         Assert-Case 'pre-flight reports a clean tree' ($logX -match 'working tree clean')
         Assert-Case 'lessons index is echoed at start' ($logX -match 'widget-export-lesson' -and $logX -match 'respond in the summary')
         Assert-Case 'investigation pre-fills flow L1' ($textX -match '(?m)(?<![A-Za-z0-9_\-])flow: L1')

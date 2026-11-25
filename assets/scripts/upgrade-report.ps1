@@ -183,9 +183,10 @@ function Get-ReportItems {
         $missingFields = @()
         if ($sumText -notmatch 'delivery_status') { $missingFields += 'delivery_status' }
         if ($sumText -notmatch 'linked_records') { $missingFields += 'linked_records' }
+        if ($sumText -notmatch 'test_skip_reason') { $missingFields += 'test_skip_reason' }
         if ($sumText -notmatch [regex]::Escape($reviewSection)) { $missingFields += $reviewSection }
         if ($missingFields.Count -eq 0) {
-            Add-Item 'summary-template' 'ACTIVE' '.harness/changes/_template/summary.md has delivery_status / linked_records / review section'
+            Add-Item 'summary-template' 'ACTIVE' '.harness/changes/_template/summary.md has delivery_status / linked_records / test_skip_reason / review section'
         } else {
             # The template is package-owned: a missing field is a stale copy,
             # not a project task.
@@ -297,6 +298,7 @@ function Invoke-UpgradeReportSelfTest {
             '# summary',
             '',
             '- delivery_status: ' + (New-Cn @(0x5DF2, 0x4EA4, 0x4ED8, 0x672A, 0x63D0, 0x4EA4)),
+            '- test_skip_reason: -',
             '- linked_records: -',
             '',
             '## ' + $reviewSection,

@@ -348,6 +348,7 @@ try {
     Put-File (Join-Path $r2 '.harness\changes\_template\summary.md') @(
         '# summary',
         '- delivery_status: todo',
+        '- test_skip_reason: -',
         '- linked_records: -',
         ('## ' + $urCnReview)
     )
