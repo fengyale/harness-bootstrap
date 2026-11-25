@@ -177,8 +177,20 @@ function Get-InstalledSkillNames {
     if (-not (Test-Path -LiteralPath $dir)) { return @() }
     $names = New-Object System.Collections.Generic.List[string]
     foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File -Filter 'SKILL.md' -Force -ErrorAction SilentlyContinue) {
-        $n = Split-Path -Leaf (Split-Path -Parent $f.FullName)
-        if ($n -and $n -ne '_template') { $names.Add($n) }
+        $dirName = Split-Path -Leaf (Split-Path -Parent $f.FullName)
+        if (-not $dirName -or $dirName -eq '_template') { continue }
+        # Directory names may carry a sort prefix (14-sql-review). The skill's
+        # real name is the frontmatter name; fall back to the unprefixed folder.
+        $front = ''
+        try {
+            $head = @([System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8) | Select-Object -First 12)
+            foreach ($line in $head) {
+                if ($line -match '^\s*name:\s*`?([A-Za-z0-9._-]+)') { $front = $matches[1]; break }
+            }
+        } catch { }
+        if ($front) { $names.Add($front) }
+        elseif ($dirName -match '^\d+[-_](.+)$') { $names.Add($matches[1]) }
+        else { $names.Add($dirName) }
     }
     return @($names | Select-Object -Unique)
 }

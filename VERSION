@@ -1,7 +1,11 @@
-HARNESS-LIFECYCLE VERSION 1.33.1
+HARNESS-LIFECYCLE VERSION 1.33.2
 
 changelog
 ---------
+1.33.2  (技能名校验读取 frontmatter)
+- check-summary：技能存在性校验改为读取 SKILL.md frontmatter 的 name；数字前缀目录（14-sql-review、03-redis-cache 等）不再误报，读不到时退回去前缀目录名
+- 测试：regression 增加带数字前缀目录 + frontmatter name 的用例，断言不再误报
+
 1.33.1  (记录保护与技能清单可验证)
 - update-harness：COMPACT 只处理无 record_kind、无第二阶段字段、且目录内只有 summary.md 的旧 L1 骨架；排查型、带证据、现代 L1 记录升级后保留
 - check-summary：loaded_skills 列出的技能必须在 .harness/skills/ 存在（WARN）；阶段 10 已安装 core 技能未列且无有效 load_skip_reason 时 WARN；n/a / - / 无 不算有效原因

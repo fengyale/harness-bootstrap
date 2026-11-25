@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.33.2",
+    "title": "(技能名校验读取 frontmatter)",
+    "body": [
+      "- check-summary：技能存在性校验改为读取 SKILL.md frontmatter 的 name；数字前缀目录（14-sql-review、03-redis-cache 等）不再误报，读不到时退回去前缀目录名",
+      "- 测试：regression 增加带数字前缀目录 + frontmatter name 的用例，断言不再误报"
+    ]
+  },
+  {
     "version": "1.33.1",
     "title": "(记录保护与技能清单可验证)",
     "body": [

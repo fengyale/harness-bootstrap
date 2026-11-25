@@ -116,12 +116,17 @@ foreach ($s in @('request-analysis', 'coding-skill', 'expert-reviewer')) {
     New-Item -ItemType Directory -Force -Path "$sp\.harness\skills\main-dev\$s" | Out-Null
     Set-Content -LiteralPath "$sp\.harness\skills\main-dev\$s\SKILL.md" -Value ('---' + "`n" + 'name: ' + $s + "`n" + '---') -Encoding ASCII
 }
+# Sort prefixes are common (14-sql-review). The check must use the frontmatter
+# name, not the folder name, or every prefixed skill becomes a false WARN.
+New-Item -ItemType Directory -Force -Path "$sp\.harness\skills\biz-dev\03-redis-cache" | Out-Null
+Set-Content -LiteralPath "$sp\.harness\skills\biz-dev\03-redis-cache\SKILL.md" -Value ('---' + "`n" + 'name: redis-cache' + "`n" + '---') -Encoding ASCII
 $finalText = [System.IO.File]::ReadAllText("$proj\.harness\changes\demo\summary.md", [System.Text.Encoding]::UTF8)
-$warnText = $finalText -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: request-analysis, ghost-skill'
+$warnText = $finalText -replace '(?m)(?<![A-Za-z0-9_\-])loaded_skills:[^\r\n]*', 'loaded_skills: request-analysis, ghost-skill, redis-cache'
 $warnText = $warnText -replace '(?m)(?<![A-Za-z0-9_\-])load_skip_reason:[^\r\n]*', 'load_skip_reason: n/a'
 [System.IO.File]::WriteAllText("$sp\.harness\changes\demo\summary.md", $warnText, (New-Object System.Text.UTF8Encoding($false)))
 $warnOut = (& powershell -NoProfile -ExecutionPolicy Bypass -File "$sp\scripts\check-summary.ps1" -Root $sp -Feature demo -Stage final 2>&1 | Out-String -Width 4096)
 if ($warnOut -notmatch '\[WARN\] loaded_skills names a skill that is not installed: ghost-skill') { Write-Host 'UNKNOWN SKILL WAS NOT NAMED' -ForegroundColor Red; $script:fail++ }
+if ($warnOut -match 'not installed: redis-cache') { Write-Host 'PREFIXED SKILL WAS FALSELY FLAGGED' -ForegroundColor Red; $script:fail++ }
 if ($warnOut -notmatch '\[WARN\] core skills not listed in loaded_skills:.*expert-reviewer') { Write-Host 'MISSING CORE SKILL WAS NOT NAMED' -ForegroundColor Red; $script:fail++ }
 if ($LASTEXITCODE -ne 0) { Write-Host 'SKILL WARNINGS FAILED THE GATE' -ForegroundColor Red; $script:fail++ }
 $reasonText = $warnText -replace '(?m)(?<![A-Za-z0-9_\-])load_skip_reason:[^\r\n]*', 'load_skip_reason: reviewer delegated to the reviewer sub-agent later'
