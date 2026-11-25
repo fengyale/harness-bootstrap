@@ -49,7 +49,9 @@
     "messages": {
       "missingModuleRow": "no compile/test command for module {0}; add a row or *; check the name against .harness/modules/ cards",
       "singleCommandWarn": "single command; add a 模块 column to cover: {0}",
-      "emptyTouchedModules": "table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)"
+      "emptyTouchedModules": "table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)",
+      "unrelatedSkip": "tests skipped ({0} declared the failure unrelated): {1}",
+      "testsSkipped": "tests skipped: {0}"
     }
   },
 

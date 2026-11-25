@@ -613,12 +613,39 @@ function Test-RunCommand {
     if ($code -eq 0) {
         $res = @{ Ok = $true; Ran = $true; Found = $true; Detail = "$cmd -> exit 0" }
     } else {
+        $script:lastFailedCmd = $cmd
+        # A module-scoped command that fails because of an unrelated module's
+        # infrastructure (fixture, fork crash, env) is not this feature's fault.
+        # The summary may own that judgement explicitly via test_skip_reason;
+        # without a reason the failure still blocks (fail-closed default).
         $tail = ($out -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' / '
         $res = @{ Ok = $false; Ran = $true; Found = $true; Detail = "$cmd -> exit $code ; $tail" }
     }
     $script:cmdCache[$cmd] = $res
     return $res
 }
+
+# Map a failed module command to the module it belongs to, then let the summary
+# accept it with a reason. Only commands scoped to modules (not a single unscoped
+# command) can be excused: a whole-tree command failing means the tree is red.
+function Test-UnrelatedModuleFailure {
+    param([string]$FeatureName, [string]$ProjectRoot, [string[]]$Keywords, [string[]]$SkipMarkers, [string[]]$SkipExact)
+    $table = Get-AgentsCommandTable -ProjectRoot $ProjectRoot -SectionNames $RULES.agentsCommandSection
+    if (-not $table -or -not $table.HasModuleColumn) { return $null }
+    $matched = @($table.Rows | Where-Object { Test-PurposeMatch -Purpose $_.Purpose -Keywords $Keywords })
+    if ($matched.Count -eq 0) { return $null }
+    $touched = @(Get-TouchedModules -FeatureName $FeatureName)
+    if ($touched.Count -eq 0) { return $null }
+    foreach ($mod in $touched) {
+        $hit = @($matched | Where-Object { $_.Module -and (($_.Module.Trim()) -eq $mod) })
+        if ($hit.Count -eq 0) { continue }
+        $cmd = ([string]$hit[0].Command).Trim().Trim('`').Trim()
+        if ($cmd -and ($script:lastFailedCmd -eq $cmd)) { return $mod }
+    }
+    return $null
+}
+
+$script:lastFailedCmd = ''
 
 $script:cmdCache = @{}
 
@@ -808,11 +835,23 @@ function Test-Criterion {
             if ($r.Ok) { return $r }
             # A missing or placeholder test row may be skipped only when the
             # summary records why. A command that actually ran and failed cannot
-            # be excused by a reason.
+            # be excused by a reason - unless the failure came from one of the
+            # touched modules' own declared commands AND the reason names that
+            # module as unrelated (an infra failure elsewhere must not block
+            # this feature, but only when the summary owns the judgement).
             if ($r.Ran -eq $false -or $r.Found -eq $false) {
                 $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
                 if ($reason -and -not (Test-SummaryTextPlaceholder $reason)) {
-                    return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=('tests skipped: ' + $reason) }
+                    return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=([string]::Format([string](Get-McMessage 'testsSkipped' 'tests skipped: {0}'), $reason)) }
+                }
+            }
+            if ($r.Ran -eq $true -and $r.Found -eq $true) {
+                $unrelated = Test-UnrelatedModuleFailure -FeatureName $FeatureName -ProjectRoot $ProjectRoot -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+                if ($unrelated) {
+                    $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
+                    if ($reason -and -not (Test-SummaryTextPlaceholder $reason) -and ($reason -match [regex]::Escape($unrelated))) {
+                        return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=([string]::Format([string](Get-McMessage 'unrelatedSkip' 'tests skipped ({0} declared the failure unrelated): {1}'), $unrelated, $reason)) }
+                    }
                 }
             }
             return $r

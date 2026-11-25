@@ -56,6 +56,11 @@
     "core": ["request-analysis", "coding-skill", "expert-reviewer"],
     "log": ".harness/metrics/skill-calls.jsonl"
   },
+  "mcpProbe": {
+    "_说明": "harness-start 开工时的环境体检（可选）。entries 为空时不探测。每个条目：name 只用于输出；command 是一次廉价可达性检查（exit 0 = 可达）；unreachableHint 是不可达时的处置建议（中文写这里，脚本保持纯 ASCII）。例：探测 MCP 服务器进程、DB 连接、远端仓库可达性。",
+    "entries": [],
+    "unreachableHint": ""
+  },
   "_deliveryStatus说明": "check-summary.ps1 -Stage final 用它校验交付终态：delivery_status 必填且值在 statuses 内；值等于 deployed 时「部署记录」表必须至少一行真实内容。已交付未提交 / 已提交未部署 / 不适用 不检查部署记录。中文值只放这里，脚本保持纯 ASCII。",
   "deliveryStatusStrict": true,
   "deliveryStatus": {

@@ -164,6 +164,58 @@ if (($out -match '\[WARN\].*tests-green') -and ($out -notmatch '\[PASS\].*tests-
 }
 [System.IO.File]::WriteAllText("$proj\AGENTS.md", $fixed2, (New-Object System.Text.UTF8Encoding($true)))
 
+Step 'unrelated module failure exemption'
+
+# With a module column, another module's failing test command is not this
+# feature's fault - but only when the summary names that module in
+# test_skip_reason. No reason still blocks (fail-closed).
+$modTable = @'
+# demo project
+
+## 技术栈
+
+| 层级 | 技术 |
+| --- | --- |
+| 语言 | demo |
+| 数据库 | demo |
+| 前端 | demo |
+
+## 必跑命令
+
+| 用途 | 模块 | 命令 |
+| --- | --- | --- |
+| 编译 / 类型检查 | * | `exit 0` |
+| 跑全部测试 | demo | `exit 0` |
+| 跑全部测试 | other | `exit 1` |
+'@
+[System.IO.File]::WriteAllText("$proj\AGENTS.md", $modTable, (New-Object System.Text.UTF8Encoding($true)))
+$sumPath = "$proj\.harness\changes\demo\summary.md"
+$sumText = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+$sumText = $sumText -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: demo, other'
+$sumText = ($sumText -split "`r?`n" | Where-Object { $_ -notmatch 'test_skip_reason:' }) -join "`r`n"
+[System.IO.File]::WriteAllText($sumPath, $sumText, (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-Null
+Expect 'stage 5 unrelated failure without a reason fails' $LASTEXITCODE 1
+
+$sumText = Get-Content -LiteralPath $sumPath -Raw -Encoding UTF8
+$sumText = $sumText -replace '(?m)^## 第二阶段：收尾（阶段 5–10 再填）', ("- 测试跳过原因：``test_skip_reason: other module infra broke, not this feature```r`n`r`n## 第二阶段：收尾（阶段 5–10 再填）")
+[System.IO.File]::WriteAllText($sumPath, $sumText, (New-Object System.Text.UTF8Encoding($true)))
+$out = Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-String
+Expect 'stage 5 unrelated failure with a named reason passes' $LASTEXITCODE 0
+if ($out -match '\[WARN\].*tests-green') { Write-Host 'ok: named unrelated-module skip is a WARN' }
+else { Write-Host 'BAD: named unrelated-module skip not reported as WARN' -ForegroundColor Red; $fail++ }
+
+# a reason that does not name the failing module must not excuse it
+$sumText = $sumText.Replace('other module infra broke, not this feature', 'unrelated infra elsewhere')
+[System.IO.File]::WriteAllText($sumPath, $sumText, (New-Object System.Text.UTF8Encoding($true)))
+Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '5'; Feature = 'demo' } | Out-Null
+Expect 'stage 5 vague skip reason still fails' $LASTEXITCODE 1
+
+# restore the single-module state for the later steps
+$sumText = $sumText -replace '(?m)(?<![A-Za-z0-9_\-])touched_modules:[^\r\n]*', 'touched_modules: demo'
+$sumText = ($sumText -split "`r?`n" | Where-Object { $_ -notmatch 'test_skip_reason:' }) -join "`r`n"
+[System.IO.File]::WriteAllText($sumPath, $sumText, (New-Object System.Text.UTF8Encoding($true)))
+
 Invoke-Harness "$proj\scripts\stage-gate.ps1" @{ Root = $proj; Stage = '3'; Feature = 'demo' } | Out-Null
 Expect 'stage 3 with passing compile' $LASTEXITCODE 0
 

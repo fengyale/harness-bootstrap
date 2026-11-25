@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.34.0",
+    "title": "(无关模块豁免与环境体检)",
+    "body": [
+      "- stage-gate：阶段 5/7 测试按 touched_modules 收窄后，新增无关模块失败豁免——失败命令是 touched 模块自己声明的 test 命令、且 test_skip_reason 点名该模块时降为 WARN；整树命令失败或未写原因仍 FAIL（fail-closed）",
+      "- harness-start：新增项目自配环境体检 mcpProbe（harness-required.json），entries 每项 {name, command} 做一次廉价可达性检查，不可达打 WARN 与处置提示，entries 为空不探测；探测独立于 pre-flight，-SkipPreflight 仍执行",
+      "- harness-start：开工时打印档位生效值与来源（[INFO] effective flow: L2 (source: argument)），显式参数 > plan 提示 > 默认，消除口径漂移",
+      "- 规则/模板：开发流程规范 SQL 行补「事前纪律」（改 SQL 前先 record-skill + 读 sql-review）；summary 模板评审结论段前置合法枚举值（严重度/范围/状态），待补短板明确结论标记",
+      "- 契约：新增 3 条跨文件契约锁定 mcpProbe 单源、Invoke-EnvProbe 存在、无关模块豁免逻辑",
+      "- 测试：gate-auto 新增无关模块豁免三态用例（无原因 FAIL / 点名 WARN / 笼统理由 FAIL）；harness-start SelfTest 覆盖 env-probe 与 effective flow"
+    ]
+  },
+  {
     "version": "1.33.3",
     "title": "(技能调用证据链与 core 词表单源化)",
     "body": [

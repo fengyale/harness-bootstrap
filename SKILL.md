@@ -316,6 +316,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 
 > **多模块项目**：`AGENTS.md` 必跑命令表可选「模块」列——`| 用途 | 模块 | 命令 |`，`*` 是任何模块都适用的默认行；
 > `stage-gate` 阶段 3/5/7/8 按 `summary.md` 的 `touched_modules` 取并集，逐个模块跑对应编译 / 测试。缺模块行且无 `*` 行 → FAIL；无可执行测试命令时必须在 summary.md 写 `test_skip_reason`，阶段 5/7 才降为 WARN，否则仍 FAIL；
+> 模块级测试命令失败时，若 `test_skip_reason` **点名该模块**（如「other 模块基础设施挂了，与本特性无关」），阶段 5 也降为 WARN——只豁免「touched 模块自己声明的 test 命令」的失败，整树命令失败不可豁免；无原因仍 FAIL；
 > 只有单条命令、没有模块列的旧表只 WARN。
 
 #### 第 3 步 · 建技能发现入口（**按平台选一种，不要全建**）

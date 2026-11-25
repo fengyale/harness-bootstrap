@@ -484,6 +484,24 @@
       "file": "README.md",
       "pattern": "record-skill\\.ps1 -Skill",
       "why": "README 的已知限制必须与证据链行为一致：说明如何记录、以及它只是结构化申报而非遥测。"
+    },
+    {
+      "id": "env-probe-config",
+      "file": "assets/scripts/harness-required.json",
+      "pattern": "\"mcpProbe\"",
+      "why": "环境体检是项目自配（entries 默认空），单一真源在这个 JSON；脚本里再写死项目名会让包默认探测不存在的工具。"
+    },
+    {
+      "id": "env-probe-in-start",
+      "file": "assets/scripts/harness-start.ps1",
+      "pattern": "Invoke-EnvProbe",
+      "why": "探测挂在 harness-start；脚本缺失会让 mcpProbe 配置静默失效，安装者以为体检已启用。"
+    },
+    {
+      "id": "unrelated-module-skip",
+      "file": "assets/scripts/stage-gate.ps1",
+      "pattern": "Test-UnrelatedModuleFailure",
+      "why": "模块级失败豁免只对 touched 模块自声明的 test 命令生效且要求 test_skip_reason 点名该模块；逻辑丢失会让无关基础设施失败重新挡住整个收尾。"
     }
   ]
 }

@@ -1,7 +1,15 @@
-HARNESS-LIFECYCLE VERSION 1.33.3
+HARNESS-LIFECYCLE VERSION 1.34.0
 
 changelog
 ---------
+1.34.0  (无关模块豁免与环境体检)
+- stage-gate：阶段 5/7 测试按 touched_modules 收窄后，新增无关模块失败豁免——失败命令是 touched 模块自己声明的 test 命令、且 test_skip_reason 点名该模块时降为 WARN；整树命令失败或未写原因仍 FAIL（fail-closed）
+- harness-start：新增项目自配环境体检 mcpProbe（harness-required.json），entries 每项 {name, command} 做一次廉价可达性检查，不可达打 WARN 与处置提示，entries 为空不探测；探测独立于 pre-flight，-SkipPreflight 仍执行
+- harness-start：开工时打印档位生效值与来源（[INFO] effective flow: L2 (source: argument)），显式参数 > plan 提示 > 默认，消除口径漂移
+- 规则/模板：开发流程规范 SQL 行补「事前纪律」（改 SQL 前先 record-skill + 读 sql-review）；summary 模板评审结论段前置合法枚举值（严重度/范围/状态），待补短板明确结论标记
+- 契约：新增 3 条跨文件契约锁定 mcpProbe 单源、Invoke-EnvProbe 存在、无关模块豁免逻辑
+- 测试：gate-auto 新增无关模块豁免三态用例（无原因 FAIL / 点名 WARN / 笼统理由 FAIL）；harness-start SelfTest 覆盖 env-probe 与 effective flow
+
 1.33.3  (技能调用证据链与 core 词表单源化)
 - 新增 scripts/record-skill.ps1：调用技能时追加结构化证据（ts / skill / feature）到 skill-calls.jsonl，feature 缺省读 harness-current-task 指针，-SelfTest 覆盖
 - check-summary：core 技能清单与日志路径改从 harness-required.json 的 skillEvidence 读取，不再在脚本里写死；有调用日志时对「声明了但无调用记录」的技能报 WARN（不 FAIL），保留渐进采用

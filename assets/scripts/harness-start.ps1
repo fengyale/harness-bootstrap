@@ -323,6 +323,51 @@ function Show-Lessons {
     foreach ($r in @($rows | Select-Object -First 5)) { Write-Host ('  ' + $r) -ForegroundColor Yellow }
 }
 
+# Environment probe driven by mcpProbe.entries in harness-required.json. A tool
+# registered but unreachable (MCP server, DB, remote) used to surface only when
+# the task already depended on it; a cheap reachability check at task start
+# turns that into a WARN before any code is written.
+function Invoke-EnvProbe {
+    param([string]$RootPath)
+    $cfgPath = Join-Path $RootPath 'scripts\harness-required.json'
+    if (-not (Test-Path -LiteralPath $cfgPath)) { return }
+    $cfg = $null
+    try { $cfg = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8) | ConvertFrom-Json } catch { return }
+    if (-not $cfg -or -not $cfg.PSObject.Properties['mcpProbe']) { return }
+    $probe = $cfg.mcpProbe
+    $entries = @()
+    if ($probe.PSObject.Properties['entries'] -and $probe.entries) { $entries = @($probe.entries) }
+    if ($entries.Count -eq 0) { return }
+    Write-Host '[env-probe] checking declared tools (mcpProbe.entries)...' -ForegroundColor Cyan
+    foreach ($e in $entries) {
+        $name = if ($e.PSObject.Properties['name']) { [string]$e.name } else { '' }
+        $cmd  = if ($e.PSObject.Properties['command']) { [string]$e.command } else { '' }
+        if (-not $cmd) { continue }
+        $ok = $false
+        try {
+            Push-Location -LiteralPath $RootPath
+            try {
+                # Run in-process (not a child powershell): the self test captures
+                # stream 6, and a child's output would bypass that capture. A
+                # failing command surfaces as a non-zero LASTEXITCODE or a
+                # thrown error; both count as unreachable.
+                $prevEap = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                Invoke-Expression -Command $cmd *> $null
+                $ErrorActionPreference = $prevEap
+                $ok = ($LASTEXITCODE -eq 0)
+            } catch { $ok = $false } finally { Pop-Location }
+        } catch { $ok = $false }
+        if ($ok) {
+            Write-Host ('[env-probe] ok: ' + $name) -ForegroundColor DarkGray
+        } else {
+            $hint = ''
+            if ($probe.PSObject.Properties['unreachableHint']) { $hint = [string]$probe.unreachableHint }
+            Write-Host ('[WARN] env-probe unreachable: ' + $name + ' (exit code nonzero or error)' + $(if ($hint) { '; hint: ' + $hint })) -ForegroundColor Yellow
+        }
+    }
+}
+
 # Investigation records keep flow L1 but carry a machine-readable kind, so the
 # content checks can skip the change-oriented sections instead of forcing prose
 # that nobody believes.
@@ -377,6 +422,9 @@ function Invoke-Start {
     if (-not $NoPreflight) {
         Invoke-Preflight -RootPath $RootPath -RequirementText $RequirementText -FeatureName $FeatureName
     }
+    # The env probe is independent of the pre-flight: a caller that skips the
+    # read-only history scan still gets the environment health check.
+    Invoke-EnvProbe -RootPath $RootPath
     Show-Lessons -RootPath $RootPath -RequirementText $RequirementText -FeatureName $FeatureName
 
     # ---------------------------------------------------------- 1 context pack
@@ -437,6 +485,11 @@ function Invoke-Start {
     if (-not $Investigation -and $FlowExplicit -and $hintFlow -and $hintFlow -ne $FlowValue) {
         Write-Host ('[INFO] the plan suggests ' + $hintFlow + '; keeping explicit -Flow ' + $FlowValue) -ForegroundColor DarkGray
     }
+    # One line that names the winning value and where it came from. Three places
+    # record the level (marker, template, plan); without this, a plan-suggested
+    # L3 could silently differ from an explicit L2 and nobody could tell which
+    # one the gate will read.
+    Write-Host ('[INFO] effective flow: ' + $effectiveFlow + ' (source: ' + $flowSource + ')') -ForegroundColor DarkGray
     $effectiveModules = $ModulesText
     $modulesSource = 'argument'
     if (-not $ModulesExplicit -and @($hintModules).Count -gt 0) {
@@ -672,6 +725,31 @@ function Invoke-StartSelfTest {
         [System.IO.File]::WriteAllText($spX, $textX2, $Utf8NoBom)
         $codeX2 = Invoke-Start -RootPath $tmp5 -FeatureName 'probe' -RequirementText 'widget export drops rows' -FlowValue 'L1' -ModulesText 'none' -Investigation $true -NoPreflight
         Assert-Case 'investigation record passes stage 1 without the change sections' ($codeX2 -eq 0)
+
+        # --- env probe: a configured unreachable tool warns at task start, an
+        # empty entries list stays silent. The record at this point has an empty
+        # loaded_skills (filled only later), so pre-fill it for stage 1 to pass.
+        $cfgPath5 = Join-Path $tmp5 'scripts\harness-required.json'
+        $cfgText5 = [System.IO.File]::ReadAllText($cfgPath5, [System.Text.Encoding]::UTF8)
+        $cfgText5 = $cfgText5 -replace '"entries": \[\]', '"entries": [{"name":"db","command":"powershell -NoProfile -Command exit 3"}]'
+        # Replace the trailing empty hint too: ConvertFrom-Json keeps the LAST
+        # occurrence of a duplicated key, so a hint before "entries" would lose.
+        $cfgText5 = $cfgText5 -replace '"unreachableHint": ""', ('"unreachableHint": "reconnect ' + 'mcp' + '"')
+        [System.IO.File]::WriteAllText($cfgPath5, $cfgText5, (New-Object System.Text.UTF8Encoding($false)))
+        $textX3 = $textX2 -replace '(?m)^flow: L1$', 'flow: L2'
+        [System.IO.File]::WriteAllText($spX, $textX3, $Utf8NoBom)
+        $linesPr = @(Invoke-Start -RootPath $tmp5 -FeatureName 'probe' -RequirementText 'widget export drops rows' -FlowValue 'L2' -ModulesText 'none' -NoPlan -NoPreflight 6>&1)
+        $logProbe = ($linesPr | ForEach-Object { "$_" }) -join "`n"
+        Assert-Case 'env probe warns on unreachable tool' ($logProbe -match '\[WARN\] env-probe unreachable: db')
+        Assert-Case 'env probe prints the configured hint' ($logProbe -match 'reconnect mcp')
+        $cfgText5b = $cfgText5 -replace '"entries": \[\{"name":"db"[^\r\n]*\]', '"entries": []'
+        [System.IO.File]::WriteAllText($cfgPath5, $cfgText5b, (New-Object System.Text.UTF8Encoding($false)))
+        $linesPr2 = @(Invoke-Start -RootPath $tmp5 -FeatureName 'probe' -RequirementText 'widget export drops rows' -FlowValue 'L2' -ModulesText 'none' -NoPlan -NoPreflight 6>&1)
+        $logProbe2 = ($linesPr2 | ForEach-Object { "$_" }) -join "`n"
+        Assert-Case 'env probe stays silent without entries' ($logProbe2 -notmatch 'env-probe')
+
+        # --- effective flow is named with its source
+        Assert-Case 'effective flow line is printed' ($logProbe2 -match '\[INFO\] effective flow: L2 \(source: argument\)')
 
         # --- fill the countable content and pass stage 1
         Set-SummaryContent -Path $sp
