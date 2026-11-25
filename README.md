@@ -79,6 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all.ps1 -Suite tes
 | 其它 / 不确定 | 按索引模式引用 `SKILL.md` |
 
 > **架构门面说明（1.32.0）**：统一架构门面与入口命名；历史入口仍可被升级脚本识别。新装请使用当前入口目录；如果历史入口还在，先确认当前入口能正常加载，再删除历史入口。升级脚本只识别、不移动、不删除技能目录。
+> 全局安装同理：先把本版装到 `~/.trae-cn/skills/harness-lifecycle/`（或对应平台的全局技能目录），确认能加载后再删旧的 `harness-bootstrap/`；升级脚本不碰全局目录。
 
 `tools/` 只用于本包自检，不进安装包。
 
@@ -140,7 +141,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 - `-UpdateSkills` 只替换仍含 `slot:` 的未编译副本；`-ForceSkills` 才强制覆盖，但覆盖后是含 slot 的骨架，要重新编译再跑 `verify-harness.ps1`（重置那一步可配 `-SkipVerify`）
 - 技能索引与 `_template` 分开对待：前者是项目资产，后者是包资产
 
-升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令；再跑一次 `scripts\verify-harness.ps1 -UpgradeReport`，按新包生成的报告逐条处理仍为 MANUAL 的文件。
+升级后先跑阶段 3/5/7/10，补 `AGENTS.md` 的必跑命令；再跑一次 `scripts\upgrade-report.ps1 -Root <项目根>`，看 8 项激活状态：
+
+- `[ACTIVE]`：已生效，盘上有证据；
+- `[MANUAL]`：项目还要动手，例如 `requireTaskStart` 仍是 `false`、流程规范的 `flow-start-command` 块还没补；
+- `[MISSING]`：包内产物缺失、为空或仍是 stub。
+
+加 `-Strict` 时任一 `MISSING` 退出 1，适合提交前对齐与 CI。`scripts\verify-harness.ps1 -UpgradeReport` 仍可用，报告口径与它一致。
+
+多仓工作区（前端 / 后端各装一份）在工作区根放 `harness.workspace.json`（示例：`assets\upgrade\harness.workspace.example.json`），用 `assets\upgrade\upgrade-workspace.ps1 -Root <工作区根>` 一条命令逐仓处理：`-Install` 给未装的仓拷模板，`-Strict` 在任一分仓失败、`-Apply` 后报告仍有 `MISSING` 或各仓 `.harness\.installed-version` 不一致时退出 1。
+
+升级脚本只管项目内资产：全局技能目录不移动、不删除。全局安装迁移时，先把本版装到 `harness-lifecycle` 目录，确认平台能发现并加载，再删旧的 `harness-bootstrap`。
 
 升级后第一次跑 `verify-harness.ps1` 可能报 `skills-registry`：老项目里存在、但从未登记或建入口的技能会被点名。它们此前一直不可达，不是升级弄坏的——按提示补 `.harness\skills\README.md` 登记与平台入口，或删除不再使用的技能目录。`skills-index` 在存量项目里通常先报 `WARN`（`AGENTS.md` 还没有生成标记块），跑一次 `scripts\sync-skills-index.ps1 -Root . -Write` 即可；报 `FAIL` 才是真有漂移。若升级本身失败，输出里会带上从备份恢复的完整 `Copy-Item` 命令。
 
@@ -164,6 +175,49 @@ AGENTS.md                    唯一常驻文件（≤150 行）：技术栈、�
 scripts/                     探测、扫描、阶段门、字段校验、度量、技能清单同步、卸载
 ```
 
+### 多模块：编译与测试按模块跑
+
+`AGENTS.md` 的「必跑命令」表可以有可选的「模块」列：`| 用途 | 模块 | 命令 |`。模块名与 `.harness/modules/` 的卡片名一致，`*` 表示任何模块都适用的默认行。
+
+- 阶段 3/5/7/8 按 `summary.md` 的 `touched_modules` 取并集，逐个模块跑对应的编译 / 测试命令；
+- 缺该模块的行且没有 `*` 行 → FAIL；有模块列但 `touched_modules` 为空 / none 且没有 `*` 行 → 同样 FAIL；
+- 只有单条命令、没有模块列的旧表只 WARN，并提示补模块列。
+
+单模块项目保持一行一条即可；不要把所有模块塞进一条固定命令——多模块改动只会跑到其中一个。
+
+## 开工一条命令
+
+需求进来先跑：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 `
+  -Feature order-export -Requirement "导出订单到 Excel"
+```
+
+一条命令做完四件事：打印 `harness-plan` 的上下文包（相关模块卡、必上技能、预计门禁、涉及表 / 接口）、按模板建 `summary.md` 骨架并预填 `flow` / `touched_modules`、跑 `stage-gate.ps1 -Stage 1`、通过后写 `.git/harness-task-started`。Stage 1 不过就不写 marker、退出码非 0，此时不得 Edit/Write 源码。
+
+| 参数 | 用途 |
+| --- | --- |
+| `-Investigation` | 只读排查型记录：`flow: L1` + `record_kind: investigation` + `delivery_status: 不适用`，验收 / 影响 / 任务三节不强制 |
+| `-Flow L1/L2/L3` / `-Modules a,b` | 显式指定档位与模块；不传时用 plan 的建议，显式参数优先 |
+| `-SkipPlan` | 不打印上下文包，只建记录 + 过 Stage 1 |
+| `-SkipPreflight` | 跳过只读 pre-flight（git status / diff --stat / 最近提交 / 需求关键词命中历史） |
+
+`requireTaskStart` 默认 `false`：新装和升级都不启用，L0 / 纯文档 / harness-only / merge 提交不受影响。团队采用这个入口后，把它改成 `true`，pre-commit 才只在提交 `.harness/changes/<特性>/summary.md` 时校验 marker（必须存在、特性名一致、晚于上次提交）。
+
+### 什么时候跑什么
+
+| 时机 | 命令 | 说明 |
+| --- | --- | --- |
+| 开工 | `scripts\harness-start.ps1 -Feature <name> -Requirement "<需求原文>"` | L2/L3 的第一条命令；`requireTaskStart` 的 pre-commit 硬校验默认关闭，采用后建议常开 |
+| 需求 / 模块 / 门禁预判 | `scripts\harness-plan.ps1 -Requirement "..."` | `harness-start` 内部会跑；也可单独跑，只读 |
+| 改动之后 | `scripts\suggest-flow.ps1` | 按真实 diff 给 L0–L3，并预填 `flow:` / `touched_modules:` |
+| 阶段门 | `scripts\stage-gate.ps1 -Stage 1/3/5/6/7/10 -Feature <name>` | 编译 / 测试判据真跑 `AGENTS.md` 的命令 |
+| 收尾 | `scripts\stage-gate.ps1 -Stage 10 -Feature <name>` | 先跑一次 `metrics.ps1` 刷新 `lessons.md` / `reviews.md`，再跑 lesson 门禁（1.31.25 起） |
+| 看指标 | `scripts\metrics.ps1` | 四个代理指标；无数据标 `n/a` / `unknown` |
+| 升级 | `assets\upgrade\upgrade-harness.ps1 -Root <项目>`；`scripts\upgrade-report.ps1 -Root <项目>` | 见「升级已有项目」 |
+| 结构自检 | `scripts\verify-harness.ps1`；`scripts\verify-grounding.ps1` | 全绿只代表结构正确 |
+
 ## 一次任务是怎么被引导的
 
 装完之后，每个任务走同一条加载链，不会把所有规范一次性塞进上下文：
@@ -176,11 +230,12 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 
 以「给订单列表加一个按状态过滤的查询」为例：
 
-1. `AGENTS.md` 的索引写着"收到需求先加载 `request-analysis`" → 产出 `summary.md`（需求 / 验收 / 影响面 / 任务拆分）
-2. 动代码时 `coding-skill` 命中"开始写代码" → 正文指向 `编码规范.md` 和订单模块卡，这时才读这两份
-3. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`；结论写「通过」时四层不得留「未验证」，引用的证据路径必须存在、数据源必须在编译后的绑定里
-4. 合并前 `expert-reviewer` 命中 → 评审结论与「待补短板」写回 `summary.md`
-5. 提交时 `pre-commit` 校验 summary 字段与三节内容（验收标准/影响面/任务拆分留占位符即拒）、SQL 结论（含"结论通过但四层未验证"的矛盾），并核对 L1 声明是否真的只有 1 文件 / 30 行；阶段 10 校验 `corrections` / `impl_corrections` / `lesson_id` / `sql_review` 内容，并要求人工确认晋升的检查真的会因该教训变红
+1. `AGENTS.md` 的「开工第一件事」让你先跑 `harness-start` → 上下文包列出订单模块卡与必上技能，`summary.md` 骨架已建好（`flow` / `touched_modules` 已预填），Stage 1 已 OPEN
+2. `request-analysis` 命中 → 补齐 `summary.md` 的需求 / 验收 / 影响面 / 任务拆分
+3. 动代码时 `coding-skill` 命中"开始写代码" → 正文指向 `编码规范.md` 和订单模块卡，这时才读这两份；改完先跑 `suggest-flow.ps1`，用它的 `flow:` / `touched_modules:` 校正记录
+4. 涉及 SQL → `sql-review` 命中 → 按正文查 `数据模型.md`、跑 `EXPLAIN`、把四层结论写进 `sql_review:`；结论写「通过」时四层不得留「未验证」，引用的证据路径必须存在、数据源必须在编译后的绑定里
+5. 合并前 `expert-reviewer` 命中 → 评审结论写回 `summary.md` 的「评审结论」表（严重度 / 范围 / 状态 / 指纹 / 问题 / 证据 / 处置），P0 必须已修、P1 必须有处置
+6. 提交时 `pre-commit` 校验 summary 字段与三节内容（验收标准/影响面/任务拆分留占位符即拒）、SQL 结论（含"结论通过但四层未验证"的矛盾），并核对 L1 声明是否真的只有 1 文件 / 30 行；阶段 10 校验 `corrections` / `impl_corrections` / `lesson_id` / `sql_review` / `delivery_status` / `linked_records`，并要求人工确认晋升的检查真的会因该教训变红
 
 保证它不退化成"看运气"的是三件事：
 
@@ -200,6 +255,37 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
 | **索引漏登记** | 新增的规则 / wiki / 技能有没有回到 `AGENTS.md` 文件索引和 `skills/README.md` | `verify-harness.ps1` 的 `skills-registry`（登记 + 平台入口）与 `skills-index`（生成表漂移，跑 `sync-skills-index.ps1 -Write` 修）、links / frontmatter；`verify-grounding.ps1` 的 references |
 
 > 三种症状都不靠"感觉"：`check-summary` 会拦缺字段的 summary，`verify-*` 会查结构与证据；但"加载率"是自报值，别把它当遥测。
+
+## 交付与记录
+
+- **交付状态必须表达到终态**：`delivery_status` 四值——`已交付未提交` / `已提交未部署` / `已部署` / `不适用`。写 `已部署` 时，部署记录表必须至少有一行真实内容（时间 / 环境 / 版本 / 验证人 / 结果）；其余三值可写「不适用」或留空说明。
+- **跨仓记录**：跨仓特性在每个仓库各留一份 `summary.md`，用 `linked_records: <repo:path 或 URL>` 指向另一个仓库；无跨仓写 `-`。整行缺失视为单仓（不算未完成），但写占位符会 FAIL；门禁不校验对端仓库。
+- **证据目录**：`.harness/changes/<特性>/evidence/` 放编译日志、`EXPLAIN`、查询结果摘要、截图；`summary.md` 只引用路径，不贴长输出。除已有的 `sql_review` 证据锚点外不新增硬门禁。
+
+### 评审台账
+
+评审结论写进 `summary.md` 的「评审结论」表，固定 7 列：
+
+| 严重度 | 范围 | 状态 | 指纹 | 问题 | 证据 | 处置 |
+| --- | --- | --- | --- | --- | --- | --- |
+
+- P0 必须 `已修`；P1 必须有处置（`已修` / `转待办` / `接受`）；
+- P0 / P1 必须带 kebab-case 指纹，写前先查 `.harness/reviews.md`，同一问题复用同一指纹；
+- `.harness/reviews.md` 是 `metrics.ps1` 生成的跨任务索引（团队共享），收尾时刷新；
+- `reviewLedgerStrict`：新装 `true`（缺表或表格式坏直接 FAIL），升级项目 `false`（缺表只 WARN，补完第一张表后手动改 true）。
+
+### 四指标
+
+`metrics.ps1` 从 `summary.md` 的 `corrections` / `impl_corrections` / `loaded_skills` / `lesson_id` 和 `gate.jsonl` 算出四个代理值：
+
+| 指标 | 口径 |
+| --- | --- |
+| 一次通过率 | 归属该任务的门禁事件里没有 `blocked=1` 即为通过；没有归属事件的标 `unknown`，不当作通过 |
+| 门禁往返 | 每个任务的 `blocked=1` 次数均值，附 0 / 1 / 2+ 分布 |
+| lead time | `summary.md` 日期 → 最后一次改动该记录目录的提交，按天 |
+| 复用率 | 同一技能被 ≥2 个任务加载时，第二个任务的纠正或往返是否更少；只出现一次的技能标 `n/a` |
+
+无数据一律标 `n/a` / `unknown`，不造数。`metrics.ps1 -SelfTest` 在临时仓库里验一遍口径。
 
 ## 它改了什么
 

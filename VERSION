@@ -1,7 +1,12 @@
-HARNESS-LIFECYCLE VERSION 1.32.0
+HARNESS-LIFECYCLE VERSION 1.32.1
 
 changelog
 ---------
+1.32.1  (四平台技能目录识别与全局迁移说明)
+- update-harness：平台技能目录识别补齐 Codex（.agents\skills）与 CodeBuddy（.codebuddy\skills）；版本推断与旧目录提示不再只覆盖 TRAE / Claude
+- 文档：新增全局安装迁移步骤——先装 harness-lifecycle、确认平台能加载、再删旧 harness-bootstrap；README / SKILL 同步
+- 测试：test-update 新增 .agents / .codebuddy 的旧目录识别、新目录优先、双目录警告用例
+
 1.32.0  (修正架构门面展示与发布标识)
 - 统一架构门面与对外展示的一致性：文档、安装入口、示例与发布包标识同步
 - 入口兼容：升级脚本同时识别历史入口与当前入口；两者并存时提示，只识别不删除；历史版本头仍可解析

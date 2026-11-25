@@ -655,6 +655,30 @@ Check 'skill dir inference: apply keeps the new dir' (Test-Path -LiteralPath $cl
 Check 'skill dir inference: apply advances installed-version' (
     (Get-Content -LiteralPath "$projVer\.harness\.installed-version" -TotalCount 1 -Encoding ASCII) -eq '9.9.9')
 
+# Codex (.agents) and CodeBuddy (.codebuddy) use the same convention. The rename
+# compatibility must not be TRAE/Claude-only: both the legacy-dir warning and the
+# VERSION fallback have to see these two platforms as well.
+Remove-Item -LiteralPath $claudeNew, $claudeOld -Recurse -Force
+Remove-Item -LiteralPath "$projVer\.harness\.installed-version" -Force -ErrorAction SilentlyContinue
+foreach ($platform in @(
+    @{ Rel = '.agents\skills'; NewVer = '1.3.1'; OldVer = '1.3.0' },
+    @{ Rel = '.codebuddy\skills'; NewVer = '1.3.2'; OldVer = '1.3.1' }
+)) {
+    $newDir = Join-Path $projVer ($platform.Rel + '\harness-lifecycle')
+    $oldDir = Join-Path $projVer ($platform.Rel + '\harness-bootstrap')
+    New-Item -ItemType Directory -Force -Path $oldDir | Out-Null
+    Set-Content -LiteralPath (Join-Path $oldDir 'VERSION') -Value ('HARNESS-BOOTSTRAP VERSION ' + $platform.OldVer) -Encoding ASCII
+    $outOld = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+    Check ($platform.Rel + ' legacy path works') ($outOld -match ('version:\s+' + [regex]::Escape($platform.OldVer) + ' ->'))
+    Check ($platform.Rel + ' legacy dir is named') ($outOld -match 'legacy harness-bootstrap skill dir')
+    New-Item -ItemType Directory -Force -Path $newDir | Out-Null
+    Set-Content -LiteralPath (Join-Path $newDir 'VERSION') -Value ('HARNESS-LIFECYCLE VERSION ' + $platform.NewVer) -Encoding ASCII
+    $outBoth = Invoke-Harness "$projVer\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $projVer } | Out-String
+    Check ($platform.Rel + ' new path wins') ($outBoth -match ('version:\s+' + [regex]::Escape($platform.NewVer) + ' ->'))
+    Check ($platform.Rel + ' both dirs are warned') ($outBoth -match '\[WARN\] both harness-lifecycle and harness-bootstrap')
+    Remove-Item -LiteralPath $newDir, $oldDir -Recurse -Force
+}
+
 # A project may disable the content checks with summaryContent:null. The merge
 # must preserve that choice instead of failing on Add-Member.
 $projNull = Join-Path $base 'null-summary'

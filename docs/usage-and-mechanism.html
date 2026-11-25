@@ -551,7 +551,7 @@
   <div class="main">
 
     <header class="hero">
-      <div class="eyebrow">harness-lifecycle · v1.32.0</div>
+      <div class="eyebrow">harness-lifecycle · v1.32.1</div>
       <h1>把 AI 编码的约定<br>变成可执行的约束</h1>
       <p class="lede">
         Harness Lifecycle 是一个元技能。它读取一个真实项目，按证据生成
@@ -773,7 +773,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\asse
             S2 --> S3["3 编码<br/>AUTO: 编译命令真跑"]
             S3 --> S4["4 静态检查<br/>pre-commit: 红线 + SQL + 字段"]
             S4 --> S5["5 测试<br/>AUTO: 测试命令真跑"]
-            S5 --> S6["6 评审<br/>评审结论 + 待补短板"]
+            S5 --> S6["6 评审<br/>评审表 + P0/P1 闭合"]
             S6 --> S7["7 合并<br/>AUTO: 编译 / 测试 / 门禁 / 绕过检测"]
             S7 --> S8["8 部署（条件）<br/>迁移与回滚成对"]
             S8 --> S9["9 验证（条件）<br/>回滚方案 + 冒烟"]
@@ -784,28 +784,47 @@ powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\asse
       <div class="grid grid--2">
         <div class="card card--accent" style="--i:0">
           <h3>任务开始</h3>
-          <p>收到需求先加载 <code>request-analysis</code>，建立 <code>.harness/changes/&lt;feature&gt;/summary.md</code>，写清需求、验收、影响面、风险和任务拆分。跑完把 <code>DECLARE: record=… | flow=… | next=…</code> 这一行贴进回复；出现 <code>[HINT]</code> 说明记录还没落盘。</p>
+          <p>L2 / L3 的第一条命令是 <code>harness-start</code>：它内部先跑只读的 <code>harness-plan</code> 取上下文包（相关模块卡 / 必上技能 / 预计门禁 / 涉及表与接口），再按模板建 <code>.harness/changes/&lt;feature&gt;/summary.md</code> 骨架并预填 <code>flow</code> / <code>touched_modules</code>，然后过 Stage 1；通过后写 <code>.git/harness-task-started</code>，未过则不写 marker 并 exit 1。已有记录不会被覆盖，只补跑 Stage 1 与 marker。只读排查（零代码改动）用 <code>-Investigation</code>：生成 <code>flow: L1</code> + <code>record_kind: investigation</code> 的记录，验收 / 影响 / 任务三节不强制。可选门禁 <code>requireTaskStart</code> 默认 <code>false</code>（新装与升级都不启用），团队 adoption 后在 <code>harness-required.json</code> 手动改 <code>true</code>。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
-  -File scripts\stage-gate.ps1 -Stage 1 -Feature &lt;name&gt;</code></pre>
+  -File scripts\harness-start.ps1 -Feature &lt;name&gt; -Requirement "需求原文"
+# 排查型记录
+powershell -NoProfile -ExecutionPolicy Bypass \
+  -File scripts\harness-start.ps1 -Feature &lt;name&gt; -Requirement "…" -Investigation</code></pre>
         </div>
         <div class="card card--green" style="--i:1">
           <h3>动代码</h3>
-          <p>先跑一次阶段 3 确认记录在盘（缺记录时 <code>[HINT]</code> 会指名加载 <code>request-analysis</code>），再加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 和阶段 5 会再次执行同一条命令，不通过就 BLOCKED。多模块项目在「必跑命令」表加「模块」列，<code>stage-gate</code> 按 <code>summary.md</code> 的 <code>touched_modules</code> 跑并集（<code>*</code> 为默认行，缺模块行且无 <code>*</code> 即 FAIL）；只有单条命令、没有模块列的旧表只 WARN 并提示补列。</p>
+          <p>先跑一次阶段 3 确认记录在盘（缺记录时 <code>[HINT]</code> 会指名加载 <code>request-analysis</code>），再加载 <code>coding-skill</code>；改完必须真跑 <code>AGENTS.md</code> 里的编译 / 测试命令。阶段 3 / 5 / 7 / 8 会再跑一次同样的命令集（多模块时按 <code>touched_modules</code> 取并集），不通过就 BLOCKED。多模块项目在「必跑命令」表加「模块」列，<code>*</code> 为默认行；缺模块行且无 <code>*</code> 即 FAIL；只有单条命令、没有模块列的旧表只 WARN 并提示补列。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 3 -Feature &lt;name&gt;</code></pre>
         </div>
         <div class="card card--teal" style="--i:2">
           <h3>合并前</h3>
-          <p>加载 <code>expert-reviewer</code>，把结论写进「评审结论」和「待补短板」。L2 / L3 合并前跑阶段 7；L1 仍需正常合并，只是不跑这道阶段门。</p>
+          <p>加载 <code>expert-reviewer</code>（装了子智能体就优先委派 <code>code-reviewer</code>），结论写进 <code>summary.md</code>「评审结论」的 7 列表：严重度 / 范围 / 状态 / 指纹 / 问题 / 证据 / 处置。<strong>P0 必须已修，P1 必须有处置</strong>（已修 / 转待办 / 接受）；P0 / P1 必须带 kebab-case 指纹，写前先查 <code>.harness/reviews.md</code> 复用同一指纹。L2 / L3 合并前跑阶段 7；L1 仍需正常合并，只是不跑这道阶段门。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 7 -Feature &lt;name&gt;</code></pre>
         </div>
         <div class="card card--plum" style="--i:3">
           <h3>收尾</h3>
-          <p>阶段 10 不只查字段是否存在：<code>lesson_id</code>（同一条教训复用同一个 id）、<code>sql_review</code>（有 SQL 必评审，结论写「通过」时四层不得留「未验证」，证据路径必须存在、数据源必须在编译后的绑定里）。晋升的教训要能真的变红，由人工项确认；缺字段、留占位符、内容自相矛盾 = 任务未完成。</p>
+          <p>1.31.25 起阶段 10 <strong>先跑一次 <code>metrics.ps1</code> 刷新 <code>.harness/lessons.md</code> 与 <code>.harness/reviews.md</code> 索引，再执行 lesson 门禁</strong>——索引不需要手工补跑。之后查字段：<code>lesson_id</code>（同一条教训复用同一个 id）、<code>sql_review</code>（有 SQL 必评审，结论写「通过」时四层不得留「未验证」，证据路径必须存在、数据源必须在编译后的绑定里）、<code>delivery_status</code> 与 <code>linked_records</code>。晋升的教训要能真的变红，由人工项确认；缺字段、留占位符、内容自相矛盾 = 任务未完成。</p>
           <pre><code>powershell -NoProfile -ExecutionPolicy Bypass \
   -File scripts\stage-gate.ps1 -Stage 10 -Feature &lt;name&gt;</code></pre>
         </div>
+      </div>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">什么时候跑什么命令</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时机</th><th>命令</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>需求进来（L2 / L3 第一条）</td><td><code>scripts\harness-start.ps1 -Feature &lt;name&gt; -Requirement "…"</code></td><td>跑 <code>harness-plan</code> → 建 summary 骨架 → 过 Stage 1 → 写 marker；<code>-Investigation</code> 生成排查型记录</td></tr>
+            <tr><td>只想要上下文包</td><td><code>scripts\harness-plan.ps1 -Requirement "…"</code></td><td>只读：相关模块卡、必上技能、预计门禁、涉及表 / 接口、档位提示</td></tr>
+            <tr><td>不确定档位</td><td><code>scripts\suggest-flow.ps1</code></td><td>只读：按当前 diff 估 L0–L3，输出可直接粘贴的 <code>flow:</code> / <code>touched_modules:</code> 与变更清单草稿</td></tr>
+            <tr><td>阶段门</td><td><code>scripts\stage-gate.ps1 -Stage &lt;1–10&gt; -Feature &lt;name&gt;</code></td><td>AUTO 判据真跑命令；阶段 3 / 5 / 7 / 8 按 <code>touched_modules</code> 跑并集</td></tr>
+            <tr><td>收尾</td><td><code>scripts\stage-gate.ps1 -Stage 10 -Feature &lt;name&gt;</code></td><td>先刷新 <code>lessons.md</code> / <code>reviews.md</code>，再跑 lesson 门禁，查收尾字段</td></tr>
+            <tr><td>每两周</td><td><code>scripts\metrics.ps1 -Days 14 -Compare</code></td><td>趋势、四指标、退役候选；<code>-SelfTest</code> 自测口径</td></tr>
+            <tr><td>升级已装项目</td><td><code>assets\upgrade\upgrade-harness.ps1 -Root &lt;项目根&gt;</code></td><td>默认 dry-run；<code>-Apply</code> 执行，<code>-MergeSkills</code> 保留项目绑定</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <h3 style="font-size:15px;margin:24px 0 8px">阶段门的三态</h3>
@@ -910,9 +929,48 @@ powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\asse
       </div>
 
       <div class="callout">
+        <strong>多模块项目的编译 / 测试：</strong><code>AGENTS.md</code>「必跑命令」表可选加「模块」列（<code>| 用途 | 模块 | 命令 |</code>），<code>*</code> 是任何模块都适用的默认行。
+        阶段 3 / 5 / 7 / 8 按 <code>summary.md</code> 的 <code>touched_modules</code> 取并集，逐个模块跑对应的编译 / 测试命令；
+        缺该模块的行且没有 <code>*</code> → FAIL；只有单条命令、没有模块列的旧表只 WARN 并提示补列。
+      </div>
+
+      <div class="callout">
         <strong>hook 目录不是硬编码的。</strong> 所有脚本统一用 <code>git rev-parse --git-path hooks</code>：
         linked worktree 下不会写进永不执行的 <code>.git/worktrees/&lt;name&gt;/hooks</code>，
         <code>core.hooksPath</code> 被设置时也会落到真正生效的目录。
+      </div>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">评审表与交付终态</h3>
+      <p class="lede" style="font-size:13px;margin-top:8px">
+        阶段 6 不再只收一句「评审结论」：评审发现必须是 <code>summary.md</code>「评审结论」里的 7 列表，阶段门逐行判定。
+        P0 必须已修，P1 必须有处置（已修 / 转待办 / 接受）；P0 / P1 必须带 kebab-case 指纹，写前先查 <code>.harness/reviews.md</code>，同一问题复用同一指纹。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>列</th><th>取值 / 要求</th></tr></thead>
+          <tbody>
+            <tr><td>严重度</td><td>P0 / P1 / P2；六维「✅ 已确认合规」只写在六维结论里，不算严重度</td></tr>
+            <tr><td>范围</td><td><code>本次</code> / <code>存量</code>；<code>-</code> 仅用于「无问题」行</td></tr>
+            <tr><td>状态</td><td>未修 / 已修 / 转待办 / 接受 / 不适用</td></tr>
+            <tr><td>指纹</td><td>kebab-case；P0 / P1 必填，同一问题跨任务复用同一指纹</td></tr>
+            <tr><td>问题 / 证据 / 处置</td><td>证据至少给 <code>文件:行</code> 或命令 / 路径；单元格里的 <code>|</code> 写成 <code>\|</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede" style="font-size:13px;margin-top:8px">
+        <code>.harness/reviews.md</code> 是评审发现索引：<code>metrics.ps1</code> 自动刷新，写 P0 / P1 指纹前先查表。
+      </p>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">交付终态、跨仓与证据</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段 / 约定</th><th>要求</th></tr></thead>
+          <tbody>
+            <tr><td><code>delivery_status</code></td><td>四值之一：<code>已交付未提交</code> / <code>已提交未部署</code> / <code>已部署</code> / <code>不适用</code>；写 <code>已部署</code> 时「部署记录」表至少一行真实内容</td></tr>
+            <tr><td><code>linked_records</code></td><td>跨仓特性在每个仓库各留一份 summary，用 <code>repo:path</code> 或 URL 指向对端记录；无跨仓写 <code>-</code>，整行缺失视为单仓</td></tr>
+            <tr><td><code>evidence/</code></td><td><code>.harness/changes/&lt;feature&gt;/evidence/</code> 放编译日志 / EXPLAIN / 查询结果摘要 / 截图；<code>summary.md</code> 只引用路径，除既有 <code>sql_review</code> 锚点外不新增硬门禁</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <h3 style="font-size:15px;margin:24px 0 8px">证据分级：什么能进技能正文</h3>
@@ -942,7 +1000,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\asse
           <li><strong>json</strong>：所有 JSON 可解析</li>
           <li><strong>version</strong>：<code>VERSION</code> 与 <code>releases.json</code> 顶部版本一致</li>
           <li><strong>structure</strong>：必需文件存在，仅本包文件不存在于项目分发包</li>
-          <li><strong>contract</strong>：67 条「同一规则必须同一写法」的跨文件断言</li>
+          <li><strong>contract</strong>：70 条「同一规则必须同一写法」的跨文件断言</li>
           <li><strong>smoke</strong>：临时副本安装 → 阶段 4 → 未填 summary 被拒 → 卸载</li>
         </ul>
         <p style="margin-top:8px">提交时 pre-commit 自动跑 <code>-Fast</code>（跳过 smoke）；发布前跑全量。</p>
@@ -1002,9 +1060,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File &lt;新包根目录&gt;\asse
         </div>
       </div>
 
+      <h3 style="font-size:15px;margin:24px 0 8px">四个生产力指标</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>指标</th><th>口径</th><th>无数据时</th></tr></thead>
+          <tbody>
+            <tr><td>一次通过率</td><td>该任务归属的门禁扫描事件里没有 <code>blocked=1</code></td><td><code>unknown</code>，不计入分母</td></tr>
+            <tr><td>门禁往返</td><td>每个任务的 <code>blocked=1</code> 次数均值，附 0 / 1 / 2+ 分布</td><td>无归属事件的任务不进分母</td></tr>
+            <tr><td>lead time</td><td>summary 日期 → 最后一次触及该记录目录的提交，按天</td><td>无日期或无提交为 <code>unknown</code></td></tr>
+            <tr><td>复用率</td><td>被 ≥2 个任务加载的技能，后一次纠正或往返是否更少</td><td>只出现过一次为 <code>n/a</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede" style="font-size:13px;margin-top:8px">
+        四个指标都从 <code>summary.md</code> 与 <code>gate.jsonl</code> 算出来，不造数；<code>gate.jsonl</code> 没有任务键，归因按记录目录的提交区间做的代理，重叠任务留成 <code>unknown</code> 而不是算作通过。<code>metrics.ps1 -SelfTest</code> 用临时项目断言这四类口径。
+      </p>
+
       <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14 -Compare -Json</code></pre>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14 -Compare -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -SelfTest</code></pre>
     </section>
 
     <!-- ============================== 6 ============================== -->
@@ -1017,7 +1092,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\metrics.ps1 -Days 14
 
       <p class="lede" style="font-size:13px">
         重跑 <code>SKILL.md</code> 第 0 步不会更新旧脚本：Copy-Missing 只补缺失文件。
-        升级从<strong>新包</strong>运行 <code>assets\upgrade\upgrade-harness.ps1 -Root &lt;项目根&gt;</code>，它调用新包自带的 <code>update-harness.ps1</code>（项目里的旧 updater 被绕过）；默认只打印计划，加 <code>-Apply</code> 才执行。
+        升级从<strong>新包</strong>运行入口 <code>assets\upgrade\upgrade-harness.ps1 -Root &lt;项目根&gt;</code>：它先校验新包，再调用新包自带的 <code>update-harness.ps1</code>，项目里的旧 updater 被绕过；默认是 dry-run，只打印计划，加 <code>-Apply</code> 才执行。
+        已编译技能推荐加 <code>-MergeSkills</code>（新版 package 块 + 磁盘 project 块，保留项目绑定）。
+        <code>-Apply</code> 成功后自动跑 <code>upgrade-report.ps1</code> 打印 8 项激活状态（ACTIVE / MANUAL / MISSING）；dry-run 不跑报告，因为升级前的状态会被读成「升级失败」。
+        项目内的 <code>scripts\update-harness.ps1</code> 只是项目侧兼容，不要再当日常升级入口。
       </p>
 
       <section class="diagram-shell">
@@ -1062,8 +1140,16 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File D:\tools\harness-lifecycle\assets\upgrade\upgrade-harness.ps1 `
   -Root D:\your-project -Apply -MergeSkills</code></pre>
 
+      <h3 style="font-size:15px;margin:24px 0 8px">升级后看激活报告</h3>
+      <pre><code>powershell -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\upgrade-report.ps1 -Root .
+# 有 MISSING 时退出 1，可接入 CI
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\upgrade-report.ps1 -Root . -Strict</code></pre>
+      <p style="font-size:13px;color:#555">8 项：<code>harness-start</code> / <code>check-task-start</code> / <code>requireTaskStart</code> / <code>pre-commit-hook</code> / <code>agents-start-command</code> / <code>flow-start-command</code> / <code>summary-template</code> / <code>module-commands</code>。<code>requireTaskStart=false</code> 报 MANUAL 而不是 ACTIVE；空标记块或模板缺字段报 MISSING。MANUAL 是项目待办，不是失败。</p>
+
       <h3 style="font-size:15px;margin:24px 0 8px">兼容：1.30.0 及更早的项目首次升级</h3>
-      <p style="font-size:13px;color:#555">这些项目的包布局还是 <code>templates/</code>，旧 updater 只认旧名。引导脚本本身兼容旧布局，所以上面的命令同样可用；如果你要手动按旧方式升级，也可以直接调用新包的 updater（执行成功后项目内脚本就是新版，之后一律走引导脚本）：</p>
+      <p style="font-size:13px;color:#555">这些项目的包布局还是 <code>templates/</code>，旧 updater 只认旧名。引导脚本本身兼容旧布局，所以上面的命令同样可用；如果确实要手动按旧方式升级，可以直调新包的 updater <strong>仅作兼容</strong>（执行成功后项目内脚本就是新版，之后一律走引导脚本）：</p>
       <pre><code>powershell -NoProfile -ExecutionPolicy Bypass `
   -File D:\tools\harness-lifecycle\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
@@ -1074,6 +1160,28 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File D:\tools\harness-lifecycle\assets\scripts\update-harness.ps1 `
   -Root D:\your-project `
   -PackagePath D:\tools\harness-lifecycle -Apply -MergeSkills</code></pre>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">多仓工作区：一次升级所有仓库</h3>
+      <p style="font-size:13px;color:#555">后端 + 前端这类多仓产品在每个仓库各装一份 harness。把 <code>assets\upgrade\harness.workspace.example.json</code> 复制到工作区根目录、改名为 <code>harness.workspace.json</code>，列出每个仓库的 <code>name</code> / <code>path</code>（相对清单文件）/ <code>role</code>（仅文档提示），由 <code>upgrade-workspace.ps1</code> 逐仓跑同一个新包入口，不会漏掉没人想起来的那一个。未装 <code>.harness</code> 的仓库默认 SKIP，加 <code>-Install</code> 才拷模板（AGENTS.md 与技能仍需编译）；<code>-Strict</code> 在任一分仓失败、报告 MISSING 或各仓 <code>.installed-version</code> 不一致时退出 1。</p>
+      <pre><code>powershell -NoProfile -ExecutionPolicy Bypass `
+  -File assets\upgrade\upgrade-workspace.ps1 -Root . -MergeSkills
+# 已确认计划后执行；未装仓一并初始化
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File assets\upgrade\upgrade-workspace.ps1 -Root . -Install -Apply -MergeSkills -Strict</code></pre>
+
+      <h3 style="font-size:15px;margin:24px 0 8px">平台技能目录与全局迁移（1.32.1）</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>平台</th><th>技能目录</th></tr></thead>
+          <tbody>
+            <tr><td>TRAE</td><td><code>.trae\skills</code></td></tr>
+            <tr><td>Claude Code</td><td><code>.claude\skills</code></td></tr>
+            <tr><td>Codex</td><td><code>.agents\skills</code></td></tr>
+            <tr><td>CodeBuddy</td><td><code>.codebuddy\skills</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:13px;color:#555">升级按上述四个目录识别已装技能与旧版本，新目录优先；同一平台下新旧技能目录并存时会提示，但只识别不删除。全局安装从 <code>harness-bootstrap</code> 迁移时顺序不能反：<strong>先把当前版本装到 <code>harness-lifecycle</code> 目录，确认平台能发现并加载新技能，再删除旧的 <code>harness-bootstrap</code></strong>。升级脚本只管项目内资产，不移动、不删除全局技能目录；两个目录并存时技能名不同，可能双份加载。</p>
 
       <h3 style="font-size:15px;margin:24px 0 8px">旧文件与新文件怎么处理</h3>
       <div class="table-wrap">
@@ -1196,7 +1304,7 @@ scripts/                     探测、扫描、阶段门、字段校验、度量
       </div>
 
       <div class="footer">
-        本页基于仓库当前代码（v1.32.0）整理。原始说明见
+        本页基于仓库当前代码（v1.32.1）整理。原始说明见
         <a href="../README.md">README</a>、
         <a href="../SKILL.md">SKILL.md</a>、
         <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a>；

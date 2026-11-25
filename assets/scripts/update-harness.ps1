@@ -146,7 +146,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $assets 'scripts\verify-harness.ps1'
 # harness-bootstrap. Keep this list in step with the VERSION fallback below.
 $platformSkillDirs = @(
     (Join-Path $rootPath '.trae\skills'),
-    (Join-Path $rootPath '.claude\skills')
+    (Join-Path $rootPath '.claude\skills'),
+    (Join-Path $rootPath '.agents\skills'),
+    (Join-Path $rootPath '.codebuddy\skills')
 )
 $skillFound = $false
 foreach ($skillsDir in $platformSkillDirs) {
@@ -198,8 +200,12 @@ if (-not $installedVersion) {
     foreach ($p in @(
         (Join-Path $rootPath '.trae\skills\harness-lifecycle\VERSION'),
         (Join-Path $rootPath '.claude\skills\harness-lifecycle\VERSION'),
+        (Join-Path $rootPath '.agents\skills\harness-lifecycle\VERSION'),
+        (Join-Path $rootPath '.codebuddy\skills\harness-lifecycle\VERSION'),
         (Join-Path $rootPath '.trae\skills\harness-bootstrap\VERSION'),
-        (Join-Path $rootPath '.claude\skills\harness-bootstrap\VERSION')
+        (Join-Path $rootPath '.claude\skills\harness-bootstrap\VERSION'),
+        (Join-Path $rootPath '.agents\skills\harness-bootstrap\VERSION'),
+        (Join-Path $rootPath '.codebuddy\skills\harness-bootstrap\VERSION')
     )) {
         $installedVersion = Read-Version $p
         if ($installedVersion) { break }

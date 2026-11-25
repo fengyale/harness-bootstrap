@@ -313,6 +313,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-stack.ps1
 - **新项目无代码阶段**：项目结论用 `- [E0] confirm:<确认人> <YYYY-MM-DD> :: <确认了什么>`；
   **代码落地后逐条升级为 E1/E2**。非新项目模式下出现 E0，`verify-grounding.ps1` 直接判 FAIL
 
+> **多模块项目**：`AGENTS.md` 必跑命令表可选「模块」列——`| 用途 | 模块 | 命令 |`，`*` 是任何模块都适用的默认行；
+> `stage-gate` 阶段 3/5/7/8 按 `summary.md` 的 `touched_modules` 取并集，逐个模块跑对应编译 / 测试。缺模块行且无 `*` 行 → FAIL；
+> 只有单条命令、没有模块列的旧表只 WARN。
+
 #### 第 3 步 · 建技能发现入口（**按平台选一种，不要全建**）
 
 | 平台能力 | 做法 |
@@ -387,6 +391,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stage-gate.ps1 -Stag
 
 > 自成长节律见 `references/维护与体检.md`（沉淀 / 体检 / 调优）与 `references/两周复盘.md`。
 
+一次任务的四个固定动作：
+
+- **需求进来**：`scripts\harness-plan.ps1 -Requirement "需求原文"` 出上下文包（相关模块卡 / 必上技能 / 预计门禁 / 涉及表与接口）；`harness-start` 会自动调用它
+- **改动完成**：`scripts\suggest-flow.ps1` 按实际 diff 定档，直接给出可粘贴的 `flow:` / `touched_modules:`
+- **收尾**：`scripts\stage-gate.ps1 -Stage 10`（1.31.25 起先刷新 `.harness/lessons.md` / `reviews.md` 索引，再跑 lesson 门禁）
+- **复盘 / 删技能**：`scripts\metrics.ps1 -Days 28`（四指标：一次通过率 / 门禁往返 / lead time / 复用率；无数据标 `n/a` / `unknown`，`-SelfTest` 自检）
+
+> 评审结论写进 `summary.md`「评审结论」的固定 7 列表（严重度 / 范围 / 状态 / 指纹 / 问题 / 证据 / 处置）；P0 必须 `已修`，P1 必须有处置，P0/P1 的指纹先查 `.harness/reviews.md` 复用。
+
 ### 2.4 升级已有项目（**不是重装**）
 
 第 0 步是 Copy-Missing，重跑不会更新旧脚本。升级从**新包**运行引导脚本：
@@ -404,6 +417,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 > 引导脚本调用**新包自带**的 `update-harness.ps1`，所以升级逻辑永远是下载到的这一版；项目里的 `scripts\update-harness.ps1` 只是一个被替换的机制文件，不再作为首选入口。
 >
 > **从 1.30.0 及更早升级一次**：包布局已从 `templates/` 改为 `assets/`，旧项目里的 `scripts\update-harness.ps1` 只认旧名。新包脚本同时兼容旧布局（读 `templates/` 并提示一次），加上引导脚本本身就指向新包，首次升级不会两头卡住。
+
+`-Apply` 后会自动跑 `scripts\upgrade-report.ps1`（也可单独跑，或 `verify-harness -UpgradeReport`）：8 项按
+`[ACTIVE]`（已在盘上生效）/ `[MANUAL]`（项目还要动，如 `requireTaskStart=false`、待填的 `AGENTS.md` / 流程规范块）/ `[MISSING]`（包内文件缺失）输出；`-Strict` 有 `MISSING` 时退出 1，`-Json` 便于脚本消费。dry-run 不跑报告。
 
 #### 多仓工作区（前端 / 后端各装一份）
 
@@ -495,6 +511,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <新包>\assets\upgrade\upgr
 
 > `assets/` 的位置 = 本技能所在目录（项目级：`.trae/skills/harness-lifecycle/assets/`；
 > 全局：`~/.trae-cn/skills/harness-lifecycle/assets/`）。
+>
+> **从 `harness-bootstrap` 迁移（全局安装）**：先把当前版本装到 `harness-lifecycle` 目录，确认平台能正常发现并加载新技能，再删除旧的 `harness-bootstrap` 目录。升级脚本只管项目内资产，不移动、不删除全局技能目录；两个目录并存时技能名不同，可能双份加载。
 
 ---
 
