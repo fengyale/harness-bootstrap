@@ -54,7 +54,7 @@ Output:
 package gate: OPEN
 ```
 
-The 67 contracts check one thing, whether the same rule reads identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is how this category usually breaks.
+The 70 contracts check one thing, whether the same rule reads identically in scripts, JSON, `SKILL.md`, `AGENTS.md` and rule files. Changing one copy and leaving the others behind is how this category usually breaks.
 
 Run the behavioural tests:
 
@@ -140,7 +140,17 @@ The upgrade **reinstalls git hooks by default** (the old hook is backed up as `.
 - `-UpdateSkills` replaces only uncompiled copies that still contain `slot:`; `-ForceSkills` overrides, but leaves slot-bearing skeletons, so recompile them and run `verify-harness.ps1` again (`-SkipVerify` for the reset step)
 - The skill index and `_template` are treated separately, one as a project asset and the other as a package asset
 
-After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`; then run `scripts\verify-harness.ps1 -UpgradeReport` once and work through the files the new package still reports as `MANUAL`.
+After upgrading, run stages 3/5/7/10 and fill the measured commands in `AGENTS.md`; then run `scripts\upgrade-report.ps1 -Root <project root>` and read its 8 activation items:
+
+- `[ACTIVE]`: switched on, evidence on disk;
+- `[MANUAL]`: the project still has to act, e.g. `requireTaskStart` is still `false` or the process spec has no `flow-start-command` block yet;
+- `[MISSING]`: a package-owned artifact is absent, empty or still a stub.
+
+With `-Strict` any `MISSING` exits 1, which suits a pre-commit alignment check and CI. `scripts\verify-harness.ps1 -UpgradeReport` still works and reports the same items.
+
+For a multi-repo workspace (frontend / backend installed separately), put `harness.workspace.json` at the workspace root (example: `assets\upgrade\harness.workspace.example.json`) and run `assets\upgrade\upgrade-workspace.ps1 -Root <workspace root>` once for every repo: `-Install` copies the template into repos that are not installed yet, and `-Strict` exits 1 when any repo fails, the report still has a `MISSING`, or the repos disagree on `.harness\.installed-version`.
+
+The upgrade script touches project assets only: it never moves or deletes a global skill directory. When migrating a global install, install this version into the `harness-lifecycle` directory, confirm the platform discovers and loads it, and only then delete the old `harness-bootstrap`.
 
 The first `verify-harness.ps1` after an upgrade may report `skills-registry`: skills that exist in the project but were never indexed or given an entry are now named. They were already unreachable before the upgrade — add them to `.harness\skills\README.md` with a platform entry, or delete the ones no longer in use. `skills-index` normally starts as a `WARN` in an existing install (`AGENTS.md` has no generated marker block yet); run `scripts\sync-skills-index.ps1 -Root . -Write` once. A `FAIL` there means real drift. If the upgrade itself fails, the output now includes the full `Copy-Item` command that restores the backup.
 
@@ -164,6 +174,49 @@ AGENTS.md                    the only resident file (<=150 lines): stack, comman
 scripts/                     probe, scan, stage gate, field checks, metrics, skills index sync, uninstall
 ```
 
+### Multi-module: compile and test per module
+
+The command table in `AGENTS.md` may carry an optional module column: `| purpose | module | command |`. Module names match the cards under `.harness/modules/`; `*` is the default row that applies to every module.
+
+- Stages 3/5/7/8 union the `touched_modules` in `summary.md` and run each module's compile / test command;
+- a module with no row and no `*` row is a FAIL; an empty / none `touched_modules` with no `*` row fails too;
+- an old table with one command and no module column is only a WARN and asks for the column.
+
+A single-module project keeps one row per command; do not hide every module behind one fixed command — a multi-module change then only runs one of them.
+
+## Starting a task with one command
+
+Run this as the first command of any requirement:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\harness-start.ps1 `
+  -Feature order-export -Requirement "export orders to excel"
+```
+
+One command does four things: prints the `harness-plan` context pack (module cards, mandatory skills, expected gates, tables / interfaces), creates the `summary.md` skeleton from the template with `flow` / `touched_modules` pre-filled, runs `stage-gate.ps1 -Stage 1`, and writes `.git/harness-task-started` on success. A failed Stage 1 writes no marker and exits non-zero — do not Edit/Write source code in that state.
+
+| Flag | Purpose |
+| --- | --- |
+| `-Investigation` | read-only investigation record: `flow: L1` + `record_kind: investigation` + `delivery_status: 不适用`; the acceptance / impact / task sections are not required |
+| `-Flow L1/L2/L3` / `-Modules a,b` | explicit level and modules; otherwise the plan's suggestion is used and an explicit argument wins |
+| `-SkipPlan` | skip the context pack, only create the record and run Stage 1 |
+| `-SkipPreflight` | skip the read-only pre-flight (git status / diff --stat / recent commits / requirement keywords hitting history) |
+
+`requireTaskStart` defaults to `false` on fresh installs and upgrades: L0 / docs-only / harness-only / merge commits are unaffected. Once a team adopts this entry point it sets the key to `true`, and only then does pre-commit check the marker — only for commits that land `.harness/changes/<feature>/summary.md` (the marker must exist, match the feature and be newer than the previous commit).
+
+### Which command, when
+
+| When | Command | Note |
+| --- | --- | --- |
+| Start | `scripts\harness-start.ps1 -Feature <name> -Requirement "<raw request>"` | first command for L2/L3; the `requireTaskStart` pre-commit check is off by default — turn it on once adopted |
+| Requirement / modules / gates | `scripts\harness-plan.ps1 -Requirement "..."` | runs inside `harness-start`; can also run alone, read-only |
+| After the change | `scripts\suggest-flow.ps1` | L0–L3 from the real diff, pre-fills `flow:` / `touched_modules:` |
+| Stage gate | `scripts\stage-gate.ps1 -Stage 1/3/5/6/7/10 -Feature <name>` | compile / test criteria really run the `AGENTS.md` commands |
+| Wrap-up | `scripts\stage-gate.ps1 -Stage 10 -Feature <name>` | runs `metrics.ps1` once to refresh `lessons.md` / `reviews.md`, then the lesson gate (since 1.31.25) |
+| Metrics | `scripts\metrics.ps1` | four proxies; `n/a` / `unknown` when there is no data |
+| Upgrade | `assets\upgrade\upgrade-harness.ps1 -Root <project>`; `scripts\upgrade-report.ps1 -Root <project>` | see "Upgrade an existing install" |
+| Structure check | `scripts\verify-harness.ps1`; `scripts\verify-grounding.ps1` | all green only means the structure is right |
+
 ## How a single task is guided
 
 After installation every task follows the same loading chain, and no rule gets dumped into context up front:
@@ -176,11 +229,12 @@ After installation every task follows the same loading chain, and no rule gets d
 
 Example: "add a status filter to the order list query".
 
-1. The index in `AGENTS.md` says "load `request-analysis` on a new requirement" → it produces `summary.md` (requirement / acceptance / impact / split)
-2. `coding-skill` matches "start writing code" → its body points to `编码规范.md` and the order module card, and only then are those read
-3. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`; a "pass" verdict cannot leave any layer unverified, every cited evidence path must exist, and every data source must appear in the compiled bindings
-4. `expert-reviewer` matches before merging → review verdict and "missing capability" go back into `summary.md`
-5. On commit, `pre-commit` checks the summary fields and the three content sections (an unfilled acceptance/impact/task table is rejected), the SQL verdict (including "pass while a layer is unverified"), and whether an L1 claim really is one file and 30 lines; stage 10 checks `corrections` / `impl_corrections` / `lesson_id` / `sql_review` and requires a human to confirm a promoted check really turns red for that lesson
+1. The "first action" block in `AGENTS.md` sends you to `harness-start` → the context pack names the order module card and the mandatory skills, the `summary.md` skeleton exists (`flow` / `touched_modules` pre-filled) and Stage 1 is OPEN
+2. `request-analysis` matches → fill in requirement / acceptance / impact / task split
+3. `coding-skill` matches "start writing code" → its body points to `编码规范.md` and the order module card, and only then are those read; after the change, run `suggest-flow.ps1` and correct the record with its `flow:` / `touched_modules:`
+4. SQL is involved → `sql-review` matches → follow the body to `数据模型.md`, run `EXPLAIN`, write the four-layer conclusion into `sql_review:`; a "pass" verdict cannot leave any layer unverified, every cited evidence path must exist, and every data source must appear in the compiled bindings
+5. `expert-reviewer` matches before merging → the review verdict goes back into the 7-column review table in `summary.md` (severity / scope / status / fingerprint / problem / evidence / disposition); P0 must be fixed, P1 must have a disposition
+6. On commit, `pre-commit` checks the summary fields and the three content sections (an unfilled acceptance/impact/task table is rejected), the SQL verdict (including "pass while a layer is unverified"), and whether an L1 claim really is one file and 30 lines; stage 10 checks `corrections` / `impl_corrections` / `lesson_id` / `sql_review` / `delivery_status` / `linked_records` and requires a human to confirm a promoted check really turns red for that lesson
 
 Three things keep it from turning into luck.
 
@@ -200,6 +254,37 @@ A broken loading chain shows up in three ways:
 | **The index is missing an entry** | Whether a new rule / wiki page / skill was added to the `AGENTS.md` file index and `skills/README.md` | `skills-registry` in `verify-harness.ps1` (indexed + platform entry) and `skills-index` (generated-table drift, fixed by `sync-skills-index.ps1 -Write`), plus links / frontmatter; the references check in `verify-grounding.ps1` |
 
 > None of the three relies on a feeling: `loaded_skills` and `load_skip_reason` are recorded, and `verify-*` asserts the structure. Tuning trigger words is covered in `references/维护与体检.md` section 3.
+
+## Delivery and records
+
+- **Delivery status must reach a terminal value**: `delivery_status` is one of `已交付未提交` / `已提交未部署` / `已部署` / `不适用`. `已部署` requires at least one real row in the deployment table (time / environment / version / verifier / result); the other three may say "not applicable" or leave a note.
+- **Cross-repo records**: a cross-repo feature keeps one `summary.md` per repository and points at the other one with `linked_records: <repo:path or URL>`; with no cross-repo record write `-`. A missing whole line means single-repo (not incomplete), but placeholders fail; the gate never checks the other repository.
+- **Evidence directory**: put compile logs, `EXPLAIN`, result summaries and screenshots under `.harness/changes/<feature>/evidence/`; `summary.md` only cites paths. No new hard gate beyond the existing `sql_review` evidence anchor.
+
+### Review ledger
+
+The review verdict goes into the review table in `summary.md`, always 7 columns:
+
+| Severity | Scope | Status | Fingerprint | Problem | Evidence | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+
+- P0 must be `fixed`; P1 must have a disposition (`fixed` / `todo` / `accepted`);
+- P0 / P1 must carry a kebab-case fingerprint; look it up in `.harness/reviews.md` first and reuse the same one;
+- `.harness/reviews.md` is the cross-task index generated by `metrics.ps1` (shared by the team); refresh it at wrap-up;
+- `reviewLedgerStrict`: `true` on a fresh install (a missing or malformed table fails), `false` on upgraded projects (missing table is only a WARN; turn it on after the first table is filled).
+
+### Four metrics
+
+`metrics.ps1` derives four proxies from `summary.md` (`corrections` / `impl_corrections` / `loaded_skills` / `lesson_id`) and `gate.jsonl`:
+
+| Metric | Definition |
+| --- | --- |
+| First pass rate | a task passes when none of its attributed gate events has `blocked=1`; a task with no attributed event is `unknown`, never a pass |
+| Gate round trips | `blocked=1` events per task, averaged over the tasks that own an event, plus the 0 / 1 / 2+ distribution |
+| Lead time | `summary.md` date → last commit touching that record directory, in days |
+| Reuse | when one skill is loaded by ≥2 tasks, does the second task show fewer corrections or round trips; a skill seen once is `n/a` |
+
+No data is marked `n/a` / `unknown`, never invented. `metrics.ps1 -SelfTest` verifies the definitions in a throw-away repo.
 
 ## What it changes
 
