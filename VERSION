@@ -1,7 +1,14 @@
-HARNESS-LIFECYCLE VERSION 1.32.1
+HARNESS-LIFECYCLE VERSION 1.33.0
 
 changelog
 ---------
+1.33.0  (门禁可信度与工作区过滤)
+- suggest-flow：默认按当前特性（.git/harness-current-task 或 -Feature）与 touched_modules 过滤工作区变更，并忽略构建产物/压缩包，减少整仓未提交改动的干扰
+- stage-gate：阶段 5/7 没有可执行测试命令时，summary.md 必须写 test_skip_reason；缺失仍 FAIL，写了才降为 WARN，报告单列 warn 计数
+- harness-start：重复检测附带提交文件路径，区分 path-match 与 keyword-only，措辞降为“可能重复”，不再直接断言已实现
+- 文档：README 增加适用边界与已知限制；summary 模板、开发流程规范、AGENTS/SKILL 同步 test_skip_reason 与 suggest-flow 过滤说明
+- 测试：gate-auto 新增“无测试行 FAIL / 有原因 WARN”用例；test-probe 同步 summary 模板字段
+
 1.32.1  (四平台技能目录识别与全局迁移说明)
 - update-harness：平台技能目录识别补齐 Codex（.agents\skills）与 CodeBuddy（.codebuddy\skills）；版本推断与旧目录提示不再只覆盖 TRAE / Claude
 - 文档：新增全局安装迁移步骤——先装 harness-lifecycle、确认平台能加载、再删旧 harness-bootstrap；README / SKILL 同步
