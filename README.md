@@ -33,7 +33,7 @@ AI 写代码很快，交付慢。慢的地方大多不在"不会写"，而在下
 它不是代码生成器，也不替代人工评审；它把“交付前必须成立的条件”变成可执行的门禁和记录。
 
 - `loaded_skills` 是**结构化自报**，不是平台遥测：调用 Skill 时用 `scripts\record-skill.ps1 -Skill <名>` 追加一条记录，`check-summary` 会交叉校验“声明”与“记录”是否一致（缺记录只报 WARN）。它证明的是“有一次结构化申报”，不能证明模型真的读过文件；`metrics.ps1` 的加载率仍来自 summary 自报。
-- 阶段 5/7 在**没有可执行测试命令**时，`summary.md` 必须写 `test_skip_reason`，结果降为 `WARN`；没有原因仍 `FAIL`。`WARN` 不是 `PASS`，报告会单独计数。模块级测试命令失败时，若 `test_skip_reason` 点名该模块，也可降为 `WARN`（只豁免 touched 模块自己声明的命令，整树失败不可豁免）。
+- 阶段 5/7 在**没有可执行测试命令**时，`summary.md` 必须写 `test_skip_reason`，结果降为 `WARN`；没有原因仍 `FAIL`。`WARN` 不是 `PASS`，报告会单独计数。`touched_modules: none` 与「缺测试行」同一口径：写了真实原因降 `WARN`，写 `-` / `n/a` / `无` 仍 `FAIL`（模板里的 `-` 表示「有测试命令」，不是跳过理由）。模块级测试命令失败时，若 `test_skip_reason` 点名该模块，也可降为 `WARN`（只豁免 touched 模块自己声明的命令，整树失败不可豁免）。
 - `harness-start` 支持项目自配环境体检：`scripts/harness-required.json` 的 `mcpProbe.entries` 每项 `{name, command}`（command 是一次廉价可达性检查，exit 0 = 可达）；不可达打 `WARN` 与处置提示，entries 为空不探测。
 - `suggest-flow` 默认按当前特性（`.git/harness-current-task` 或 `-Feature`）过滤；模块名来自模块卡或路径推断，属于候选，不是项目真相。
 - `harness-start` 的重复检测是**关键词 + 路径证据**，不是代码级重复分析；`path-match` 比 `keyword-only` 更值得优先核对。

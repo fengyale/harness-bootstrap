@@ -51,7 +51,8 @@
       "singleCommandWarn": "single command; add a 模块 column to cover: {0}",
       "emptyTouchedModules": "table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)",
       "unrelatedSkip": "tests skipped ({0} declared the failure unrelated): {1}",
-      "testsSkipped": "tests skipped: {0}"
+      "testsSkipped": "tests skipped: {0}",
+      "compileSkipped": "compile skipped: {0}"
     }
   },
 

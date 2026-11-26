@@ -376,6 +376,38 @@ function Replace-TableThirdCell {
     return '| ' + $dstCells[0] + ' | ' + $dstCells[1] + ' | ' + $srcCells[2] + ' |'
 }
 
+# Split a markdown table row on unescaped pipes: a command cell may contain a
+# literal "\|" (the red-line row pipes git diff into powershell), and a plain
+# -split '\|' turns that one cell into two, which shifts every later column.
+function Split-TableCells {
+    param([string]$Line)
+    $t = $Line.Trim()
+    if ($t.StartsWith('|')) { $t = $t.Substring(1) }
+    if ($t.EndsWith('|')) { $t = $t.Substring(0, $t.Length - 1) }
+    return @($t -split '(?<!\\)\|' | ForEach-Object { $_.Trim() })
+}
+
+# The run-commands table may carry a module column (and a trailing note column).
+# Copying the template's two-column row over a three-column one dropped the
+# module cell, so a row the project had scoped to a module turned into a
+# malformed one and stage-gate read the command as the module name. Only the
+# command cell is framework-owned: replace the cell that holds the old scanner
+# command and keep every other cell, whatever the column order is.
+function Merge-CommandRow {
+    param([string]$Line, [string]$SourceLine)
+    $dstCells = @(Split-TableCells $Line)
+    $srcCells = @(Split-TableCells $SourceLine)
+    if ($dstCells.Count -lt 2 -or $srcCells.Count -lt 2) { return $SourceLine }
+    $newCmd = $srcCells[$srcCells.Count - 1]
+    for ($i = 0; $i -lt $dstCells.Count; $i++) {
+        if ($dstCells[$i] -match 'red-line-scan\.ps1') {
+            $dstCells[$i] = $newCmd
+            return '| ' + ($dstCells -join ' | ') + ' |'
+        }
+    }
+    return $SourceLine
+}
+
 function Merge-AgentsKnown {
     param([string]$Dst, [string]$Src)
     $srcLines = [System.IO.File]::ReadAllLines($Src, [System.Text.Encoding]::UTF8)
@@ -397,8 +429,9 @@ function Merge-AgentsKnown {
     $recordSeen = (@($dstLines | Where-Object { $_ -match 'HARNESS_ALLOW_NO_RECORD' }).Count -gt 0)
     foreach ($line in $dstLines) {
         if ($srcRed -and $line -match '^\|' -and $line -match 'red-line-scan\.ps1' -and $line -match '-Files') {
-            if ($line -ne $srcRed) { $changed = $true }
-            $out += $srcRed; continue
+            $new = Merge-CommandRow $line $srcRed
+            if ($new -ne $line) { $changed = $true }
+            $out += $new; continue
         }
         if ($srcR5 -and $line -match '^\| R5 ') {
             $new = Replace-TableThirdCell $line $srcR5

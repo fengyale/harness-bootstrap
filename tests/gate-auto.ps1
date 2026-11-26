@@ -840,6 +840,25 @@ if ((Test-Path -LiteralPath "$mm\empty-star.compiled") -and -not (Test-Path -Lit
     Write-Host 'ok: an empty declaration used the * row, not module-a'
 } else { Write-Host 'BAD: empty declaration did not use the * row' -ForegroundColor Red; $fail++ }
 
+# A docs-only change cannot run any module command. The empty declaration used to
+# be a hard FAIL that test_skip_reason could not excuse, so the documented reason
+# (the escape hatch every other missing row has) was ignored here.
+$reasonSum = $emptySum -replace '(?m)(?<![A-Za-z0-9_\-])test_skip_reason:[^\r\n]*', 'test_skip_reason: docs-only change, no module command to run'
+[System.IO.File]::WriteAllText("$mm\.harness\changes\demo\summary.md", $reasonSum, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$mm\AGENTS.md", $mmAgents, (New-Object System.Text.UTF8Encoding($true)))
+$outR = Invoke-Harness $gate @{ Root = $mm; Stage = '5'; Feature = 'demo' } | Out-String
+Expect 'empty touched_modules with a documented reason opens stage 5' $LASTEXITCODE 0
+if (($outR -match 'compile skipped') -and ($outR -match 'tests skipped')) {
+    Write-Host 'ok: documented empty declaration is a WARN for compile and tests'
+} else { Write-Host 'BAD: documented empty declaration not reported as WARN' -ForegroundColor Red; $fail++ }
+
+# The template tells projects to write "-" when a test command exists. That token
+# is not a reason, and accepting it let a copied template excuse the gap.
+$dashSum = $emptySum -replace '(?m)(?<![A-Za-z0-9_\-])test_skip_reason:[^\r\n]*', 'test_skip_reason: -'
+[System.IO.File]::WriteAllText("$mm\.harness\changes\demo\summary.md", $dashSum, (New-Object System.Text.UTF8Encoding($false)))
+Invoke-Harness $gate @{ Root = $mm; Stage = '5'; Feature = 'demo' } | Out-Null
+Expect 'a dash is not a skip reason (template default stays blocked)' $LASTEXITCODE 1
+
 # The purpose cell decides which row is a compile row. Matching the whole line
 # made a test row whose parenthetical mentions compile satisfy the compile gate,
 # and a lint row was treated as a compile row.

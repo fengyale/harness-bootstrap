@@ -766,6 +766,34 @@ Check 'AGENTS record line inserted once' ($recordLines.Count -eq 1)
 Check 'AGENTS task line kept once' ($taskLines.Count -eq 1)
 Check 'AGENTS SQL line kept once' ($sqlLines.Count -eq 1)
 
+# A 3-column run-commands table must keep its module cell when the package
+# refreshes the red-line row. Replacing the whole line with the template's
+# 2-column row dropped the module, and stage-gate then read the command as the
+# module name. Only the command cell is framework-owned.
+$proj3 = Join-Path $TestRoot 'proj-agents-3col'
+New-Item -ItemType Directory -Force -Path $proj3 | Out-Null
+Copy-Item -LiteralPath (Join-Path $pkg 'assets\scripts') -Destination $proj3 -Recurse -Force
+New-Item -ItemType Directory -Force -Path "$proj3\.harness\rules","$proj3\.harness\changes\_template" | Out-Null
+$agents3 = @(
+    '# demo project',
+    '',
+    '## run commands',
+    '',
+    '| purpose | module | command |',
+    '| --- | --- | --- |',
+    '| compile | demo | powershell -NoProfile -Command "exit 0" |',
+    '| redline | * | `git diff --cached -U0 \| powershell -NoProfile -ExecutionPolicy Bypass -File scripts\red-line-scan.ps1 -Root . -Files` | keep-note |',
+    ''
+) -join "`r`n"
+[System.IO.File]::WriteAllText("$proj3\AGENTS.md", $agents3, (New-Object System.Text.UTF8Encoding($false)))
+Invoke-Harness "$proj3\scripts\update-harness.ps1" @{ PackagePath = $newPkg; Root = $proj3; Apply = $true; SkipHooks = $true; SkipVerify = $true } | Out-Null
+Check 'three-column table: upgrade exits 0' ($LASTEXITCODE -eq 0)
+$row3 = @([System.IO.File]::ReadAllLines("$proj3\AGENTS.md", [System.Text.Encoding]::UTF8) | Where-Object { $_ -match 'red-line-scan\.ps1' })[0]
+Check 'three-column red-line row keeps the module cell' ($row3 -match '^\| redline \| \* \|')
+Check 'three-column red-line row takes the new command' ($row3 -match '-DiffFromStdin')
+Check 'three-column red-line row keeps the escaped pipe' ($row3 -match '\| powershell -NoProfile')
+Check 'three-column red-line row keeps the trailing note' ($row3 -match '\| keep-note \|$')
+
 # Marked block merge: inserted once after the title, the older unmarked copy is
 # replaced (not duplicated), and the project-only line survives.
 $startBegin = @($agentsFinal | Where-Object { $_ -match 'harness:upgrade:begin\s+id=start-command' })

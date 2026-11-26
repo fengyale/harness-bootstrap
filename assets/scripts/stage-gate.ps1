@@ -219,6 +219,24 @@ function Test-SummaryTextPlaceholder {
     return ($Text -match '<|(?i)\b(TODO|TBD)\b')
 }
 
+# "A reason was written" must be a sentence, not the template's "no reason"
+# token. The summary template tells projects to write "-" when a test command
+# exists, so accepting "-" here meant a summary copied straight from the
+# template could excuse a missing or empty test row: the fail-closed promise
+# only held for projects that deleted the field instead of leaving it alone.
+function Test-SkipReasonUsable {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    if (Test-SummaryTextPlaceholder $Text) { return $false }
+    $t = ($Text.Trim().Trim('`').Trim()).ToLowerInvariant()
+    if ($t -match '^-+$') { return $false }
+    if ($t -eq 'n/a' -or $t -eq 'na' -or $t -eq 'none' -or $t -eq 'no') { return $false }
+    $cnNone = [string][char]0x65E0
+    $cnNa = -join @([char]0x4E0D, [char]0x9002, [char]0x7528)
+    if ($t -eq $cnNone -or $t -eq $cnNa) { return $false }
+    return $true
+}
+
 # Split one markdown table line into raw cells. An escaped pipe (\|) belongs to
 # the command, not to the table: Split('|') silently truncated it and ran a
 # different command.
@@ -510,8 +528,13 @@ function Test-RunCommandSet {
         } else {
             # No touched module and no default row: running the first module row
             # would compile module-a only and call a module-b change PASS.
+            # Found=$false (not $true) on purpose: with Ran/Found both true this
+            # result was a hard FAIL that no documented reason could excuse, so a
+            # docs-only change declaring touched_modules: none was blocked even
+            # after writing test_skip_reason. Now it behaves like any other gap:
+            # a recorded reason turns it into WARN, no reason stays FAIL.
             $msg = Get-McMessage 'emptyTouchedModules' 'table has a module column but touched_modules is empty/none; list the touched modules in summary.md (or add a * row)'
-            return (Add-TableHints -Result @{ Ok=$false; Ran=$true; Found=$true; Detail=$msg } -Table $table)
+            return (Add-TableHints -Result @{ Ok=$false; Ran=$false; Found=$false; EmptyModules=$true; Detail=$msg } -Table $table)
         }
     } else {
         $missing = @()
@@ -828,7 +851,19 @@ function Test-Criterion {
             return @{ Ok=$false; Detail='corrections > 0 but no lesson_id; attribute it so the lesson can be promoted' }
         }
         'compiles' {
-            return Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.compile -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            $r = Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.compile -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
+            if ($r.Ok) { return $r }
+            # An empty touched_modules declaration is the same documented gap as a
+            # missing test row: with test_skip_reason it is a WARN, without it the
+            # FAIL stands. Scoped to EmptyModules so a genuinely missing compile
+            # row stays FAIL even when a test reason exists.
+            if ($r.EmptyModules) {
+                $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
+                if (Test-SkipReasonUsable $reason) {
+                    return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=([string]::Format([string](Get-McMessage 'compileSkipped' 'compile skipped: {0}'), $reason)) }
+                }
+            }
+            return $r
         }
         'tests-green' {
             $r = Test-RunCommandSet -ProjectRoot $ProjectRoot -FeatureName $FeatureName -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
@@ -841,7 +876,7 @@ function Test-Criterion {
             # this feature, but only when the summary owns the judgement).
             if ($r.Ran -eq $false -or $r.Found -eq $false) {
                 $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
-                if ($reason -and -not (Test-SummaryTextPlaceholder $reason)) {
+                if (Test-SkipReasonUsable $reason) {
                     return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=([string]::Format([string](Get-McMessage 'testsSkipped' 'tests skipped: {0}'), $reason)) }
                 }
             }
@@ -849,7 +884,7 @@ function Test-Criterion {
                 $unrelated = Test-UnrelatedModuleFailure -FeatureName $FeatureName -ProjectRoot $ProjectRoot -Keywords $RULES.agentsCommandPurpose.test -SkipMarkers $RULES.commandSkipMarkers -SkipExact $RULES.commandSkipExact
                 if ($unrelated) {
                     $reason = Get-SummaryFieldValue -FeatureName $FeatureName -Name 'test_skip_reason'
-                    if ($reason -and -not (Test-SummaryTextPlaceholder $reason) -and ($reason -match [regex]::Escape($unrelated))) {
+                    if ((Test-SkipReasonUsable $reason) -and ($reason -match [regex]::Escape($unrelated))) {
                         return @{ Ok=$true; Ran=$false; Found=$true; Warn=$true; Detail=([string]::Format([string](Get-McMessage 'unrelatedSkip' 'tests skipped ({0} declared the failure unrelated): {1}'), $unrelated, $reason)) }
                     }
                 }

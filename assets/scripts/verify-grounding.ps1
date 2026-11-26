@@ -545,6 +545,13 @@ foreach ($s in $skillFiles) {
             if ($tok.Length -eq 0) { continue }
             if ($tok -match '[<>*$%]') { continue }
             if ($tok -match 'Xxx|xxx|\d{8}') { continue }
+            # A backticked COMMAND is not a path: `scripts\stage-gate.ps1 -Stage 1
+            # -Feature X` carries an argument list, and quoted prose arguments make
+            # it look like one long path. Joining it to the project root reported
+            # "path not found" for a script that exists, so the whole reference
+            # check became noise on every real skill. Whitespace or a quote means
+            # "command line", not "file reference".
+            if ($tok -match '\s|["'']') { continue }
             $first = ($tok -split '[\\/]')[0]
             $isInternal = ($InternalPrefixes -contains $first) -or ($tok -eq 'AGENTS.md')
             $isStaleHarness = $false

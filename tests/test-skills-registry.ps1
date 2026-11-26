@@ -210,6 +210,18 @@ $keptPh = @([System.IO.File]::ReadAllLines($phSkillFile, [System.Text.Encoding]:
 $g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
 Check 'removing the Chinese path clears the failure' ($LASTEXITCODE -eq 0)
 
+Step 'a backticked command is not a path'
+# `scripts\harness-start.ps1 -Feature demo -Requirement "x"` is a command, not a
+# file reference. Joining the whole string to the project root reported "path
+# not found" for a script that exists, so every real skill with a command
+# example failed the reference check.
+Add-Content -LiteralPath $phSkillFile -Value '- run: `scripts\harness-start.ps1 -Feature demo -Requirement "export orders"`' -Encoding UTF8
+$g = Invoke-Harness "$proj\scripts\verify-grounding.ps1" @{ Root = $proj } | Out-String
+Check 'a command with arguments is not treated as a path' (($LASTEXITCODE -eq 0) -and (-not ($g -match 'path not found')))
+$keptPh = @([System.IO.File]::ReadAllLines($phSkillFile, [System.Text.Encoding]::UTF8) |
+    Where-Object { $_ -notmatch 'harness-start\.ps1 -Feature demo' })
+[System.IO.File]::WriteAllLines($phSkillFile, $keptPh, (New-Object System.Text.UTF8Encoding($false)))
+
 Step 'coverage: a placeholder structure tree is a failure'
 # verify-grounding cannot see that a long wiki page is still the template, so the
 # coverage check reads the structure tree: a fenced line that still starts with
