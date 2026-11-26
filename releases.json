@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.34.1",
+    "title": "(命令 token、空模块与三列合并)",
+    "body": [
+      "- verify-grounding：反引号 token 含空白或引号时按「命令行」处理，不再拼成路径；`scripts\\stage-gate.ps1 -Stage 1 -Feature 名` 这类命令不再报 path not found",
+      "- stage-gate：`touched_modules: none` 且没有 `*` 行时，`test_skip_reason` 现在生效（真实原因 → WARN，仍不是 PASS）；写 `-` / `n/a` / `无` 不算原因，保持 FAIL",
+      "- stage-gate：编译跳过复用同一判定，输出 `compile skipped: ...` 与 `tests skipped: ...` 区分，避免把编译跳过写成测试跳过",
+      "- update-harness：known-lines 合并只替换命令那一格，保留模块列与尾部说明；按未转义 `|` 切分，命令里的 `\\|` 不再把单元格切错",
+      "- 文档：README（中/英）与 summary 模板同步「`-` 不是跳过原因」的口径",
+      "- 测试：gate-auto 增加空模块三态（无原因 FAIL / 真实原因 WARN / `-` 仍 FAIL）；test-skills-registry 增加命令 token 用例；test-update 增加 4 列命令行的合并用例"
+    ]
+  },
+  {
     "version": "1.34.0",
     "title": "(无关模块豁免与环境体检)",
     "body": [
